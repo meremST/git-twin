@@ -40,8 +40,77 @@ pub enum Field {
         sel: usize,
         top: usize,
         rows: u16,
+        /// Incremental filter (`/` or `?` to start), when supported.
+        search: Option<ListSearch>,
     },
     Label(String, Tone),
+}
+
+/// Filter state of a searchable list. `items`/`values` of the field hold the
+/// filtered view; the full content is kept here.
+#[derive(Clone, Debug)]
+pub struct ListSearch {
+    pub active: bool,
+    pub input: TextInput,
+    all_items: Vec<String>,
+    all_values: Vec<Vec<u8>>,
+    /// Text matched against the pattern for each item.
+    keys: Vec<String>,
+}
+
+/// Case-insensitive match. Without wildcards: substring. With `*` (any
+/// sequence) or `?` (one char): anchored on the whole key or on any part
+/// following a `/` (so `ma*` matches `main` and `origin/master`).
+pub fn search_match(pattern: &str, key: &str) -> bool {
+    let p: Vec<char> = pattern.to_lowercase().chars().collect();
+    let k = key.to_lowercase();
+    if p.is_empty() {
+        return true;
+    }
+    if !p.iter().any(|c| matches!(c, '*' | '?')) {
+        return k.contains(&pattern.to_lowercase());
+    }
+    let kc: Vec<char> = k.chars().collect();
+    std::iter::once(0)
+        .chain(kc.iter().enumerate().filter(|(_, c)| **c == '/').map(|(i, _)| i + 1))
+        .any(|start| glob(&p, &kc[start..]))
+}
+
+fn glob(p: &[char], s: &[char]) -> bool {
+    let (mut pi, mut si) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while si < s.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == s[si]) {
+            pi += 1;
+            si += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some((pi, si));
+            pi += 1;
+        } else if let Some((sp, ss)) = star {
+            pi = sp + 1;
+            si = ss + 1;
+            star = Some((sp, ss + 1));
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|c| *c == '*')
+}
+
+impl ListSearch {
+    fn apply(&self, items: &mut Vec<String>, values: &mut Vec<Vec<u8>>, sel: &mut usize, top: &mut usize) {
+        let pat = self.input.text.trim();
+        let keep: Vec<usize> = (0..self.keys.len())
+            .filter(|i| search_match(pat, &self.keys[*i]))
+            .collect();
+        let current = values.get(*sel).cloned();
+        *items = keep.iter().map(|i| self.all_items[*i].clone()).collect();
+        *values = keep.iter().map(|i| self.all_values[*i].clone()).collect();
+        *sel = current
+            .and_then(|v| values.iter().position(|x| *x == v))
+            .unwrap_or(0);
+        *top = 0;
+    }
 }
 
 impl Field {
@@ -72,7 +141,30 @@ impl Field {
             sel,
             top: 0,
             rows,
+            search: None,
         }
+    }
+    /// List that can be filtered by typing `/` (or `?`) then a pattern
+    /// matched against `keys` (see `search_match`).
+    pub fn searchable_list(
+        label: &str,
+        items: Vec<String>,
+        values: Vec<Vec<u8>>,
+        keys: Vec<String>,
+        rows: u16,
+    ) -> Field {
+        let search = ListSearch {
+            active: false,
+            input: TextInput::new(""),
+            all_items: items.clone(),
+            all_values: values.clone(),
+            keys,
+        };
+        let mut f = Field::list(label, items, values, 0, rows);
+        if let Field::List { search: s, .. } = &mut f {
+            *s = Some(search);
+        }
+        f
     }
     pub fn area(label: &str, value: &str, rows: u16) -> Field {
         Field::Area {
@@ -93,7 +185,9 @@ impl Field {
     pub fn height(&self) -> u16 {
         match self {
             Field::Area { rows, .. } => rows + 1,
-            Field::List { rows, .. } => rows + 1,
+            Field::List { rows, search, .. } => {
+                rows + 1 + u16::from(search.as_ref().is_some_and(|s| s.active))
+            }
             _ => 1,
         }
     }
@@ -292,6 +386,16 @@ impl Dialog {
             return DialogResult::None;
         }
         self.reveal_focus = true;
+        if k.code == C::Esc
+            && let Some(Field::List { items, values, sel, top, search: Some(s), .. }) =
+                self.fields.get_mut(self.focus)
+            && s.active
+        {
+            s.active = false;
+            s.input.clear();
+            s.apply(items, values, sel, top);
+            return DialogResult::None;
+        }
         match k.code {
             C::Esc => {
                 return match self.cancel {
@@ -364,10 +468,31 @@ impl Dialog {
                 _ => {}
             },
             Field::List {
-                items, sel, top, rows, ..
+                items, values, sel, top, rows, search,
+                ..
             } => {
-                let n = items.len();
                 let h = *rows as usize;
+                if let Some(s) = search {
+                    match k.code {
+                        C::Char('/') | C::Char('?') if !s.active && !ctrl && !alt => {
+                            s.active = true;
+                            return DialogResult::None;
+                        }
+                        C::Backspace if s.active && s.input.text.is_empty() => {
+                            s.active = false;
+                            return DialogResult::None;
+                        }
+                        C::Char(_) | C::Backspace | C::Delete | C::Left | C::Right
+                            if s.active =>
+                        {
+                            edit_input(&mut s.input, k);
+                            s.apply(items, values, sel, top);
+                            return DialogResult::None;
+                        }
+                        _ => {}
+                    }
+                }
+                let n = items.len();
                 match k.code {
                     C::Up => *sel = sel.saturating_sub(1),
                     C::Down => *sel = (*sel + 1).min(n.saturating_sub(1)),
@@ -395,6 +520,10 @@ impl Dialog {
         match self.focused_field() {
             Some(Field::Text { input, .. }) => input.insert_str(s),
             Some(Field::Area { area, .. }) => area.insert_str(s),
+            Some(Field::List { items, values, sel, top, search: Some(ls), .. }) if ls.active => {
+                ls.input.insert_str(s);
+                ls.apply(items, values, sel, top);
+            }
             _ => {}
         }
     }
@@ -421,5 +550,45 @@ pub fn edit_input(input: &mut TextInput, k: crossterm::event::KeyEvent) {
         C::Home => input.apply(Edit::Home),
         C::End => input.apply(Edit::End),
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    fn search_patterns() {
+        assert!(search_match("ma*", "main"));
+        assert!(search_match("ma*", "master"));
+        assert!(search_match("ma*", "origin/main"));
+        assert!(!search_match("ma*", "feature/xmain"));
+        assert!(search_match("*main", "feature/xmain"));
+        assert!(search_match("MA*", "main"));
+        assert!(search_match("ai", "main"));
+        assert!(search_match("v1.?", "v1.2"));
+        assert!(!search_match("v1.?", "v1.23"));
+        assert!(search_match("", "anything"));
+    }
+
+    #[test]
+    fn list_filtering_keys() {
+        let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+        let items: Vec<String> = ["H main", "H master", "H dev", "R origin/main"].map(String::from).into();
+        let keys = items.iter().map(|s| s[2..].to_string()).collect();
+        let values = items.iter().map(|s| s.as_bytes().to_vec()).collect();
+        let mut d = Dialog::new("t", Kind::Info)
+            .with_fields(vec![Field::searchable_list("l", items, values, keys, 5)]);
+        d.on_key(key('?'));
+        for c in "ma*".chars() {
+            d.on_key(key(c));
+        }
+        let Some(Field::List { items, .. }) = d.fields.first() else { panic!() };
+        assert_eq!(items, &["H main", "H master", "R origin/main"]);
+        d.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        let Some(Field::List { items, search, .. }) = d.fields.first() else { panic!() };
+        assert_eq!(items.len(), 4);
+        assert!(!search.as_ref().unwrap().active);
     }
 }

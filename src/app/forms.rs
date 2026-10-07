@@ -117,8 +117,15 @@ impl App {
             &[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag, RefKind::Other, RefKind::Stash],
             false,
         );
+        let keys = items.iter().map(|s| s.get(2..).unwrap_or("").to_string()).collect();
         let title = format!("Tags and heads: {}", self.repo.display_name());
-        let fields = vec![Field::list("H local head, R remote, T tag, o other", items, values, 0, 14)];
+        let fields = vec![Field::searchable_list(
+            "H local head, R remote, T tag, o other   (/ search, * wildcard)",
+            items,
+            values,
+            keys,
+            14,
+        )];
         self.dialogs.push(form(&title, FormKind::ListRefs, fields, &["Select", "Close"]));
     }
 

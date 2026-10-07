@@ -421,6 +421,9 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         };
         f.render_widget(Block::default().style(style), rr);
         app.hits.push(rr, Hit::CommitRow(i));
+        // Reverse-video selection would turn colored glyphs into colored blocks.
+        let plain = style.add_modifier.contains(Modifier::REVERSED);
+        let tint = |c: ratatui::style::Color| if plain { style } else { style.fg(c) };
         let mut x = inner.x;
         if let Some(g) = app.hist.graph.get(i) {
             for (lane, cell) in g.cells.iter().enumerate() {
@@ -432,17 +435,16 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                 } else {
                     graph::glyph(cell.bits, app.theme.icons.ascii)
                 };
-                let color = if lane == usize::from(g.node) {
-                    g.node_color
+                let fg = if lane == usize::from(g.node) {
+                    if c.oid == crate::git::log::null_unstaged() {
+                        app.theme.error
+                    } else {
+                        app.theme.graph_color(g.node_color)
+                    }
                 } else {
-                    cell.color
+                    app.theme.graph_color(cell.color)
                 };
-                text(
-                    f,
-                    Rect::new(x, rr.y, 1, 1),
-                    ch.to_string(),
-                    style.fg(app.theme.graph_color(color)),
-                );
+                text(f, Rect::new(x, rr.y, 1, 1), ch.to_string(), tint(fg));
                 let h = if cell.bits & graph::RIGHT != 0 {
                     if app.theme.icons.ascii { "-" } else { "─" }
                 } else {
@@ -452,7 +454,7 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                     f,
                     Rect::new(x + 1, rr.y, 1, 1),
                     h,
-                    style.fg(app.theme.graph_color(cell.hcolor)),
+                    tint(app.theme.graph_color(cell.hcolor)),
                 );
                 x += 2;
             }
@@ -471,7 +473,7 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             let label = format!("[{}] ", reference.short);
             let w = label.width().min(usize::from(author_x.saturating_sub(x))) as u16;
             let zone = Rect::new(x, rr.y, w, 1);
-            text(f, zone, label, style.fg(color).add_modifier(Modifier::BOLD));
+            text(f, zone, label, tint(color).add_modifier(Modifier::BOLD));
             app.hits
                 .push(zone, Hit::RefLabel(i, reference.full.clone()));
             x += w;
@@ -482,7 +484,7 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             .as_ref()
             .is_some_and(|set| set.contains(&c.oid));
         let subject_style = if bold {
-            style.fg(app.theme.warn).add_modifier(Modifier::BOLD)
+            tint(app.theme.warn).add_modifier(Modifier::BOLD)
         } else {
             style
         };
@@ -502,7 +504,7 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             f,
             Rect::new(date_x, rr.y, date_w, 1),
             c.date.to_string(),
-            style.fg(app.theme.dim),
+            tint(app.theme.dim),
         );
     }
     app.hits.push(
@@ -1049,5 +1051,68 @@ fn textarea(f: &mut Frame, area: &mut TextArea, r: Rect, focused: bool, t: &Them
             r.x + (x as u16).min(r.width - 1),
             r.y + (area.cursor.row - area.top) as u16,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        app::diffview::DLine,
+        config::{Config, ThemeName},
+    };
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
+
+    #[test]
+    fn terminal_diff_selection_keeps_uniform_active_and_colored_inactive_styles() {
+        let t = Theme::new(&Config {
+            theme: ThemeName::Terminal,
+            ..Config::default()
+        });
+        let mut words = DLine::plain(DKind::Words, "-old+new");
+        words.segs = Some(vec![
+            (DKind::Del, "-old".into()),
+            (DKind::Add, "+new".into()),
+        ]);
+        let mut dv = DiffView {
+            lines: vec![
+                DLine::plain(DKind::Add, "+new"),
+                DLine::plain(DKind::Del, "-old"),
+                words,
+            ],
+            anchor: Some(0),
+            cursor: 2,
+            ..DiffView::default()
+        };
+        let mut terminal = Terminal::new(TestBackend::new(12, 3)).unwrap();
+        for focused in [true, false] {
+            terminal
+                .draw(|f| {
+                    render_diff(
+                        f,
+                        &mut dv,
+                        Rect::new(0, 0, 12, 3),
+                        PaneId::HDiff,
+                        focused,
+                        &t,
+                        &mut HitMap::default(),
+                    );
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            for (x, y, fg) in [
+                (0, 0, t.add),
+                (0, 1, t.del),
+                (0, 2, t.del),
+                (4, 2, t.add),
+                (11, 2, t.fg),
+            ] {
+                let cell = &buffer[(x, y)];
+                assert_eq!(cell.fg, if focused { Color::Reset } else { fg });
+                assert_eq!(cell.bg, Color::Reset);
+                assert_eq!(cell.modifier.contains(Modifier::REVERSED), focused);
+                assert_eq!(cell.modifier.contains(Modifier::UNDERLINED), !focused);
+            }
+        }
     }
 }

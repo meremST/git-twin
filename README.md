@@ -81,6 +81,9 @@ comme `gitk --all`, au lieu de se limiter a HEAD. Le theme `terminal`
 n'utilise que les couleurs par defaut et ANSI du terminal (pas de RGB fixe) :
 l'interface suit alors la palette configuree par l'utilisateur dans son
 emulateur, plutot que d'imposer `dark`/`light`.
+Il conserve le fond du terminal, avec un accent jaune ANSI pour le focus et
+des boutons sans aplats. La selection active est inversee de facon uniforme ;
+une selection dans un panneau inactif est soulignee et conserve ses couleurs.
 
 `--help`, `--version` et `doctor` fonctionnent sans depot ni terminal interactif.
 `doctor` n'effectue aucun appel reseau.

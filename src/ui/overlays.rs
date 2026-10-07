@@ -100,6 +100,8 @@ enum FormRow {
     Input(usize),
     Area(usize, usize),
     Item(usize, usize),
+    Search(usize),
+    Blank,
 }
 
 pub(super) fn dialog(f: &mut Frame, app: &mut App) {
@@ -173,9 +175,11 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 rows: height,
                 sel,
                 top,
+                search,
                 ..
             } => {
                 let labels = wrap(label, width);
+                let searching = search.as_ref().is_some_and(|s| s.active);
                 let h = usize::from(*height).min(max_content.saturating_sub(labels.len()).max(1));
                 if focused && reveal {
                     if *sel < *top {
@@ -186,6 +190,10 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 }
                 *top = (*top).min(items.len().saturating_sub(h));
                 rows.extend(labels.into_iter().map(|s| FormRow::Label(s, style, None)));
+                if searching {
+                    rows.push(FormRow::Search(i));
+                }
+                let first = rows.len();
                 rows.extend(
                     (*top..items.len())
                         .take(h)
@@ -193,6 +201,12 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 );
                 if items.is_empty() {
                     rows.push(FormRow::Label("(none)".into(), app.theme.dimmed(), None));
+                }
+                // Searchable lists keep a stable height while filtering.
+                if search.is_some() {
+                    while rows.len() < first + h {
+                        rows.push(FormRow::Blank);
+                    }
                 }
             }
             Field::Check { label, value } => {
@@ -285,6 +299,16 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 }
                 app.hits.push(rr, Hit::DlgArea(i, offset));
             }
+            FormRow::Search(i) => {
+                if let Field::List { search: Some(s), .. } = &mut d.fields[i] {
+                    const P: &str = "Search: ";
+                    let pw = P.len() as u16;
+                    text(f, rr, P, app.theme.base());
+                    let ir = Rect::new(rr.x + pw, rr.y, rr.width.saturating_sub(pw), 1);
+                    input(f, &mut s.input, ir, d.focus == i, &app.theme);
+                }
+            }
+            FormRow::Blank => {}
             FormRow::Item(i, item) => {
                 if let Field::List { items, sel, .. } = &d.fields[i] {
                     let style = if *sel == item {

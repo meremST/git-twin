@@ -255,6 +255,7 @@ impl Icons {
 #[derive(Clone, Debug)]
 pub struct Theme {
     depth_true: bool,
+    terminal_palette: bool,
     pub bg: Color,
     pub bg_alt: Color,
     pub fg: Color,
@@ -307,6 +308,7 @@ impl Theme {
         let bgc = |v: u32| if low { Color::Reset } else { c(v) };
         Theme {
             depth_true: depth == Depth::True,
+            terminal_palette: false,
             bg: bgc(p.bg),
             bg_alt: bgc(p.bg_alt),
             fg: if low { Color::Reset } else { c(p.fg) },
@@ -344,12 +346,13 @@ impl Theme {
     fn terminal(cfg: &Config) -> Theme {
         Theme {
             depth_true: false,
+            terminal_palette: true,
             bg: Color::Reset,
             bg_alt: Color::Reset,
             fg: Color::Reset,
             dim: Color::DarkGray,
             border: Color::DarkGray,
-            accent: Color::Blue,
+            accent: Color::Yellow,
             sel_bg: Color::Blue,
             sel_dim_bg: Color::DarkGray,
             bar_bg: Color::Reset,
@@ -403,6 +406,14 @@ impl Theme {
     }
 
     pub fn selected(&self, focused: bool) -> Style {
+        if self.terminal_palette {
+            return if focused {
+                // Reset semantic foregrounds before reversing to avoid coloured blocks.
+                self.base().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default().add_modifier(Modifier::UNDERLINED)
+            };
+        }
         if self.low_color {
             return Style::default().add_modifier(Modifier::REVERSED);
         }
@@ -422,6 +433,13 @@ impl Theme {
     }
 
     pub fn button(&self, enabled: bool) -> Style {
+        if self.terminal_palette {
+            return if enabled {
+                self.base().fg(self.accent).add_modifier(Modifier::BOLD)
+            } else {
+                self.dimmed()
+            };
+        }
         let s = Style::default()
             .bg(self.bg_alt)
             .fg(if enabled { self.fg } else { self.dim });
@@ -466,14 +484,106 @@ mod tests {
 
     #[test]
     fn terminal_theme_uses_reset_and_named_colors() {
-        let cfg = Config {
+        for colors in [
+            ColorMode::Auto,
+            ColorMode::Truecolor,
+            ColorMode::C256,
+            ColorMode::C16,
+        ] {
+            let t = Theme::new(&Config {
+                theme: ThemeName::Terminal,
+                colors,
+                ..Config::default()
+            });
+            assert!(!t.truecolor());
+            for color in [t.bg, t.bg_alt, t.fg, t.bar_bg, t.add_bg, t.del_bg] {
+                assert_eq!(color, Color::Reset);
+            }
+            assert_eq!(t.accent, Color::Yellow);
+            for color in [
+                t.dim,
+                t.border,
+                t.accent,
+                t.sel_bg,
+                t.sel_dim_bg,
+                t.add,
+                t.del,
+                t.hunk,
+                t.meta,
+                t.warn,
+                t.error,
+                t.ok,
+                t.head,
+                t.branch,
+                t.remote,
+                t.tag,
+            ]
+            .into_iter()
+            .chain(t.graph)
+            {
+                assert!(!matches!(color, Color::Rgb(..) | Color::Indexed(_)));
+            }
+        }
+    }
+
+    #[test]
+    fn terminal_selection_and_buttons_respect_focus() {
+        let t = Theme::new(&Config {
             theme: ThemeName::Terminal,
             ..Config::default()
-        };
-        let t = Theme::new(&cfg);
-        assert!(!t.truecolor());
-        assert_eq!(t.bg, Color::Reset);
-        assert_eq!(t.fg, Color::Reset);
-        assert_eq!(t.accent, Color::Blue);
+        });
+        for fg in [t.fg, t.add, t.del, t.meta] {
+            let base = t.base().fg(fg);
+            let active = base.patch(t.selected(true));
+            assert_eq!(active.fg, Some(Color::Reset));
+            assert_eq!(active.bg, Some(Color::Reset));
+            assert!(active.add_modifier.contains(Modifier::REVERSED));
+            let inactive = base.patch(t.selected(false));
+            assert_eq!(inactive.fg, Some(fg));
+            assert_eq!(inactive.bg, Some(Color::Reset));
+            assert!(inactive.add_modifier.contains(Modifier::UNDERLINED));
+            assert!(!inactive.add_modifier.contains(Modifier::REVERSED));
+        }
+        for enabled in [true, false] {
+            let button = t.button(enabled);
+            assert_eq!(button.bg, Some(Color::Reset));
+            assert_eq!(button.fg, Some(if enabled { t.accent } else { t.dim }));
+            assert_eq!(button.add_modifier.contains(Modifier::BOLD), enabled);
+            assert!(!button.add_modifier.contains(Modifier::REVERSED));
+        }
+        let focused_button = t.button(true).patch(t.selected(true));
+        assert_eq!(focused_button.fg, Some(Color::Reset));
+        assert!(focused_button.add_modifier.contains(Modifier::REVERSED));
+    }
+
+    #[test]
+    fn fixed_palette_selection_and_buttons_are_unchanged() {
+        for theme in [ThemeName::Dark, ThemeName::Light] {
+            for colors in [ColorMode::Truecolor, ColorMode::C256, ColorMode::C16] {
+                let t = Theme::new(&Config {
+                    theme,
+                    colors,
+                    ..Config::default()
+                });
+                for focused in [true, false] {
+                    let expected = if colors == ColorMode::C16 {
+                        Style::default().add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default().bg(if focused { t.sel_bg } else { t.sel_dim_bg })
+                    };
+                    assert_eq!(t.selected(focused), expected);
+                }
+                for enabled in [true, false] {
+                    let mut expected =
+                        Style::default()
+                            .bg(t.bg_alt)
+                            .fg(if enabled { t.fg } else { t.dim });
+                    if colors == ColorMode::C16 {
+                        expected = expected.add_modifier(Modifier::REVERSED);
+                    }
+                    assert_eq!(t.button(enabled), expected);
+                }
+            }
+        }
     }
 }
