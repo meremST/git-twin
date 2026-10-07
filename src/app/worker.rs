@@ -82,6 +82,10 @@ pub enum Payload {
     Origin(Result<(Oid, u32), GitError>),
     Amend(Result<String, GitError>),
     Remotes(Vec<String>),
+    TagInfo {
+        full: Vec<u8>,
+        result: Result<Option<crate::git::read::TagDetails>, GitError>,
+    },
 }
 
 pub struct Msg {

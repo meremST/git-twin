@@ -12,6 +12,7 @@ use super::dialog::{DialogResult, Field};
 use super::history::HFocus;
 use super::menu::{Ctx, MenuItem};
 use super::worktree::WFocus;
+use crate::domain::refs::RefKind;
 use crate::ui::hit::{Hit, PaneId, SplitId};
 
 const WHEEL_LINES: isize = 3;
@@ -150,9 +151,13 @@ impl App {
                 self.hist.focus = HFocus::List;
                 self.dispatch(Action::SelectRow(i));
             }
-            Hit::RefLabel(i, _) => {
+            Hit::RefLabel(i, full) => {
                 self.hist.focus = HFocus::List;
-                self.dispatch(Action::SelectRow(i));
+                if self.refs.find_full(&full).is_some_and(|r| r.kind == RefKind::Tag) {
+                    self.show_tag_info(full);
+                } else {
+                    self.dispatch(Action::SelectRow(i));
+                }
             }
             Hit::ShaEntry => {
                 self.hist.focus = HFocus::Sha;

@@ -82,6 +82,7 @@ pub struct Requests {
     pub goto: u64,
     pub origin: u64,
     pub amend: u64,
+    pub tag_info: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,6 +131,8 @@ pub struct Options {
     pub view: Option<ViewKind>,
     pub read_only: bool,
     pub mouse: Option<bool>,
+    /// Like `gitk --all`: the default view shows every ref, not just HEAD.
+    pub all_refs: bool,
 }
 
 impl App {
@@ -145,6 +148,11 @@ impl App {
         };
         let theme = Theme::new(&cfg);
         let mut hist = HistoryState::new(&cfg, &state);
+        if opts.all_refs
+            && let Some(default_view) = hist.views.first_mut()
+        {
+            default_view.all_refs = true;
+        }
         hist.views.extend(state.views.iter().cloned());
         let mut wt = WorktreeState::new(&cfg);
         let draft_error = match crate::config::load_draft(&repo.git_dir) {
@@ -506,6 +514,11 @@ impl App {
                 }
             }
             Payload::Remotes(v) => self.remotes = v,
+            Payload::TagInfo { full, result } => {
+                if m.id == self.req.tag_info {
+                    self.hist.on_tag_info(full, result);
+                }
+            }
         }
     }
 

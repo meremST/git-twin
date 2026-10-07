@@ -15,9 +15,9 @@ Spec: `design.md`. This is not yet the final parity/quality milestone.
 | UI | `src/ui/{mod,theme,hit,overlays}.rs` | Both views, graph, diffs, message editor, menus, dialogs and hit zones |
 | Binaries | `src/main.rs`, `src/bin/git-tui.rs`, shared `src/cli.rs` | `gitt` defaults to History; `git tui` defaults to Worktree; About dialogs updated |
 | Integration / PTY tests | `tests/prototype.rs` | Rendering/resizing, stage, read-only, commit, overlays, CLI and PTY smoke tests |
-| Docs | README, limitations, parity inventory and reference notes | Architecture/build/testing guides still pending |
+| Docs | README, limitations, parity inventory, architecture, build/install and testing guides | ✅ |
 | CI | `.github/workflows/` is empty | ❌ to do |
-| Repo | the directory is **not** a git repo yet | ❌ `git init` + local commit (no push) |
+| Repo | git-initialized locally (`.gitignore` added, `target/` untracked) | ✅ no push performed |
 
 `src/lib.rs` exports all five layers. The suite now includes the application,
 config and UI rather than only domain/Git code.
@@ -40,7 +40,23 @@ F6 switches views, F10 opens menus, F11 maximizes the focused pane and Ctrl-Q
 quits. Startup no longer depends on a cursor-position query: this matters for
 PTYs and terminals that do not answer terminal queries.
 
-## Latest completed work
+## Latest completed work (session continuation)
+
+- `.gitignore` added (`/target/`, `*.rs.bk`, `*.pdb`, `.DS_Store`).
+- `--all` CLI flag (`gitt --all`, `git tui --all`), equivalent to `gitk --all`:
+  sets `all_refs` on the default History view so all branches/tags/remotes
+  are included, not only `HEAD`'s ancestry.
+- Terminal-following theme (`--theme terminal`, and a Preferences form choice):
+  uses only `Color::Reset`/named ANSI colors so the UI follows the terminal's
+  own palette instead of a fixed dark/light RGB theme.
+- Clicking an annotated or lightweight tag label in the History tree now shows
+  "Tag / Tagger / date / message" (or "Lightweight tag (no annotation).") in
+  the bottom details pane, like gitk, via a new `git for-each-ref`-based
+  `tag_details` read and an async worker payload.
+- `LICENSE` file added (Apache-2.0, matching `Cargo.toml`).
+- New docs: `docs/architecture.md`, `docs/build-install.md`, `docs/testing.md`.
+
+## Latest completed work (previous session)
 
 - Quit confirmation for nonempty messages; Cancel preserves editing. Failed
   persistence prevents normal exit and keeps the draft dirty for retry.
@@ -55,25 +71,27 @@ PTYs and terminals that do not answer terminal queries.
 - `gitt` / `git-tui` binaries and `git tui` integration; `--view` still overrides
   the entry point's default. Existing XDG paths are retained.
 
-Current suite: 63 library tests and 13 integration tests, including both
+Current suite: 64 library tests and 13 integration tests, including both
 entry points in a PTY, Unicode rendering, persistence failure/recovery and
 compact/form interaction checks.
 
 ## Next priorities
 
 1. Extend integration coverage to partial staging/reverting, amend, conflicts,
-   unusual filenames, editor/signing handoffs and failure recovery.
+   unusual filenames, editor/signing handoffs and failure recovery, and to the
+   new tag-info-on-click flow (currently only exercised by unit tests).
 2. Further exercise the new interactions against real repositories and
    terminals, especially external edits and concurrent Git operations.
 3. Validate remaining parity entries against the graphical references. Only
    promote a row to verified when its specific behavior is covered.
 4. Resolve existing strict Clippy warnings in the previously written modules,
-   then establish the formatting/lint baseline and CI. Current strict Clippy
-   reports style lints in app/config/domain; it is not a passing quality gate.
-5. Add LICENSE and the remaining build/install, architecture and testing docs;
-   benchmark large histories and verify the Git minimum and macOS support.
-6. Initialize the source repository and create a local commit when appropriate;
-   no source-repository initialization or commit has been performed here.
+   then establish the formatting/lint baseline (including a `cargo fmt --all`
+   pass, deliberately deferred here since it reformats ~29 unrelated files)
+   and CI. Current strict Clippy reports style lints in app/config/domain; it
+   is not a passing quality gate.
+5. Benchmark large histories and verify the Git minimum and macOS support.
+6. Set up `.github/workflows/` (build/test/clippy) now that the repo is
+   git-initialized.
 
 ## Environment
 
@@ -82,7 +100,7 @@ compact/form interaction checks.
 - Main crates: ratatui 0.30, crossterm 0.29, clap 4, regex, serde/toml, tempfile,
   unicode-width, unicode-segmentation. Dev crates: portable-pty 0.9, vt100 0.16.
 - git 2.43 (minimum supported version `MIN_GIT = (2, 25)`). No Xvfb, so no gitk/git gui screenshots.
-- License: Apache-2.0 (the `LICENSE` file still has to be added).
+- License: Apache-2.0 (see `LICENSE`).
 
 ## Architecture (layers, top depends on bottom)
 

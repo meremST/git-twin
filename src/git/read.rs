@@ -169,6 +169,41 @@ pub fn related(r: &Runner, oid: &Oid) -> Related {
     rel
 }
 
+/// Annotation of an annotated tag object (gitk's tag info).
+#[derive(Clone, Debug, Default)]
+pub struct TagDetails {
+    pub tagger: String,
+    pub tagger_date: String,
+    pub message: String,
+}
+
+/// `None` for a lightweight tag (no tag object, nothing to show beyond the
+/// commit it points at).
+pub fn tag_details(r: &Runner, full_ref: &[u8]) -> Result<Option<TagDetails>, GitError> {
+    let out = r.read(&[
+        os("for-each-ref"),
+        os("--format=%(objecttype)%00%(taggername)%00%(taggeremail)%00%(taggerdate:iso-strict)%00%(contents)"),
+        bytes_arg(full_ref),
+    ])?;
+    let mut f = out.splitn(5, |c| *c == 0);
+    let mut next = || f.next().unwrap_or_default();
+    let kind = String::from_utf8_lossy(next()).trim().to_string();
+    if kind != "tag" {
+        return Ok(None);
+    }
+    let name = sanitize::display_bytes(next());
+    let email = sanitize::display_bytes(next());
+    let date = sanitize::display_bytes(next());
+    let msg_bytes = next();
+    let message = sanitize::display_bytes(msg_bytes.strip_suffix(b"\n").unwrap_or(msg_bytes));
+    let tagger = if email.is_empty() { name } else { format!("{name} {email}") };
+    Ok(Some(TagDetails {
+        tagger,
+        tagger_date: date,
+        message,
+    }))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum WordMode {
     #[default]

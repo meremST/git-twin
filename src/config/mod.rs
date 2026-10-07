@@ -42,6 +42,9 @@ pub enum ThemeName {
     #[default]
     Dark,
     Light,
+    /// Uses the terminal's own default colors and 16-color palette instead of
+    /// a fixed one, so the UI follows whatever scheme the user's terminal applies.
+    Terminal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default, clap::ValueEnum)]

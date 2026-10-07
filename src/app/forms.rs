@@ -23,10 +23,6 @@ fn form(title: &str, kind: FormKind, fields: Vec<Field>, buttons: &[&str]) -> Di
     d
 }
 
-fn bool_s(b: bool) -> usize {
-    usize::from(b)
-}
-
 impl App {
     fn subject(&self, oid: &Oid) -> String {
         self.hist
@@ -66,7 +62,15 @@ impl App {
     pub fn open_preferences(&mut self) {
         let c = &self.cfg;
         let fields = vec![
-            Field::choice("Theme", &["dark", "light"], bool_s(c.theme == ThemeName::Light)),
+            Field::choice(
+                "Theme",
+                &["dark", "light", "terminal"],
+                match c.theme {
+                    ThemeName::Dark => 0,
+                    ThemeName::Light => 1,
+                    ThemeName::Terminal => 2,
+                },
+            ),
             Field::choice(
                 "Icons",
                 &["unicode", "nerd", "ascii"],
@@ -770,7 +774,11 @@ impl App {
     fn submit_preferences(&mut self, d: Dialog) {
         let num = |i: usize| d.text(i).trim().parse::<u64>().ok();
         let mut c = self.cfg.clone();
-        c.theme = if d.chosen(0) == 1 { ThemeName::Light } else { ThemeName::Dark };
+        c.theme = match d.chosen(0) {
+            1 => ThemeName::Light,
+            2 => ThemeName::Terminal,
+            _ => ThemeName::Dark,
+        };
         c.icons = match d.chosen(1) {
             1 => IconMode::Nerd,
             2 => IconMode::Ascii,

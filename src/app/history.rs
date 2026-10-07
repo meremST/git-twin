@@ -95,6 +95,20 @@ pub struct HistoryState {
     pub sel_changed_at: Option<Instant>,
     pub tab: usize,
     pub total: usize,
+    /// Annotated tag details shown in the details pane (set by clicking a tag
+    /// label, gitk-style), bound to the commit it was requested for.
+    pub tag_info: Option<TagInfoPanel>,
+}
+
+/// State of a pending/loaded annotated-tag lookup, shown in the commit
+/// details header.
+#[derive(Clone, Debug)]
+pub struct TagInfoPanel {
+    pub oid: Oid,
+    pub full: Vec<u8>,
+    pub short: String,
+    pub loading: bool,
+    pub details: Option<read::TagDetails>,
 }
 
 impl HistoryState {
@@ -150,6 +164,7 @@ impl HistoryState {
             sel_changed_at: None,
             tab: cfg.tab_width as usize,
             total: 0,
+            tag_info: None,
         }
     }
 
@@ -278,6 +293,22 @@ impl HistoryState {
         let Some(c) = self.selected() else {
             return v;
         };
+        if let Some(t) = &self.tag_info
+            && t.oid == c.oid
+        {
+            v.push(DLine::plain(DKind::Header, format!("Tag: {}", t.short)));
+            if t.loading {
+                v.push(DLine::plain(DKind::Info, "Loading tag details..."));
+            } else if let Some(d) = &t.details {
+                v.push(DLine::plain(DKind::Header, format!("Tagger: {}  {}", d.tagger, d.tagger_date)));
+                for l in d.message.lines() {
+                    v.push(DLine::plain(DKind::Message, l.to_string()));
+                }
+            } else {
+                v.push(DLine::plain(DKind::Info, "Lightweight tag (no annotation)."));
+            }
+            v.push(DLine::plain(DKind::Header, String::new()));
+        }
         if Self::is_pseudo(&c.oid) {
             v.push(DLine::plain(DKind::Header, c.subject.to_string()));
             v.push(DLine::plain(DKind::Header, String::new()));
@@ -361,6 +392,24 @@ impl HistoryState {
             }
         }
         self.forward.clear();
+    }
+
+    /// Applies the result of an annotated-tag lookup requested by
+    /// `App::show_tag_info`; stale answers (a different tag meanwhile
+    /// selected) are dropped.
+    pub fn on_tag_info(&mut self, full: Vec<u8>, result: Result<Option<read::TagDetails>, crate::git::GitError>) {
+        let Some(info) = &mut self.tag_info else { return };
+        if info.full != full {
+            return;
+        }
+        match result {
+            Ok(details) => {
+                info.loading = false;
+                info.details = details;
+            }
+            Err(_) => self.tag_info = None,
+        }
+        self.rebuild_diff();
     }
 }
 
@@ -524,6 +573,12 @@ impl App {
         h.related = None;
         h.cur_diff = None;
         h.diff.reset_scroll();
+        // Keep tag info set just before this debounced reload (clicking a
+        // tag label also selects its commit); drop it once the selection
+        // has actually moved elsewhere.
+        if h.tag_info.as_ref().is_some_and(|t| t.oid != c.oid) {
+            h.tag_info = None;
+        }
         h.rebuild_diff();
         if !HistoryState::is_pseudo(&c.oid) && h.compare.is_none() {
             let r = self.runner.clone();
@@ -538,6 +593,39 @@ impl App {
         if self.hist.tree_mode {
             self.load_tree();
         }
+    }
+
+    /// Shows an annotated tag's tagger/date/message in the details pane,
+    /// gitk-style, when its label is clicked in the commit list.
+    pub fn show_tag_info(&mut self, full: Vec<u8>) {
+        let Some(r) = self.refs.find_full(&full) else {
+            return;
+        };
+        if r.kind != RefKind::Tag {
+            return;
+        }
+        let Some(&i) = self.hist.index.get(&r.target) else {
+            return;
+        };
+        let oid = r.target;
+        let short = r.short.clone();
+        self.hist.tag_info = Some(TagInfoPanel {
+            oid,
+            full: full.clone(),
+            short,
+            loading: true,
+            details: None,
+        });
+        if self.hist.sel == Some(i) {
+            self.hist.rebuild_diff();
+        } else {
+            self.select_row(i);
+        }
+        let runner = self.runner.clone();
+        self.req.tag_info = self.workers.read(self.generation, move || Payload::TagInfo {
+            full: full.clone(),
+            result: read::tag_details(&runner, &full),
+        });
     }
 
     /// Re-requests only the diff (options changed).

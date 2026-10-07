@@ -29,8 +29,8 @@ git tui --repo /chemin/vers/depot
 Pour installer les deux commandes dans `~/.cargo/bin` : `cargo install --path . --locked`.
 
 L'application ne cree pas de depot si le chemin fourni n'en contient pas.
-Le repertoire des sources n'est pas encore initialise en depot Git :
-utiliser `--repo` pour le lancement, ou la demonstration ci-dessus.
+Le repertoire des sources est desormais lui-meme un depot Git (commit initial
+local, non publie) ; utiliser `--repo` pour pointer vers un autre depot.
 
 Taille conseillee : **120 x 35** cellules. Taille minimale : **80 x 24**.
 Entre ces tailles, le mode compact affiche un panneau a la fois, avec des onglets
@@ -71,8 +71,16 @@ garde l'application ouverte et le brouillon en memoire.
 gitt --help
 gitt doctor
 gitt --repo /chemin/vers/depot --no-mouse --icons ascii
+gitt --repo /chemin/vers/depot --all
 git tui --repo /chemin/vers/depot --theme light --colors 256
+git tui --repo /chemin/vers/depot --theme terminal
 ```
+
+`--all` affiche l'historique de toutes les refs (branches, tags, remotes),
+comme `gitk --all`, au lieu de se limiter a HEAD. Le theme `terminal`
+n'utilise que les couleurs par defaut et ANSI du terminal (pas de RGB fixe) :
+l'interface suit alors la palette configuree par l'utilisateur dans son
+emulateur, plutot que d'imposer `dark`/`light`.
 
 `--help`, `--version` et `doctor` fonctionnent sans depot ni terminal interactif.
 `doctor` n'effectue aucun appel reseau.
@@ -90,5 +98,13 @@ cargo run --example preview -- /chemin/vers/depot
 
 Les tests du prototype utilisent des depots temporaires et un pseudo-terminal.
 Voir [status.md](status.md) pour les travaux restants,
-[design.md](design.md) pour la specification, et
+[design.md](design.md) pour la specification,
+[docs/architecture.md](docs/architecture.md) pour l'organisation des couches,
+[docs/build-install.md](docs/build-install.md) pour la compilation,
+l'installation et la desinstallation detaillees,
+[docs/testing.md](docs/testing.md) pour l'etat de la suite de tests, et
 [docs/limitations.md](docs/limitations.md) pour les adaptations et limites.
+
+## Licence
+
+Apache-2.0, voir [LICENSE](LICENSE).

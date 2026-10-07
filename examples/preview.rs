@@ -37,6 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             view: Some(ViewKind::History),
             read_only: true,
             mouse: Some(false),
+            all_refs: false,
         },
     );
     app.start();

@@ -285,10 +285,14 @@ pub struct Theme {
 
 impl Theme {
     pub fn new(cfg: &Config) -> Theme {
+        if cfg.theme == ThemeName::Terminal {
+            return Theme::terminal(cfg);
+        }
         let depth = detect_depth(cfg.colors);
         let p = match cfg.theme {
             ThemeName::Dark => DARK,
             ThemeName::Light => LIGHT,
+            ThemeName::Terminal => unreachable!(),
         };
         let c = |v: u32| -> Color {
             let (r, g, b) = ((v >> 16) as u8, (v >> 8) as u8, v as u8);
@@ -332,6 +336,49 @@ impl Theme {
             graph: p.graph.map(c),
             icons: Icons::new(cfg.icons),
             low_color: low,
+        }
+    }
+
+    /// Uses only the terminal's own default and ANSI colours (no fixed RGB),
+    /// so the UI inherits whatever palette the user configured there.
+    fn terminal(cfg: &Config) -> Theme {
+        Theme {
+            depth_true: false,
+            bg: Color::Reset,
+            bg_alt: Color::Reset,
+            fg: Color::Reset,
+            dim: Color::DarkGray,
+            border: Color::DarkGray,
+            accent: Color::Blue,
+            sel_bg: Color::Blue,
+            sel_dim_bg: Color::DarkGray,
+            bar_bg: Color::Reset,
+            add: Color::Green,
+            del: Color::Red,
+            add_bg: Color::Reset,
+            del_bg: Color::Reset,
+            hunk: Color::Cyan,
+            meta: Color::Magenta,
+            warn: Color::Yellow,
+            error: Color::Red,
+            ok: Color::Green,
+            head: Color::Green,
+            branch: Color::Cyan,
+            remote: Color::Yellow,
+            tag: Color::Yellow,
+            graph: [
+                Color::Blue,
+                Color::Green,
+                Color::Red,
+                Color::Yellow,
+                Color::Magenta,
+                Color::Cyan,
+                Color::LightYellow,
+                Color::LightCyan,
+            ],
+            icons: Icons::new(cfg.icons),
+            // No reliable background colours to pair with reversed selection.
+            low_color: true,
         }
     }
 
@@ -415,5 +462,18 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn terminal_theme_uses_reset_and_named_colors() {
+        let cfg = Config {
+            theme: ThemeName::Terminal,
+            ..Config::default()
+        };
+        let t = Theme::new(&cfg);
+        assert!(!t.truecolor());
+        assert_eq!(t.bg, Color::Reset);
+        assert_eq!(t.fg, Color::Reset);
+        assert_eq!(t.accent, Color::Blue);
     }
 }

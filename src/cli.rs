@@ -38,6 +38,9 @@ struct Cli {
     repo: Option<PathBuf>,
     #[arg(long, value_enum)]
     view: Option<ViewKind>,
+    /// Show history for all refs (branches, tags, remotes), like `gitk --all`.
+    #[arg(long)]
+    all: bool,
     #[arg(long)]
     read_only: bool,
     #[arg(long)]
@@ -167,6 +170,7 @@ fn run(default_view: ViewKind, name: &'static str) -> Result<(), String> {
             view: Some(cli.view.unwrap_or(default_view)),
             read_only: cli.read_only,
             mouse: cli.no_mouse.then_some(false),
+            all_refs: cli.all,
         },
     );
     let old_hook = std::panic::take_hook();

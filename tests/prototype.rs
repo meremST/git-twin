@@ -68,6 +68,7 @@ fn app(dir: &std::path::Path, read_only: bool) -> App {
             view: Some(ViewKind::History),
             read_only,
             mouse: Some(true),
+            all_refs: false,
         },
     )
 }
