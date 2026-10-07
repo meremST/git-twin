@@ -619,12 +619,11 @@ impl App {
             return;
         }
         if self.cfg.confirm_quit && !self.wt.message.text().trim().is_empty() {
-            self.confirm(
-                "Quit with a commit message?",
-                &[("Your message has not been committed. Save the draft and quit?", Tone::Warn)],
-                "Save draft and quit",
-                Pending::Act(Action::ForceQuit),
-            );
+            let mut d = Dialog::new("Quit with a commit message?", Kind::Form(dialog::FormKind::QuitWithDraft))
+                .with_body(&[("Your message has not been committed.", Tone::Warn)])
+                .with_buttons(&["Save draft and quit", "Quit without saving", "Cancel"]);
+            d.cancel = Some(2);
+            self.dialogs.push(d);
         } else {
             self.finish_quit();
         }
@@ -632,6 +631,17 @@ impl App {
 
     pub fn finish_quit(&mut self) {
         match self.persist() {
+            Ok(()) => self.quit = true,
+            Err(e) => self.error("Not quitting: cannot save", e),
+        }
+    }
+
+    /// Quits without saving the in-progress commit message draft.
+    pub fn finish_quit_discard(&mut self) {
+        if let Err(e) = crate::config::clear_draft(&self.repo.git_dir) {
+            return self.error("Not quitting: cannot clear draft", e);
+        }
+        match self.try_save_state() {
             Ok(()) => self.quit = true,
             Err(e) => self.error("Not quitting: cannot save", e),
         }

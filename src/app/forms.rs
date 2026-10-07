@@ -486,6 +486,11 @@ impl App {
                     self.finish_quit();
                 }
             }
+            FormKind::QuitWithDraft => match b {
+                0 => self.finish_quit(),
+                1 => self.finish_quit_discard(),
+                _ => {}
+            },
             FormKind::UntrackedStage(_) => match b {
                 0 => self.stage_changed(Some(true)),
                 1 => self.stage_changed(Some(false)),

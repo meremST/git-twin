@@ -225,6 +225,7 @@ pub enum FormKind {
     BrowseBranch,
     Browser(Oid),
     QuitBusy,
+    QuitWithDraft,
     CherryPickMerge(Oid),
     UntrackedStage(Vec<Vec<u8>>),
 }

@@ -744,7 +744,11 @@ fn persistence_errors_and_quit_confirmation_are_recoverable() {
         app.dialogs.last().unwrap().buttons[0],
         "Save draft and quit"
     );
-    app.on_dialog_result(DialogResult::Button(1));
+    assert_eq!(
+        app.dialogs.last().unwrap().buttons[1],
+        "Quit without saving"
+    );
+    app.on_dialog_result(DialogResult::Button(2));
     assert!(!app.quit);
     assert_eq!(app.wt.message.text(), "Keep this draft");
     let state_dir = config::state_dir().unwrap();
@@ -792,6 +796,19 @@ fn persistence_errors_and_quit_confirmation_are_recoverable() {
     app.open_preferences();
     app.on_dialog_result(DialogResult::Button(0));
     assert!(app.dialogs.last().unwrap().title.contains("not saved"));
+    app.dialogs.clear();
+    app.quit = false;
+    app.cfg.confirm_quit = true;
+    app.wt.message.set_text("Discard me");
+    app.save_draft();
+    assert_eq!(
+        config::load_draft(&app.repo.git_dir).unwrap().as_deref(),
+        Some("Discard me")
+    );
+    app.request_quit();
+    app.on_dialog_result(DialogResult::Button(1));
+    assert!(app.quit, "Quit without saving must still quit");
+    assert_eq!(config::load_draft(&app.repo.git_dir).unwrap(), None);
 }
 
 #[test]
