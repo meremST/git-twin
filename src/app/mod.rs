@@ -125,6 +125,9 @@ pub struct App {
     pub git_version: String,
     pub mouse_enabled: bool,
     pub persistence_error: Option<String>,
+    /// Timestamp of the previous Ctrl-C press, used to require a quick double
+    /// press to quit (Ctrl-C alone still copies, like elsewhere in the app).
+    pub last_ctrl_c: Option<Instant>,
 }
 
 pub struct Options {
@@ -193,6 +196,7 @@ impl App {
                 .unwrap_or_default(),
             mouse_enabled,
             persistence_error: draft_error,
+            last_ctrl_c: None,
             repo,
             cfg,
             state,

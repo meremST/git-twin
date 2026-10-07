@@ -1,6 +1,8 @@
 //! Keyboard handling. Priority: dialog > menu > global keys > focused view.
 //! gitk and git gui shortcuts are kept where the terminal can report them.
 
+use std::time::{Duration, Instant};
+
 use crossterm::event::{KeyCode as C, KeyEvent, KeyEventKind, KeyModifiers as M};
 
 use super::action::{Action, FileList};
@@ -17,6 +19,17 @@ impl App {
     pub fn on_key(&mut self, k: KeyEvent) {
         if k.kind == KeyEventKind::Release {
             return;
+        }
+        if k.code == C::Char('c') && k.modifiers.contains(M::CONTROL) {
+            let now = Instant::now();
+            if self.last_ctrl_c.is_some_and(|t| now.duration_since(t) < Duration::from_millis(1200)) {
+                self.last_ctrl_c = None;
+                self.request_quit();
+                return;
+            }
+            self.last_ctrl_c = Some(now);
+            self.set_status("Press Ctrl-C again to quit", StatusTone::Info);
+            // Fall through so Ctrl-C still copies as usual on a single press.
         }
         if !self.dialogs.is_empty() {
             if k.code == C::Char('c') && k.modifiers.contains(M::CONTROL) {
