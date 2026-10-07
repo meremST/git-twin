@@ -145,9 +145,7 @@ impl App {
         let view = if repo.is_bare() {
             ViewKind::History
         } else {
-            opts.view
-                .or(state.last_view)
-                .unwrap_or(ViewKind::History)
+            opts.view.or(state.last_view).unwrap_or(ViewKind::History)
         };
         let theme = Theme::new(&cfg);
         let mut hist = HistoryState::new(&cfg, &state);
@@ -159,7 +157,10 @@ impl App {
         hist.views.extend(state.views.iter().cloned());
         let mut wt = WorktreeState::new(&cfg);
         let draft_error = match crate::config::load_draft(&repo.git_dir) {
-            Ok(Some(d)) => { wt.message = input::TextArea::new(&d); None }
+            Ok(Some(d)) => {
+                wt.message = input::TextArea::new(&d);
+                None
+            }
             Ok(None) => None,
             Err(e) => Some(e),
         };
@@ -171,7 +172,11 @@ impl App {
             hist,
             wt,
             menu: None,
-            dialogs: draft_error.as_ref().map(|e| Dialog::error("Cannot read draft", e)).into_iter().collect(),
+            dialogs: draft_error
+                .as_ref()
+                .map(|e| Dialog::error("Cannot read draft", e))
+                .into_iter()
+                .collect(),
             status: (String::from("Ready."), StatusTone::Info),
             workers: Workers::new(4),
             generation: 1,
@@ -207,7 +212,10 @@ impl App {
     pub fn start(&mut self) {
         self.refresh_all(None);
         if self.read_only {
-            self.set_status("Read-only mode: all mutations are disabled.", StatusTone::Info);
+            self.set_status(
+                "Read-only mode: all mutations are disabled.",
+                StatusTone::Info,
+            );
         }
     }
 
@@ -274,9 +282,9 @@ impl App {
 
     pub fn load_refs(&mut self) {
         let r = self.runner.clone();
-        self.req.refs = self
-            .workers
-            .read(self.generation, move || Payload::Refs(crate::git::read::load_refs(&r)));
+        self.req.refs = self.workers.read(self.generation, move || {
+            Payload::Refs(crate::git::read::load_refs(&r))
+        });
     }
 
     /// Queues a mutation. `expect_head` lets the job refuse to run if HEAD
@@ -329,7 +337,10 @@ impl App {
             return;
         }
         if self.workers.writing() {
-            self.set_status("Busy: wait for the running operation to finish.", StatusTone::Error);
+            self.set_status(
+                "Busy: wait for the running operation to finish.",
+                StatusTone::Error,
+            );
             return;
         }
         self.handoff = Some(h);
@@ -344,7 +355,10 @@ impl App {
                 self.set_status("Commit created.", StatusTone::Info);
             }
             (_, Ok(true)) => self.set_status("Done.", StatusTone::Info),
-            (_, Ok(false)) => self.set_status("Command failed (see the terminal output).", StatusTone::Error),
+            (_, Ok(false)) => self.set_status(
+                "Command failed (see the terminal output).",
+                StatusTone::Error,
+            ),
             (_, Err(e)) => self.error("Error", e),
         }
         self.refresh_all(None);
@@ -358,7 +372,10 @@ impl App {
         self.clipboard = s.clone();
         if self.cfg.osc52 {
             self.osc52 = Some(s);
-            self.set_status(format!("Copied {n} characters to the clipboard."), StatusTone::Info);
+            self.set_status(
+                format!("Copied {n} characters to the clipboard."),
+                StatusTone::Info,
+            );
         } else {
             self.set_status(
                 format!("Copied {n} characters (internal clipboard; enable osc52 in Preferences for the system clipboard)."),
@@ -377,7 +394,14 @@ impl App {
         if !self.is_bare() {
             self.state.last_view = Some(self.view);
         }
-        self.state.views = self.hist.views.iter().skip(1).filter(|v| v.remember).cloned().collect();
+        self.state.views = self
+            .hist
+            .views
+            .iter()
+            .skip(1)
+            .filter(|v| v.remember)
+            .cloned()
+            .collect();
         self.state.save()
     }
 
@@ -433,7 +457,9 @@ impl App {
                             self.refs = rs;
                             self.wt.branch_label = self.refs.head.label();
                         }
-                        Err(e) => self.set_status(format!("Cannot read refs: {e}"), StatusTone::Error),
+                        Err(e) => {
+                            self.set_status(format!("Cannot read refs: {e}"), StatusTone::Error)
+                        }
                     }
                 }
             }
@@ -470,7 +496,9 @@ impl App {
                 if m.id == self.req.highlight {
                     match r {
                         Ok(s) => self.hist.highlight = Some(s),
-                        Err(e) => self.set_status(format!("Highlight failed: {e}"), StatusTone::Error),
+                        Err(e) => {
+                            self.set_status(format!("Highlight failed: {e}"), StatusTone::Error)
+                        }
                     }
                 }
             }
@@ -506,7 +534,10 @@ impl App {
                     match r {
                         Ok((oid, line)) => {
                             self.select_oid(oid, true);
-                            self.set_status(format!("Origin: {} line {line}", oid.short(10)), StatusTone::Info);
+                            self.set_status(
+                                format!("Origin: {} line {line}", oid.short(10)),
+                                StatusTone::Info,
+                            );
                         }
                         Err(e) => self.error("Show origin of this line", e),
                     }
@@ -555,25 +586,25 @@ impl App {
                 }
             }
             Err(e) => {
-                if let After::OfferForceDelete(name) = after {
-                    if e.message.contains("not fully merged") {
-                        let shown = crate::domain::sanitize::display_bytes(&name);
-                        let body = format!(
-                            "The commits on branch {shown} aren't on any other branch.\nReally delete branch {shown}?"
-                        );
-                        self.confirm(
-                            "Confirm",
-                            &[(&body, Tone::Warn)],
-                            "Delete",
-                            Pending::Op {
-                                label: format!("Delete branch {shown}"),
-                                f: Box::new(move |r| crate::git::ops::delete_branch(r, &name, true)),
-                                after: After::Refresh,
-                                expect_head: None,
-                            },
-                        );
-                        return;
-                    }
+                if let After::OfferForceDelete(name) = after
+                    && e.message.contains("not fully merged")
+                {
+                    let shown = crate::domain::sanitize::display_bytes(&name);
+                    let body = format!(
+                        "The commits on branch {shown} aren't on any other branch.\nReally delete branch {shown}?"
+                    );
+                    self.confirm(
+                        "Confirm",
+                        &[(&body, Tone::Warn)],
+                        "Delete",
+                        Pending::Op {
+                            label: format!("Delete branch {shown}"),
+                            f: Box::new(move |r| crate::git::ops::delete_branch(r, &name, true)),
+                            after: After::Refresh,
+                            expect_head: None,
+                        },
+                    );
+                    return;
                 }
                 self.error(&label, &e);
                 // The repository may have changed partially: re-read.
@@ -592,7 +623,10 @@ impl App {
 
     pub fn switch_view(&mut self, v: ViewKind) {
         if v == ViewKind::Worktree && self.is_bare() {
-            self.set_status("Bare repository: the working tree view is not available.", StatusTone::Error);
+            self.set_status(
+                "Bare repository: the working tree view is not available.",
+                StatusTone::Error,
+            );
             return;
         }
         self.view = v;
@@ -608,20 +642,32 @@ impl App {
                 .lock()
                 .map(|l| l.clone())
                 .unwrap_or_default();
-            let mut d = Dialog::new("Operation in progress", Kind::Form(dialog::FormKind::QuitBusy))
-                .with_body(&[
-                    (&format!("A Git operation is still running: {label}"), Tone::Warn),
-                    ("It will not be interrupted. Quit anyway, or wait for it to finish?", Tone::Normal),
-                ])
-                .with_buttons(&["Wait", "Quit anyway"]);
+            let mut d = Dialog::new(
+                "Operation in progress",
+                Kind::Form(dialog::FormKind::QuitBusy),
+            )
+            .with_body(&[
+                (
+                    &format!("A Git operation is still running: {label}"),
+                    Tone::Warn,
+                ),
+                (
+                    "It will not be interrupted. Quit anyway, or wait for it to finish?",
+                    Tone::Normal,
+                ),
+            ])
+            .with_buttons(&["Wait", "Quit anyway"]);
             d.cancel = Some(0);
             self.dialogs.push(d);
             return;
         }
         if self.cfg.confirm_quit && !self.wt.message.text().trim().is_empty() {
-            let mut d = Dialog::new("Quit with a commit message?", Kind::Form(dialog::FormKind::QuitWithDraft))
-                .with_body(&[("Your message has not been committed.", Tone::Warn)])
-                .with_buttons(&["Save draft and quit", "Quit without saving", "Cancel"]);
+            let mut d = Dialog::new(
+                "Quit with a commit message?",
+                Kind::Form(dialog::FormKind::QuitWithDraft),
+            )
+            .with_body(&[("Your message has not been committed.", Tone::Warn)])
+            .with_buttons(&["Save draft and quit", "Quit without saving", "Cancel"]);
             d.cancel = Some(2);
             self.dialogs.push(d);
         } else {
@@ -654,7 +700,11 @@ impl App {
         let draft = self.try_save_draft();
         let state = self.try_save_state();
         let errors: Vec<_> = [draft, state].into_iter().filter_map(Result::err).collect();
-        if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("\n"))
+        }
     }
 
     pub fn shutdown(&mut self) -> Result<(), String> {
@@ -704,7 +754,9 @@ impl App {
     pub fn focused_pane(&self) -> PaneId {
         match self.view {
             ViewKind::History => match self.hist.focus {
-                history::HFocus::List | history::HFocus::Sha | history::HFocus::Find => PaneId::HList,
+                history::HFocus::List | history::HFocus::Sha | history::HFocus::Find => {
+                    PaneId::HList
+                }
                 history::HFocus::Files => PaneId::HFiles,
                 _ => PaneId::HDiff,
             },
@@ -733,7 +785,11 @@ impl App {
                     .selected_oid()
                     .map(|o| o.to_hex())
                     .unwrap_or_default(),
-                history::HFocus::Files => self.hist.file_path(self.hist.file_sel).map(|p| crate::domain::sanitize::display_bytes(&p)).unwrap_or_default(),
+                history::HFocus::Files => self
+                    .hist
+                    .file_path(self.hist.file_sel)
+                    .map(|p| crate::domain::sanitize::display_bytes(&p))
+                    .unwrap_or_default(),
                 history::HFocus::Sha => self.hist.sha.text.clone(),
                 history::HFocus::Find => self.hist.find.text.clone(),
             },
@@ -771,7 +827,9 @@ impl App {
             ViewKind::Worktree => {
                 if self.wt.focus == worktree::WFocus::Message {
                     self.wt.message.insert_str(s);
-                    self.wt.message.scroll_to_cursor(self.wt.msg_height, self.wt.msg_width);
+                    self.wt
+                        .message
+                        .scroll_to_cursor(self.wt.msg_height, self.wt.msg_width);
                 }
             }
         }
@@ -791,8 +849,16 @@ pub fn base64(data: &[u8]) -> String {
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         out.push(T[(n >> 18) as usize & 63] as char);
         out.push(T[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if c.len() > 2 { T[n as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }

@@ -1,4 +1,4 @@
-# Limites du prototype
+# Limites connues de la version 0.1.0
 
 - Les deux vues, menus, dialogues et interactions de base sont raccordes.
   Cela ne constitue pas encore une validation de toutes les lignes de
@@ -33,13 +33,19 @@
 - La commande gitk permettant de generer des commits avec un shell arbitraire
   n'est pas implementee. Les outils configures explicitement et l'editeur Git
   s'executent seulement sur action utilisateur.
-- Le prototype demande confirmation avant de quitter avec un message non vide
+- L'application demande confirmation avant de quitter avec un message non vide
   lorsque `confirm_quit` est active. Un echec de sauvegarde empeche la fermeture
   normale ; le message reste en memoire et la sauvegarde peut etre reessayee.
   Les erreurs de lecture et de suppression des brouillons sont aussi signalees.
+  L'option explicite de quitter sans sauvegarder abandonne les changements
+  du message en memoire.
 - Le plancher Git 2.25 est verifie au lancement, mais seule la version 2.43 a
   ete utilisee pour les essais actuels. macOS, gros depots et budgets de
   performances restent a valider.
+- La distribution binaire cible Linux x86_64 GNU avec glibc >= 2.35 ;
+  les executables ne sont pas statiques. Alpine/musl, ARM et Windows ne font
+  pas partie de cette premiere distribution. Voir le
+  [guide d'installation](build-install.md).
 - Aucune capture des applications graphiques gitk/git gui n'a ete produite.
   L'exemple `preview` represente le rendu reel de Git Twin via ratatui TestBackend,
   et non une maquette statique.

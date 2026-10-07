@@ -1,7 +1,8 @@
 # Git Twin — development status
 
-Last update: 2026-10-07, six usability features completed and launchers renamed.
-Spec: `design.md`. This is not yet the final parity/quality milestone.
+Last update: 2026-10-07, first Linux release preparation.
+Spec: `design.md`. Version 0.1.0 is prepared, not published; full parity is
+not a release claim.
 
 ## TL;DR
 
@@ -16,13 +17,13 @@ Spec: `design.md`. This is not yet the final parity/quality milestone.
 | Binaries | `src/main.rs`, `src/bin/git-tui.rs`, shared `src/cli.rs` | `gitt` defaults to History; `git tui` defaults to Worktree; About dialogs updated |
 | Integration / PTY tests | `tests/prototype.rs` | Rendering/resizing, stage, read-only, commit, overlays, CLI and PTY smoke tests |
 | Docs | README, limitations, parity inventory, architecture, build/install and testing guides | ✅ |
-| CI | `.github/workflows/` is empty | ❌ to do |
-| Repo | git-initialized locally (`.gitignore` added, `target/` untracked) | ✅ no push performed |
+| CI | `.github/workflows/{ci,release}.yml` | Strict checks, Linux archive/install jobs and draft release; hosted run pending |
+| Repo | Local Git repository, no remote configured | No tag, push or publication performed |
 
 `src/lib.rs` exports all five layers. The suite now includes the application,
 config and UI rather than only domain/Git code.
 
-## Try the intermediate state
+## Try from source
 
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -40,7 +41,26 @@ F6 switches views, F10 opens menus, F11 maximizes the focused pane and Ctrl-Q
 quits. Startup no longer depends on a cursor-position query: this matters for
 PTYs and terminals that do not answer terminal queries.
 
-## Latest completed work (session continuation)
+## Release preparation
+
+- Linux installation guide for prebuilt archives and pinned source builds,
+  PATH setup, upgrades, uninstall, runtime compatibility and troubleshooting.
+- Installation defaults to `~/bin`; `scripts/uninstall.sh` handles manual
+  installs and Cargo installs (`--cargo`), preserving user data. Included in
+  release archives and exercised by isolated tests and archive-install CI.
+- Linux x86_64 GNU packaging with both launchers, docs, dependency licenses and
+  SHA-256. `scripts/package-release.py --tag v0.1.0` rejects version mismatches.
+- CI for formatting, strict Clippy, tests, archive building on Ubuntu 22.04,
+  and installation on Ubuntu 22.04/24.04. Tag pushes create a draft only after
+  all checks pass; publication remains a maintainer decision.
+- Rust formatting baseline and compiler-assisted Clippy cleanups, without
+  intentional changes to application behavior.
+- `CHANGELOG.md` added. crates.io publishing stays disabled; no official
+  repository URL is invented while a remote is not configured.
+- Pending publication work: configure the official remote, run hosted CI,
+  review release notes/licenses, then tag and review the generated draft.
+
+## Earlier completed work (session continuation)
 
 - `.gitignore` added (`/target/`, `*.rs.bk`, `*.pdb`, `.DS_Store`).
 - `--all` CLI flag (`gitt --all`, `git tui --all`), equivalent to `gitk --all`:
@@ -71,7 +91,7 @@ PTYs and terminals that do not answer terminal queries.
 - `gitt` / `git-tui` binaries and `git tui` integration; `--view` still overrides
   the entry point's default. Existing XDG paths are retained.
 
-Current suite: 64 library tests and 13 integration tests, including both
+Current suite: 71 library tests and 14 integration tests, including both
 entry points in a PTY, Unicode rendering, persistence failure/recovery and
 compact/form interaction checks.
 
@@ -84,14 +104,10 @@ compact/form interaction checks.
    terminals, especially external edits and concurrent Git operations.
 3. Validate remaining parity entries against the graphical references. Only
    promote a row to verified when its specific behavior is covered.
-4. Resolve existing strict Clippy warnings in the previously written modules,
-   then establish the formatting/lint baseline (including a `cargo fmt --all`
-   pass, deliberately deferred here since it reformats ~29 unrelated files)
-   and CI. Current strict Clippy reports style lints in app/config/domain; it
-   is not a passing quality gate.
-5. Benchmark large histories and verify the Git minimum and macOS support.
-6. Set up `.github/workflows/` (build/test/clippy) now that the repo is
-   git-initialized.
+4. Execute the new workflows on the official GitHub repository before
+   publishing the first release; local checks do not replace hosted runs.
+5. Benchmark large histories and verify the Git minimum. Validate other
+   architectures/platforms before expanding beyond Linux x86_64.
 
 ## Environment
 

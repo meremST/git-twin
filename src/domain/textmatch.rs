@@ -52,9 +52,10 @@ impl Matcher {
     /// Byte ranges of all matches in `s` (for highlighting).
     pub fn find_all(&self, s: &str) -> Vec<(usize, usize)> {
         match self {
-            Matcher::Exact(p) if !p.is_empty() => {
-                s.match_indices(p.as_str()).map(|(i, m)| (i, i + m.len())).collect()
-            }
+            Matcher::Exact(p) if !p.is_empty() => s
+                .match_indices(p.as_str())
+                .map(|(i, m)| (i, i + m.len()))
+                .collect(),
             Matcher::IgnCase(p) if !p.is_empty() => {
                 let lower = s.to_lowercase();
                 if lower.len() != s.len() {
@@ -81,10 +82,26 @@ mod tests {
 
     #[test]
     fn kinds() {
-        assert!(Matcher::new(MatchKind::Exact, "Foo").unwrap().is_match("a Foo b"));
-        assert!(!Matcher::new(MatchKind::Exact, "foo").unwrap().is_match("a Foo b"));
-        assert!(Matcher::new(MatchKind::IgnCase, "foo").unwrap().is_match("a FOO b"));
-        assert!(Matcher::new(MatchKind::Regexp, "^fix(es)?:").unwrap().is_match("fixes: x"));
+        assert!(
+            Matcher::new(MatchKind::Exact, "Foo")
+                .unwrap()
+                .is_match("a Foo b")
+        );
+        assert!(
+            !Matcher::new(MatchKind::Exact, "foo")
+                .unwrap()
+                .is_match("a Foo b")
+        );
+        assert!(
+            Matcher::new(MatchKind::IgnCase, "foo")
+                .unwrap()
+                .is_match("a FOO b")
+        );
+        assert!(
+            Matcher::new(MatchKind::Regexp, "^fix(es)?:")
+                .unwrap()
+                .is_match("fixes: x")
+        );
         assert!(Matcher::new(MatchKind::Regexp, "(").is_err());
         let m = Matcher::new(MatchKind::Exact, "ab").unwrap();
         assert_eq!(m.find_all("xabyab"), vec![(1, 3), (4, 6)]);

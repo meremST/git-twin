@@ -138,7 +138,10 @@ pub fn safe_join(workdir: &Path, rel: &[u8]) -> Result<PathBuf, String> {
 /// untracked files). The repository is never touched outside `workdir`.
 pub fn delete_untracked(r: &Runner, workdir: &Path, paths: &[Vec<u8>]) -> Result<String, GitError> {
     if r.read_only {
-        return Err(GitError::new("delete", "refused: git-twin runs in --read-only mode"));
+        return Err(GitError::new(
+            "delete",
+            "refused: git-twin runs in --read-only mode",
+        ));
     }
     let mut errors = Vec::new();
     for p in paths {
@@ -201,7 +204,10 @@ pub struct CommitRequest<'a> {
 /// and `commit.*` settings apply as usual.
 pub fn commit(r: &Runner, req: &CommitRequest) -> Result<String, GitError> {
     if r.read_only {
-        return Err(GitError::new("git commit", "refused: git-twin runs in --read-only mode"));
+        return Err(GitError::new(
+            "git commit",
+            "refused: git-twin runs in --read-only mode",
+        ));
     }
     let mut tmp = tempfile::Builder::new()
         .prefix("git-twin-msg-")
@@ -210,7 +216,11 @@ pub fn commit(r: &Runner, req: &CommitRequest) -> Result<String, GitError> {
     tmp.write_all(req.message.as_bytes())
         .and_then(|_| tmp.flush())
         .map_err(|e| GitError::new("git commit", e.to_string()))?;
-    let mut a = vec![os("commit"), os("-F"), tmp.path().as_os_str().to_os_string()];
+    let mut a = vec![
+        os("commit"),
+        os("-F"),
+        tmp.path().as_os_str().to_os_string(),
+    ];
     if req.amend {
         a.push(os("--amend"));
     }
@@ -219,7 +229,10 @@ pub fn commit(r: &Runner, req: &CommitRequest) -> Result<String, GitError> {
         if st {
             Ok("Commit created".into())
         } else {
-            Err(GitError::new("git commit", "commit failed (see terminal output)"))
+            Err(GitError::new(
+                "git commit",
+                "commit failed (see terminal output)",
+            ))
         }
     } else {
         r.write(&a, None, Opts::default()).map(done)
@@ -236,7 +249,12 @@ pub fn check_ref_format_branch(r: &Runner, name: &str) -> Result<(), GitError> {
         &[0],
     )
     .map(|_| ())
-    .map_err(|_| GitError::new("branch", format!("'{}' is not a valid branch name", sanitize::sanitize(name))))
+    .map_err(|_| {
+        GitError::new(
+            "branch",
+            format!("'{}' is not a valid branch name", sanitize::sanitize(name)),
+        )
+    })
 }
 
 fn check_tag_name(r: &Runner, name: &str) -> Result<(), GitError> {
@@ -249,7 +267,12 @@ fn check_tag_name(r: &Runner, name: &str) -> Result<(), GitError> {
         &[0],
     )
     .map(|_| ())
-    .map_err(|_| GitError::new("tag", format!("'{}' is not a valid tag name", sanitize::sanitize(name))))
+    .map_err(|_| {
+        GitError::new(
+            "tag",
+            format!("'{}' is not a valid tag name", sanitize::sanitize(name)),
+        )
+    })
 }
 
 pub fn create_branch(
@@ -292,7 +315,13 @@ pub fn checkout_branch(r: &Runner, name: &str) -> Result<String, GitError> {
 
 pub fn checkout_detach(r: &Runner, oid: &Oid) -> Result<String, GitError> {
     r.write(
-        &[os("checkout"), os("-q"), os("--detach"), os(oid.to_hex()), os("--")],
+        &[
+            os("checkout"),
+            os("-q"),
+            os("--detach"),
+            os(oid.to_hex()),
+            os("--"),
+        ],
         None,
         Opts::default(),
     )
@@ -363,7 +392,13 @@ impl ResetMode {
 
 pub fn reset(r: &Runner, mode: ResetMode, oid: &Oid) -> Result<String, GitError> {
     r.write(
-        &[os("reset"), os("-q"), os(mode.flag()), os(oid.to_hex()), os("--")],
+        &[
+            os("reset"),
+            os("-q"),
+            os(mode.flag()),
+            os(oid.to_hex()),
+            os("--"),
+        ],
         None,
         Opts::default(),
     )
@@ -393,7 +428,12 @@ pub fn merge(r: &Runner, rev: &str) -> Result<String, GitError> {
         return Err(GitError::new("merge", "invalid revision"));
     }
     r.write(
-        &[os("merge"), os("--no-edit"), os("--end-of-options"), os(rev)],
+        &[
+            os("merge"),
+            os("--no-edit"),
+            os("--end-of-options"),
+            os(rev),
+        ],
         None,
         Opts::default(),
     )
@@ -475,7 +515,10 @@ pub fn handoff(r: &Runner, args: &[OsString], banner: Option<&str>) -> Result<bo
 /// handed over (git gui tools). Only invoked on explicit user action.
 pub fn handoff_shell(r: &Runner, cmd: &str, envs: &[(&str, OsString)]) -> Result<bool, GitError> {
     if r.read_only {
-        return Err(GitError::new("tool", "refused: git-twin runs in --read-only mode"));
+        return Err(GitError::new(
+            "tool",
+            "refused: git-twin runs in --read-only mode",
+        ));
     }
     println!("$ {}", sanitize::sanitize(cmd));
     let mut c = std::process::Command::new("sh");

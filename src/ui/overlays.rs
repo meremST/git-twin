@@ -300,7 +300,10 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 app.hits.push(rr, Hit::DlgArea(i, offset));
             }
             FormRow::Search(i) => {
-                if let Field::List { search: Some(s), .. } = &mut d.fields[i] {
+                if let Field::List {
+                    search: Some(s), ..
+                } = &mut d.fields[i]
+                {
                     const P: &str = "Search: ";
                     let pw = P.len() as u16;
                     text(f, rr, P, app.theme.base());

@@ -199,7 +199,12 @@ impl ViewSpec {
             opts.push(os("--simplify-by-decoration"));
         }
         for a in split_args(&self.extra_args)? {
-            if a.starts_with("--output") || a == "-o" || a.starts_with("--format") || a.starts_with("--pretty") || a == "-z" {
+            if a.starts_with("--output")
+                || a == "-o"
+                || a.starts_with("--format")
+                || a.starts_with("--pretty")
+                || a == "-z"
+            {
                 return Err(format!("argument not allowed in a view: {a}"));
             }
             opts.push(os(a));
@@ -210,7 +215,8 @@ impl ViewSpec {
             }
             revs.push(os(r));
         }
-        let no_rev_selection = revs.is_empty() && !self.all_refs && !self.branches && !self.tags && !self.remotes;
+        let no_rev_selection =
+            revs.is_empty() && !self.all_refs && !self.branches && !self.tags && !self.remotes;
         if no_rev_selection {
             revs.push(os("HEAD"));
         }
@@ -280,10 +286,7 @@ pub fn stream_log(
         os(LOG_FORMAT),
         os(LOCAL_DATE),
     ];
-    args.extend(
-        view.log_args()
-            .map_err(|e| GitError::new("git log", e))?,
-    );
+    args.extend(view.log_args().map_err(|e| GitError::new("git log", e))?);
     let mut graph = GraphBuilder::new();
     let mut interner = Interner::default();
     let mut batch = LogBatch {
@@ -304,7 +307,11 @@ pub fn stream_log(
         };
         let staged_parent = l.head;
         if l.unstaged {
-            let parent = if l.staged { Some(null_staged()) } else { staged_parent };
+            let parent = if l.staged {
+                Some(null_staged())
+            } else {
+                staged_parent
+            };
             push_fake(
                 null_unstaged(),
                 parent,
@@ -417,7 +424,10 @@ mod tests {
 
     #[test]
     fn split_args_quotes() {
-        assert_eq!(split_args("a 'b c' \"d\\\"e\" f\\ g").unwrap(), vec!["a", "b c", "d\"e", "f g"]);
+        assert_eq!(
+            split_args("a 'b c' \"d\\\"e\" f\\ g").unwrap(),
+            vec!["a", "b c", "d\"e", "f g"]
+        );
         assert!(split_args("'open").is_err());
         assert_eq!(split_args("  ").unwrap(), Vec::<String>::new());
     }
@@ -426,7 +436,15 @@ mod tests {
     fn view_args() {
         let mut v = ViewSpec::default_view();
         let a = v.log_args().unwrap();
-        assert_eq!(a, vec![os("--topo-order"), os("--end-of-options"), os("HEAD"), os("--")]);
+        assert_eq!(
+            a,
+            vec![
+                os("--topo-order"),
+                os("--end-of-options"),
+                os("HEAD"),
+                os("--")
+            ]
+        );
         v.all_refs = true;
         v.author = "bob".into();
         v.paths = "src\n docs \n".into();

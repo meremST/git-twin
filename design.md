@@ -425,25 +425,26 @@ cargo build --locked --offline --release
 Methode recommandee, depuis la racine des sources :
 
 ```sh
-cargo install --path . --locked
+cargo install --path . --locked --root "$HOME"
+export PATH="$HOME/bin:$PATH"
 gitt --version
 git tui doctor
 ```
 
-Les deux binaires sont places dans `$CARGO_HOME/bin`, ou `~/.cargo/bin` par defaut.
-Verifier que ce repertoire est dans `PATH`, via l'environnement configure par
-rustup. Pas de `sudo cargo install`.
+Les deux binaires sont places dans `~/bin` grace a `--root "$HOME"`.
+Conserver l'ajout de `~/bin` au `PATH` dans la configuration du shell.
+Pas de `sudo cargo install`.
 
 Alternative sans gestion d'installation Cargo, apres compilation release :
 
 ```sh
-install -d "$HOME/.local/bin"
-install -m 0755 target/release/gitt "$HOME/.local/bin/gitt"
-install -m 0755 target/release/git-tui "$HOME/.local/bin/git-tui"
-"$HOME/.local/bin/gitt" --version
+install -d "$HOME/bin"
+install -m 0755 target/release/gitt "$HOME/bin/gitt"
+install -m 0755 target/release/git-tui "$HOME/bin/git-tui"
+"$HOME/bin/gitt" --version
 ```
 
-Ajouter `~/.local/bin` au `PATH` du shell si necessaire. Choisir une seule methode
+Ajouter `~/bin` au `PATH` du shell si necessaire. Choisir une seule methode
 pour eviter de lancer une ancienne copie. Verifier la resolution avec
 `command -v gitt` / `command -v git-tui` et la version avec `gitt --version`.
 
@@ -453,23 +454,26 @@ Pour mettre a jour depuis les sources, recuperer une revision publiee, relancer
 les controles de la section 9.3, puis :
 
 ```sh
-cargo install --path . --locked --force
+cargo install --path . --locked --root "$HOME" --force
 gitt --version
 ```
 
 Pour une installation manuelle, recompiler et repeter la commande `install`.
-Pour desinstaller une installation geree par Cargo :
+Pour desinstaller une installation geree par Cargo, depuis les sources ou
+l'archive extraite :
 
 ```sh
-cargo uninstall git-twin
+sh scripts/uninstall.sh --cargo
 ```
 
 Pour une installation manuelle dans le chemin indique ci-dessus :
 
 ```sh
-rm -- "$HOME/.local/bin/gitt" "$HOME/.local/bin/git-tui"
+sh scripts/uninstall.sh
 ```
 
+Le mode `--cargo` met aussi a jour les metadonnees Cargo ; le mode sans option
+supprime uniquement les deux executables de `~/bin`. Ne pas utiliser `sudo`.
 Conserver configuration, etat et cache par defaut ; documenter leurs chemins
 pour un nettoyage volontaire. Ne jamais supprimer un depot Git utilisateur.
 

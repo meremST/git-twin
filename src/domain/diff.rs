@@ -143,19 +143,19 @@ fn path_from_marker(rest: &[u8], prefix: &[u8]) -> Option<Vec<u8>> {
 
 fn split_git_header(rest: &[u8]) -> (Option<Vec<u8>>, Option<Vec<u8>>) {
     // `diff --git a/x b/y` – handles quoted forms and identical halves.
-    if rest.first() == Some(&b'"') {
-        if let Some(end) = rest[1..].iter().position(|c| *c == b'"') {
-            let first = &rest[..end + 2];
-            let second = rest.get(end + 3..).unwrap_or_default();
-            let a = unquote_c_style(first);
-            let b = unquote_c_style(second);
-            return (
-                a.strip_prefix(b"a/").map(|s| s.to_vec()),
-                b.strip_prefix(b"b/").map(|s| s.to_vec()),
-            );
-        }
+    if rest.first() == Some(&b'"')
+        && let Some(end) = rest[1..].iter().position(|c| *c == b'"')
+    {
+        let first = &rest[..end + 2];
+        let second = rest.get(end + 3..).unwrap_or_default();
+        let a = unquote_c_style(first);
+        let b = unquote_c_style(second);
+        return (
+            a.strip_prefix(b"a/").map(|s| s.to_vec()),
+            b.strip_prefix(b"b/").map(|s| s.to_vec()),
+        );
     }
-    if rest.len() >= 5 && rest.starts_with(b"a/") && (rest.len() - 5) % 2 == 0 {
+    if rest.len() >= 5 && rest.starts_with(b"a/") && (rest.len() - 5).is_multiple_of(2) {
         let half = (rest.len() - 5) / 2;
         let a = &rest[2..2 + half];
         let tail = &rest[2 + half..];
@@ -391,7 +391,8 @@ index 1111111..2222222 100644
     #[test]
     fn parses_hunks_and_eol_markers() {
         // second hunk counts: -10,2 vs 1 line deleted; adjust header to match body
-        let data = String::from_utf8_lossy(SIMPLE).replace("@@ -10,2 +10,2 @@", "@@ -10,1 +10,2 @@");
+        let data =
+            String::from_utf8_lossy(SIMPLE).replace("@@ -10,2 +10,2 @@", "@@ -10,1 +10,2 @@");
         let d = parse_diff(data.as_bytes(), ParseMode::Normal, false);
         assert_eq!(d.files.len(), 1);
         let f = &d.files[0];

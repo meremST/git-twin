@@ -153,7 +153,11 @@ impl App {
             }
             Hit::RefLabel(i, full) => {
                 self.hist.focus = HFocus::List;
-                if self.refs.find_full(&full).is_some_and(|r| r.kind == RefKind::Tag) {
+                if self
+                    .refs
+                    .find_full(&full)
+                    .is_some_and(|r| r.kind == RefKind::Tag)
+                {
                     self.show_tag_info(full);
                 } else {
                     self.dispatch(Action::SelectRow(i));

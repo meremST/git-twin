@@ -60,7 +60,10 @@ pub fn discover(start: &Path) -> Result<RepoInfo, GitError> {
     let out = o.stdout;
     let lines: Vec<&[u8]> = out.split(|c| *c == b'\n').collect();
     if lines.len() < 4 {
-        return Err(GitError::new("git rev-parse", "unexpected rev-parse output"));
+        return Err(GitError::new(
+            "git rev-parse",
+            "unexpected rev-parse output",
+        ));
     }
     let bare = lines[0] == b"true";
     let inside = lines[1] == b"true";

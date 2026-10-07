@@ -257,7 +257,8 @@ impl Runner {
 
     /// Read-only command; succeeds only with exit code 0.
     pub fn read(&self, args: &[OsString]) -> Result<Vec<u8>, GitError> {
-        self.read_opts(args, Opts::default(), &[0]).map(|o| o.stdout)
+        self.read_opts(args, Opts::default(), &[0])
+            .map(|o| o.stdout)
     }
 
     pub fn read_opts(&self, args: &[OsString], opts: Opts, ok: &[i32]) -> Result<Output, GitError> {
@@ -276,16 +277,29 @@ impl Runner {
     }
 
     /// Read-only command with stdin.
-    pub fn read_stdin(&self, args: &[OsString], input: &[u8], opts: Opts) -> Result<Output, GitError> {
+    pub fn read_stdin(
+        &self,
+        args: &[OsString],
+        input: &[u8],
+        opts: Opts,
+    ) -> Result<Output, GitError> {
         let o = self.run_inner(args, Some(input), opts, None)?;
         Self::check(Self::describe(args), o, &[0])
     }
 
     /// Mutating command. Refused in read-only mode.
-    pub fn write(&self, args: &[OsString], stdin: Option<&[u8]>, opts: Opts) -> Result<Output, GitError> {
+    pub fn write(
+        &self,
+        args: &[OsString],
+        stdin: Option<&[u8]>,
+        opts: Opts,
+    ) -> Result<Output, GitError> {
         let desc = Self::describe(args);
         if self.read_only {
-            return Err(GitError::new(&desc, "refused: git-twin runs in --read-only mode"));
+            return Err(GitError::new(
+                &desc,
+                "refused: git-twin runs in --read-only mode",
+            ));
         }
         let o = self.run_inner(args, stdin, opts, None)?;
         Self::check(desc, o, &[0])

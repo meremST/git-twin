@@ -33,7 +33,10 @@ impl App {
     }
 
     fn commit_label(&self, oid: &Oid) -> Field {
-        Field::label(&format!("{}  {}", oid.short(10), self.subject(oid)), Tone::Code)
+        Field::label(
+            &format!("{}  {}", oid.short(10), self.subject(oid)),
+            Tone::Code,
+        )
     }
 
     /// (display, full name) of refs of the given kinds.
@@ -83,7 +86,10 @@ impl App {
             Field::check("Mouse support (applies on restart)", c.mouse),
             Field::check("Copy to the system clipboard (OSC 52)", c.osc52),
             Field::text("History: lines of context", &c.history_context.to_string()),
-            Field::text("Worktree: lines of context", &c.worktree_context.to_string()),
+            Field::text(
+                "Worktree: lines of context",
+                &c.worktree_context.to_string(),
+            ),
             Field::text("Tab width", &c.tab_width.to_string()),
             Field::text("Commit message width guide", &c.commit_width.to_string()),
             Field::choice(
@@ -107,17 +113,31 @@ impl App {
             Field::check("Allow external diff drivers / textconv", c.allow_textconv),
             Field::check("Ask before quitting with a commit message", c.confirm_quit),
         ];
-        let mut d = form("Preferences", FormKind::Preferences, fields, &["OK", "Cancel"]);
+        let mut d = form(
+            "Preferences",
+            FormKind::Preferences,
+            fields,
+            &["OK", "Cancel"],
+        );
         d.width = 74;
         self.dialogs.push(d);
     }
 
     pub fn open_list_refs(&mut self) {
         let (items, values) = self.ref_items(
-            &[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag, RefKind::Other, RefKind::Stash],
+            &[
+                RefKind::LocalBranch,
+                RefKind::RemoteBranch,
+                RefKind::Tag,
+                RefKind::Other,
+                RefKind::Stash,
+            ],
             false,
         );
-        let keys = items.iter().map(|s| s.get(2..).unwrap_or("").to_string()).collect();
+        let keys = items
+            .iter()
+            .map(|s| s.get(2..).unwrap_or("").to_string())
+            .collect();
         let title = format!("Tags and heads: {}", self.repo.display_name());
         let fields = vec![Field::searchable_list(
             "H local head, R remote, T tag, o other   (/ search, * wildcard)",
@@ -126,7 +146,12 @@ impl App {
             keys,
             14,
         )];
-        self.dialogs.push(form(&title, FormKind::ListRefs, fields, &["Select", "Close"]));
+        self.dialogs.push(form(
+            &title,
+            FormKind::ListRefs,
+            fields,
+            &["Select", "Close"],
+        ));
     }
 
     pub fn open_view_editor(&mut self, idx: Option<usize>) {
@@ -155,10 +180,16 @@ impl App {
             Field::label("Changes to Files:", Tone::Strong),
             Field::check("Regular Expression (else fixed string)", v.changes_regex),
             Field::text("Search string", &v.changes),
-            Field::label("Commit Dates (\"2 weeks ago\", \"2009-03-17 15:27:38\", \"March 17, 2009 15:27:38\"):", Tone::Strong),
+            Field::label(
+                "Commit Dates (\"2 weeks ago\", \"2009-03-17 15:27:38\", \"March 17, 2009 15:27:38\"):",
+                Tone::Strong,
+            ),
             Field::text("Since", &v.since),
             Field::text("Until", &v.until),
-            Field::label("Limit and/or skip a number of revisions (positive integer):", Tone::Strong),
+            Field::label(
+                "Limit and/or skip a number of revisions (positive integer):",
+                Tone::Strong,
+            ),
             Field::text("Number to show", &v.max_count),
             Field::text("Number to skip", &v.skip),
             Field::label("Miscellaneous options:", Tone::Strong),
@@ -167,13 +198,22 @@ impl App {
             Field::check("Limit to first parent", v.first_parent),
             Field::check("Simple history", v.simplify),
             Field::text("Additional arguments to git log", &v.extra_args),
-            Field::area("Enter files and directories to include, one per line:", &v.paths, 4),
+            Field::area(
+                "Enter files and directories to include, one per line:",
+                &v.paths,
+                4,
+            ),
         ];
         let title = match idx {
             Some(_) => format!("Gitk view definition: {}", v.name),
             None => "Gitk view definition".to_string(),
         };
-        let mut d = form(&title, FormKind::ViewEdit(idx), fields, &["OK", "Apply (F5)", "Cancel"]);
+        let mut d = form(
+            &title,
+            FormKind::ViewEdit(idx),
+            fields,
+            &["OK", "Apply (F5)", "Cancel"],
+        );
         d.width = 80;
         self.dialogs.push(d);
     }
@@ -188,8 +228,12 @@ impl App {
             Field::check("Reverse", false),
             Field::text("Output file", &format!("patch{n}.patch")),
         ];
-        self.dialogs
-            .push(form("Generate patch", FormKind::MakePatch(from, to), fields, &["Generate", "Cancel"]));
+        self.dialogs.push(form(
+            "Generate patch",
+            FormKind::MakePatch(from, to),
+            fields,
+            &["Generate", "Cancel"],
+        ));
     }
 
     pub fn open_create_tag(&mut self, oid: Oid) {
@@ -201,17 +245,29 @@ impl App {
             Field::text("Tag name", ""),
             Field::text("Tag message (optional, makes an annotated tag)", ""),
         ];
-        self.dialogs.push(form("Create tag", FormKind::CreateTag(oid), fields, &["Create", "Cancel"]));
+        self.dialogs.push(form(
+            "Create tag",
+            FormKind::CreateTag(oid),
+            fields,
+            &["Create", "Cancel"],
+        ));
     }
 
     pub fn open_write_commit(&mut self, oid: Oid) {
         let fields = vec![
             self.commit_label(&oid),
-            Field::label("Format: git diff-tree --stdin -p --pretty=email", Tone::Normal),
+            Field::label(
+                "Format: git diff-tree --stdin -p --pretty=email",
+                Tone::Normal,
+            ),
             Field::text("Output file", &format!("commit-{}", oid.short(7))),
         ];
-        self.dialogs
-            .push(form("Write commit to file", FormKind::WriteCommit(oid), fields, &["Write", "Cancel"]));
+        self.dialogs.push(form(
+            "Write commit to file",
+            FormKind::WriteCommit(oid),
+            fields,
+            &["Write", "Cancel"],
+        ));
     }
 
     pub fn open_create_branch_at(&mut self, oid: Oid) {
@@ -219,14 +275,21 @@ impl App {
             return;
         }
         let fields = vec![self.commit_label(&oid), Field::text("Name", "")];
-        self.dialogs
-            .push(form("Create branch", FormKind::CreateBranchAt(oid), fields, &["Create", "Cancel"]));
+        self.dialogs.push(form(
+            "Create branch",
+            FormKind::CreateBranchAt(oid),
+            fields,
+            &["Create", "Cancel"],
+        ));
     }
 
     pub fn open_reset(&mut self, oid: Oid) {
         let branch = self.refs.head.label();
         let fields = vec![
-            Field::label(&format!("Reset branch {branch} to {}?", oid.short(10)), Tone::Strong),
+            Field::label(
+                &format!("Reset branch {branch} to {}?", oid.short(10)),
+                Tone::Strong,
+            ),
             self.commit_label(&oid),
             Field::choice(
                 "Reset type",
@@ -238,13 +301,20 @@ impl App {
                 1,
             ),
         ];
-        let mut d = form("Confirm reset", FormKind::ResetHere(oid), fields, &["OK", "Cancel"]);
+        let mut d = form(
+            "Confirm reset",
+            FormKind::ResetHere(oid),
+            fields,
+            &["OK", "Cancel"],
+        );
         d.width = 80;
         self.dialogs.push(d);
     }
 
     pub fn open_rename_branch(&mut self, full: Vec<u8>) {
-        let Some(r) = self.refs.find_full(&full).cloned() else { return };
+        let Some(r) = self.refs.find_full(&full).cloned() else {
+            return;
+        };
         if r.kind != RefKind::LocalBranch {
             self.set_status("Only local branches can be renamed.", StatusTone::Error);
             return;
@@ -253,8 +323,12 @@ impl App {
             Field::label(&format!("Branch: {}", r.short), Tone::Strong),
             Field::text("New name", &r.short),
         ];
-        self.dialogs
-            .push(form("Rename branch", FormKind::RenameBranch(full), fields, &["Rename", "Cancel"]));
+        self.dialogs.push(form(
+            "Rename branch",
+            FormKind::RenameBranch(full),
+            fields,
+            &["Rename", "Cancel"],
+        ));
     }
 
     pub fn open_cherry_pick_merge(&mut self, oid: Oid, nparents: usize) {
@@ -262,7 +336,10 @@ impl App {
         let refs: Vec<&str> = opts.iter().map(String::as_str).collect();
         let fields = vec![
             self.commit_label(&oid),
-            Field::label("This is a merge commit: choose the mainline parent.", Tone::Warn),
+            Field::label(
+                "This is a merge commit: choose the mainline parent.",
+                Tone::Warn,
+            ),
             Field::choice("Mainline", &refs, 0),
         ];
         self.dialogs.push(form(
@@ -281,7 +358,11 @@ impl App {
             return;
         }
         let start = match &self.refs.head {
-            crate::domain::refs::Head::Branch { short, oid: Some(_), .. } => short.clone(),
+            crate::domain::refs::Head::Branch {
+                short,
+                oid: Some(_),
+                ..
+            } => short.clone(),
             crate::domain::refs::Head::Detached(o) => o.to_hex(),
             _ => "HEAD".into(),
         };
@@ -291,21 +372,32 @@ impl App {
             Field::check("Update existing branch (reset)", false),
             Field::check("Checkout After Creation", true),
         ];
-        self.dialogs
-            .push(form("Create Branch", FormKind::GuiCreateBranch, fields, &["Create", "Cancel"]));
+        self.dialogs.push(form(
+            "Create Branch",
+            FormKind::GuiCreateBranch,
+            fields,
+            &["Create", "Cancel"],
+        ));
     }
 
     pub fn open_gui_checkout(&mut self) {
         if !self.guard_write() {
             return;
         }
-        let (items, values) = self.ref_items(&[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag], true);
+        let (items, values) = self.ref_items(
+            &[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag],
+            true,
+        );
         let fields = vec![
             Field::list("Revision", items, values, 0, 10),
             Field::check("Detach From Local Branch", false),
         ];
-        self.dialogs
-            .push(form("Checkout Branch", FormKind::GuiCheckout, fields, &["Checkout", "Cancel"]));
+        self.dialogs.push(form(
+            "Checkout Branch",
+            FormKind::GuiCheckout,
+            fields,
+            &["Checkout", "Cancel"],
+        ));
     }
 
     pub fn open_gui_rename(&mut self) {
@@ -319,8 +411,16 @@ impl App {
             .branch_full()
             .and_then(|f| values.iter().position(|v| v == f))
             .unwrap_or(0);
-        let fields = vec![Field::list("Branch", items, values, cur, 8), Field::text("New Name", "")];
-        self.dialogs.push(form("Rename Branch", FormKind::GuiRename, fields, &["Rename", "Cancel"]));
+        let fields = vec![
+            Field::list("Branch", items, values, cur, 8),
+            Field::text("New Name", ""),
+        ];
+        self.dialogs.push(form(
+            "Rename Branch",
+            FormKind::GuiRename,
+            fields,
+            &["Rename", "Cancel"],
+        ));
     }
 
     pub fn open_gui_delete(&mut self) {
@@ -336,8 +436,12 @@ impl App {
             Field::list("Local Branches", items, values, 0, 10),
             Field::check("Always (Do not perform merge checks)", false),
         ];
-        self.dialogs
-            .push(form("Delete Local Branch", FormKind::GuiDelete, fields, &["Delete", "Cancel"]));
+        self.dialogs.push(form(
+            "Delete Local Branch",
+            FormKind::GuiDelete,
+            fields,
+            &["Delete", "Cancel"],
+        ));
     }
 
     pub fn open_gui_merge(&mut self) {
@@ -359,10 +463,18 @@ impl App {
             );
             return;
         }
-        let (items, values) = self.ref_items(&[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag], true);
+        let (items, values) = self.ref_items(
+            &[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag],
+            true,
+        );
         let title = format!("Merge Into {}", self.refs.head.label());
         let fields = vec![Field::list("Revision To Merge", items, values, 0, 10)];
-        self.dialogs.push(form(&title, FormKind::GuiMerge, fields, &["Merge", "Cancel"]));
+        self.dialogs.push(form(
+            &title,
+            FormKind::GuiMerge,
+            fields,
+            &["Merge", "Cancel"],
+        ));
     }
 
     pub fn open_push(&mut self) {
@@ -384,11 +496,19 @@ impl App {
         let fields = vec![
             Field::list("Source Branch", items, values, cur, 8),
             Field::choice("Destination Remote", &remotes, 0),
-            Field::check("Force overwrite existing branch (may discard changes)", false),
+            Field::check(
+                "Force overwrite existing branch (may discard changes)",
+                false,
+            ),
             Field::check("Use thin pack (for slow network connections)", false),
             Field::check("Include tags", false),
         ];
-        self.dialogs.push(form("Push Branches", FormKind::Push, fields, &["Push", "Cancel"]));
+        self.dialogs.push(form(
+            "Push Branches",
+            FormKind::Push,
+            fields,
+            &["Push", "Cancel"],
+        ));
     }
 
     pub fn open_add_remote(&mut self) {
@@ -396,7 +516,12 @@ impl App {
             return;
         }
         let fields = vec![Field::text("Name", ""), Field::text("Location", "")];
-        self.dialogs.push(form("Add Remote", FormKind::AddRemote, fields, &["Add", "Cancel"]));
+        self.dialogs.push(form(
+            "Add Remote",
+            FormKind::AddRemote,
+            fields,
+            &["Add", "Cancel"],
+        ));
     }
 
     pub fn open_delete_remote_branch(&mut self) {
@@ -418,10 +543,17 @@ impl App {
     }
 
     pub fn open_browse_branch(&mut self) {
-        let (items, values) = self.ref_items(&[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag], false);
+        let (items, values) = self.ref_items(
+            &[RefKind::LocalBranch, RefKind::RemoteBranch, RefKind::Tag],
+            false,
+        );
         let fields = vec![Field::list("Revision", items, values, 0, 10)];
-        self.dialogs
-            .push(form("Browse Branch Files", FormKind::BrowseBranch, fields, &["Browse", "Cancel"]));
+        self.dialogs.push(form(
+            "Browse Branch Files",
+            FormKind::BrowseBranch,
+            fields,
+            &["Browse", "Cancel"],
+        ));
     }
 
     pub fn open_browser(&mut self, rev: Option<String>) {
@@ -434,7 +566,12 @@ impl App {
             Ok(paths) => {
                 let items = paths.iter().map(|p| sanitize::display_bytes(p)).collect();
                 let fields = vec![Field::list(&format!("Files of {rev}"), items, paths, 0, 16)];
-                let mut d = form(&format!("{rev}: File Browser"), FormKind::Browser(oid), fields, &["Open", "Close"]);
+                let mut d = form(
+                    &format!("{rev}: File Browser"),
+                    FormKind::Browser(oid),
+                    fields,
+                    &["Open", "Close"],
+                );
                 d.width = 80;
                 self.dialogs.push(d);
             }
@@ -498,11 +635,11 @@ impl App {
             },
             FormKind::Preferences => self.submit_preferences(d),
             FormKind::ListRefs => {
-                if let Some(full) = d.list_value(0) {
-                    if let Some(r) = self.refs.find_full(&full) {
-                        let o = r.target;
-                        self.select_oid(o, true);
-                    }
+                if let Some(full) = d.list_value(0)
+                    && let Some(r) = self.refs.find_full(&full)
+                {
+                    let o = r.target;
+                    self.select_oid(o, true);
                 }
             }
             FormKind::ViewEdit(idx) => self.submit_view(d, idx, b == 1),
@@ -531,7 +668,9 @@ impl App {
                     .map_err(|e| e.to_string())
                     .and_then(|data| ops::write_new_file(&path, &data, false))
                 {
-                    Ok(()) => self.set_status(format!("Commit written to {file}"), StatusTone::Info),
+                    Ok(()) => {
+                        self.set_status(format!("Commit written to {file}"), StatusTone::Info)
+                    }
                     Err(e) => self.reject(d, &format!("Error writing commit: {e}")),
                 }
             }
@@ -541,7 +680,12 @@ impl App {
                 if name.is_empty() {
                     return self.reject(d, "No tag name specified");
                 }
-                if self.refs.refs.iter().any(|r| r.kind == RefKind::Tag && r.short == name) {
+                if self
+                    .refs
+                    .refs
+                    .iter()
+                    .any(|r| r.kind == RefKind::Tag && r.short == name)
+                {
                     return self.reject(d, &format!("Tag \"{name}\" already exists"));
                 }
                 self.run_op(
@@ -560,11 +704,16 @@ impl App {
                     let n2 = name.clone();
                     self.confirm(
                         "Create branch",
-                        &[(&format!("Branch '{name}' already exists. Overwrite?"), Tone::Warn)],
+                        &[(
+                            &format!("Branch '{name}' already exists. Overwrite?"),
+                            Tone::Warn,
+                        )],
                         "Overwrite",
                         Pending::Op {
                             label: format!("Create branch {name}"),
-                            f: Box::new(move |r| ops::create_branch(r, &n2, &oid.to_hex(), true, false)),
+                            f: Box::new(move |r| {
+                                ops::create_branch(r, &n2, &oid.to_hex(), true, false)
+                            }),
                             after: After::Refresh,
                             expect_head: None,
                         },
@@ -588,7 +737,9 @@ impl App {
             }
             FormKind::RenameBranch(full) => {
                 let new = d.text(1).trim().to_string();
-                let Some(r) = self.refs.find_full(&full).cloned() else { return };
+                let Some(r) = self.refs.find_full(&full).cloned() else {
+                    return;
+                };
                 if new.is_empty() || new == r.short {
                     return self.reject(d, "Please specify a new name for the branch");
                 }
@@ -633,7 +784,9 @@ impl App {
             FormKind::GuiCheckout => {
                 let Some(full) = d.list_value(0) else { return };
                 let detach = d.checked(1);
-                let Some(r) = self.refs.find_full(&full).cloned() else { return };
+                let Some(r) = self.refs.find_full(&full).cloned() else {
+                    return;
+                };
                 if detach || r.kind == RefKind::Tag {
                     let t = r.target;
                     let head = self.head();
@@ -656,7 +809,9 @@ impl App {
                 if self.refs.local_branches().any(|r| r.short == new) {
                     return self.reject(d, &format!("Branch '{new}' already exists."));
                 }
-                let Some(r) = self.refs.find_full(&full).cloned() else { return };
+                let Some(r) = self.refs.find_full(&full).cloned() else {
+                    return;
+                };
                 let old = r.short_bytes().to_vec();
                 self.run_op(
                     &format!("Rename branch {}", r.short),
@@ -668,7 +823,9 @@ impl App {
             FormKind::GuiDelete => {
                 let Some(full) = d.list_value(0) else { return };
                 let force = d.checked(1);
-                let Some(r) = self.refs.find_full(&full).cloned() else { return };
+                let Some(r) = self.refs.find_full(&full).cloned() else {
+                    return;
+                };
                 let name = r.short_bytes().to_vec();
                 let n2 = name.clone();
                 let body = if force {
@@ -683,14 +840,20 @@ impl App {
                     Pending::Op {
                         label: format!("Delete branch {}", r.short),
                         f: Box::new(move |rr| ops::delete_branch(rr, &n2, force)),
-                        after: if force { After::Refresh } else { After::OfferForceDelete(name) },
+                        after: if force {
+                            After::Refresh
+                        } else {
+                            After::OfferForceDelete(name)
+                        },
                         expect_head: None,
                     },
                 );
             }
             FormKind::GuiMerge => {
                 let Some(full) = d.list_value(0) else { return };
-                let Some(r) = self.refs.find_full(&full).cloned() else { return };
+                let Some(r) = self.refs.find_full(&full).cloned() else {
+                    return;
+                };
                 let rev = String::from_utf8_lossy(&r.full).into_owned();
                 let head = self.head();
                 self.run_op(
@@ -702,7 +865,9 @@ impl App {
             }
             FormKind::Push => {
                 let Some(full) = d.list_value(0) else { return };
-                let Some(remote) = self.remotes.get(d.chosen(1)).cloned() else { return };
+                let Some(remote) = self.remotes.get(d.chosen(1)).cloned() else {
+                    return;
+                };
                 let mut args = vec![os("push"), os("-v")];
                 if d.checked(3) {
                     args.push(os("--thin"));
@@ -741,18 +906,30 @@ impl App {
             }
             FormKind::DeleteRemoteBranch => {
                 let Some(full) = d.list_value(0) else { return };
-                let Some(r) = self.refs.find_full(&full).cloned() else { return };
-                let Some((remote, branch)) = r.short.split_once('/') else { return };
+                let Some(r) = self.refs.find_full(&full).cloned() else {
+                    return;
+                };
+                let Some((remote, branch)) = r.short.split_once('/') else {
+                    return;
+                };
                 let (remote, branch) = (remote.to_string(), branch.to_string());
                 self.confirm(
                     "Delete Branch Remotely",
                     &[
-                        (&format!("Delete branch {branch} on remote {remote}?"), Tone::Warn),
+                        (
+                            &format!("Delete branch {branch} on remote {remote}?"),
+                            Tone::Warn,
+                        ),
                         ("Recovering deleted branches is difficult.", Tone::Normal),
                     ],
                     "Delete",
                     Pending::Handoff(Handoff::Git {
-                        args: vec![os("push"), os(&remote), os("--delete"), os(format!("refs/heads/{branch}"))],
+                        args: vec![
+                            os("push"),
+                            os(&remote),
+                            os("--delete"),
+                            os(format!("refs/heads/{branch}")),
+                        ],
                         label: format!("Delete {branch} on {remote}"),
                     }),
                 );

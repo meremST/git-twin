@@ -1,36 +1,74 @@
 # Git Twin
 
-Prototype de client Git pour terminal, avec une vue **History** inspiree de
-gitk et une vue **Worktree** inspiree de git gui. Le prototype est executable ;
-la parite complete avec les applications de reference n'est pas encore acquise.
+Client Git pour terminal Linux, avec une vue **History** inspiree de
+gitk et une vue **Worktree** inspiree de git gui.
 **`gitt`** lance Git Twin en vue History ; **`git tui`** lance Git TUI en vue
 Worktree, via l'executable **`git-tui`**. Les deux commandes donnent acces aux
 deux vues ; `--view` remplace leur vue initiale.
 
-## Essayer rapidement
+La premiere version **0.1.0** propose l'historique avec graphe, branches et tags,
+les diffs, l'indexation par fichier/bloc/lignes et l'edition des commits dans
+une interface clavier et souris. La parite complete avec gitk/git gui n'est pas
+revendiquee : consulter les [limites connues](docs/limitations.md), notamment
+pour les operations avancees.
 
-Prerequis : Linux, Git et Rust 1.93.1 (version fixee par `rust-toolchain.toml`).
-Le programme refuse Git < 2.25 ; ce minimum reste a valider sur cette version.
-Les essais actuels utilisent Git 2.43.
+## Installation Linux
+
+**Sans Rust** : une fois la release publiee, telecharger l'archive
+`git-twin-0.1.0-x86_64-unknown-linux-gnu.tar.gz` et son fichier `.sha256`
+depuis la page Releases du depot. Le binaire cible Linux **x86_64 avec glibc
+2.35 ou plus recente** (Ubuntu 22.04/24.04, Debian 12, par exemple).
+Il ne convient pas a Alpine/musl ni a ARM.
+Voir le [guide d'installation](docs/build-install.md) pour verifier l'archive,
+installer les deux commandes dans `~/bin` sans droits administrateur et
+configurer `PATH`.
+
+**Depuis les sources** : installer Git, un compilateur C et
+[Rust via rustup](https://rustup.rs/), puis executer depuis les sources de la
+version choisie :
 
 ```sh
-cargo build
+cargo install --path . --locked --root "$HOME"
+export PATH="$HOME/bin:$PATH"
+gitt --version
+git tui doctor
+```
 
-# Apercu texte des deux vues, sur un depot temporaire de demonstration.
-# Aucune modification de vos depots ou de votre configuration Git.
-cargo run --example preview -- --demo
+Les binaires sont installes dans `~/bin/gitt` et `~/bin/git-tui`.
+Conserver l'ajout de `~/bin` au `PATH` dans la configuration de votre shell.
 
-# Interface interactive sur votre depot.
-./target/debug/gitt --repo /chemin/vers/depot --read-only
-export PATH="$PWD/target/debug:$PATH"
+La toolchain de compilation est fixee a **Rust 1.93.1** par
+`rust-toolchain.toml`. Rust n'est pas necessaire pour utiliser les binaires.
+Git doit etre dans `PATH` ; le programme refuse Git < 2.25, mais ce plancher
+reste a valider sur cette version. Les essais locaux utilisent Git 2.43.
+La distribution initiale se fait par archives et sources, pas par crates.io.
+
+### Desinstallation
+
+Depuis les sources ou l'archive extraite, sans `sudo` :
+
+```sh
+sh scripts/uninstall.sh --cargo  # installation avec Cargo dans ~/bin
+sh scripts/uninstall.sh          # alternative : installation manuelle dans ~/bin
+```
+
+Choisir la commande correspondant a l'installation. La configuration, les
+brouillons et les depots sont conserves.
+
+## Premier lancement
+
+```sh
+# Commencer sans autoriser de modification du depot.
+gitt --repo /chemin/vers/depot --read-only
+
+# Ouvrir le worktree pour indexer et committer.
 git tui --repo /chemin/vers/depot
 ```
 
-Pour installer les deux commandes dans `~/.cargo/bin` : `cargo install --path . --locked`.
-
-L'application ne cree pas de depot si le chemin fourni n'en contient pas.
-Le repertoire des sources est desormais lui-meme un depot Git (commit initial
-local, non publie) ; utiliser `--repo` pour pointer vers un autre depot.
+Sans `--repo`, le repertoire courant est utilise. L'application ne cree pas
+de depot si le chemin fourni n'en contient pas. Git Twin utilise votre Git,
+votre configuration, vos hooks et vos outils externes : n'ouvrez que des
+depots de confiance. Le mode lecture seule n'est pas un bac a sable.
 
 Taille conseillee : **120 x 35** cellules. Taille minimale : **80 x 24**.
 Entre ces tailles, le mode compact affiche un panneau a la fois, avec des onglets
@@ -69,6 +107,7 @@ garde l'application ouverte et le brouillon en memoire.
 
 ```sh
 gitt --help
+git tui -h
 gitt doctor
 gitt --repo /chemin/vers/depot --no-mouse --icons ascii
 gitt --repo /chemin/vers/depot --all
@@ -92,6 +131,8 @@ conservent leurs couleurs sur un fond bleu (actif) ou gris (inactif).
 
 `--help`, `--version` et `doctor` fonctionnent sans depot ni terminal interactif.
 `doctor` n'effectue aucun appel reseau.
+Pour l'aide via Git, utiliser `git tui -h` ou `git-tui --help` :
+`git tui --help` est intercepte par Git et cherche une page man non fournie.
 
 Les preferences sont stockees sous `$XDG_CONFIG_HOME/git-twin`, l'etat et les
 brouillons sous `$XDG_STATE_HOME/git-twin`, avec les replis XDG habituels.
@@ -100,17 +141,21 @@ Le presse-papiers OSC 52 est optionnel et desactive par defaut.
 ## Developpement
 
 ```sh
-cargo test
-cargo run --example preview -- /chemin/vers/depot
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+cargo run --locked --example preview -- --demo
 ```
 
-Les tests du prototype utilisent des depots temporaires et un pseudo-terminal.
+L'apercu `--demo` utilise un depot temporaire sans modifier vos depots.
+Les tests utilisent des depots temporaires et un pseudo-terminal.
 Voir [status.md](status.md) pour les travaux restants,
 [design.md](design.md) pour la specification,
 [docs/architecture.md](docs/architecture.md) pour l'organisation des couches,
 [docs/build-install.md](docs/build-install.md) pour la compilation,
 l'installation et la desinstallation detaillees,
-[docs/testing.md](docs/testing.md) pour l'etat de la suite de tests, et
+[docs/testing.md](docs/testing.md) pour la suite et la CI,
+[CHANGELOG.md](CHANGELOG.md) pour les notes de version, et
 [docs/limitations.md](docs/limitations.md) pour les adaptations et limites.
 
 ## Licence

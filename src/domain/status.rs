@@ -230,8 +230,7 @@ mod tests {
             format!("2 R. N... 100644 100644 100644 {oid} {oid} R100 new\0old\0").as_bytes(),
         );
         s.extend_from_slice(
-            format!("u UU N... 100644 100644 100644 100644 {oid} {oid} {oid} conf\0")
-                .as_bytes(),
+            format!("u UU N... 100644 100644 100644 100644 {oid} {oid} {oid} conf\0").as_bytes(),
         );
         s.extend_from_slice(b"? new\xff\0");
         let st = parse_porcelain_v2(&s).unwrap();

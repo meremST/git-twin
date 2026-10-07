@@ -142,7 +142,10 @@ impl DiffView {
                 self.lines.push(title);
                 for h in &f.header {
                     let skip = o.compact_headers
-                        && (h.starts_with(b"diff ") || h.starts_with(b"index ") || h.starts_with(b"--- ") || h.starts_with(b"+++ "));
+                        && (h.starts_with(b"diff ")
+                            || h.starts_with(b"index ")
+                            || h.starts_with(b"--- ")
+                            || h.starts_with(b"+++ "));
                     if skip {
                         continue;
                     }
@@ -225,7 +228,8 @@ impl DiffView {
                     }
                 }
                 if f.truncated {
-                    self.lines.push(DLine::plain(DKind::Error, "[diff truncated]"));
+                    self.lines
+                        .push(DLine::plain(DKind::Error, "[diff truncated]"));
                 }
             }
             if d.truncated {
@@ -307,12 +311,25 @@ impl DiffView {
 
     pub fn selected_text(&self) -> String {
         if let Some((a, b)) = self.text_range() {
-            return self.lines[a.row..=b.row].iter().enumerate().map(|(offset, line)| {
-                let row = a.row + offset;
-                let start = if row == a.row { a.col } else { 0 };
-                let end = if row == b.row { b.col } else { line.text.chars().count() };
-                line.text.chars().skip(start).take(end.saturating_sub(start)).collect::<String>()
-            }).collect::<Vec<_>>().join("\n");
+            return self.lines[a.row..=b.row]
+                .iter()
+                .enumerate()
+                .map(|(offset, line)| {
+                    let row = a.row + offset;
+                    let start = if row == a.row { a.col } else { 0 };
+                    let end = if row == b.row {
+                        b.col
+                    } else {
+                        line.text.chars().count()
+                    };
+                    line.text
+                        .chars()
+                        .skip(start)
+                        .take(end.saturating_sub(start))
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
         }
         let (a, b) = self.sel_range();
         self.lines
@@ -333,11 +350,16 @@ impl DiffView {
     /// (file, {(hunk, line)}) for the selected changed lines. Lines from a
     /// single file only (the first one in the selection).
     pub fn selected_lines(&self) -> Option<(usize, BTreeSet<(usize, usize)>)> {
-        if self.text_range().is_some() { return None; }
+        if self.text_range().is_some() {
+            return None;
+        }
         let (a, b) = self.sel_range();
         let mut file = None;
         let mut set = BTreeSet::new();
-        for l in self.lines.get(a..=b.min(self.lines.len().saturating_sub(1)))? {
+        for l in self
+            .lines
+            .get(a..=b.min(self.lines.len().saturating_sub(1)))?
+        {
             if let (Some(f), Some(h), Some(li)) = (l.file, l.hunk, l.line) {
                 if !matches!(l.kind, DKind::Add | DKind::Del) {
                     continue;
@@ -361,9 +383,18 @@ impl DiffView {
 
     pub fn text_click(&mut self, row: usize, column: usize, extend: bool) {
         use super::input::{Pos, char_at_col};
-        let Some(line) = self.lines.get(row) else { return };
-        let point = Pos { row, col: char_at_col(&line.text, self.left + column) };
-        let anchor = if extend { self.text_selection.map_or(point, |(a, _)| a) } else { point };
+        let Some(line) = self.lines.get(row) else {
+            return;
+        };
+        let point = Pos {
+            row,
+            col: char_at_col(&line.text, self.left + column),
+        };
+        let anchor = if extend {
+            self.text_selection.map_or(point, |(a, _)| a)
+        } else {
+            point
+        };
         self.text_selection = Some((anchor, point));
         self.anchor = None;
         self.cursor = row;
@@ -372,24 +403,38 @@ impl DiffView {
 
     pub fn text_move(&mut self, right: bool) {
         use super::input::{Pos, next_boundary, prev_boundary};
-        if self.lines.is_empty() { return; }
+        if self.lines.is_empty() {
+            return;
+        }
         let (anchor, mut point) = self.text_selection.unwrap_or_else(|| {
-            let p = Pos { row: self.cursor.min(self.lines.len() - 1), col: 0 };
+            let p = Pos {
+                row: self.cursor.min(self.lines.len() - 1),
+                col: 0,
+            };
             (p, p)
         });
         let text = &self.lines[point.row].text;
         if right {
-            if point.col < text.chars().count() { point.col = next_boundary(text, point.col); }
-            else if point.row + 1 < self.lines.len() { point.row += 1; point.col = 0; }
-        } else if point.col > 0 { point.col = prev_boundary(text, point.col); }
-        else if point.row > 0 { point.row -= 1; point.col = self.lines[point.row].text.chars().count(); }
+            if point.col < text.chars().count() {
+                point.col = next_boundary(text, point.col);
+            } else if point.row + 1 < self.lines.len() {
+                point.row += 1;
+                point.col = 0;
+            }
+        } else if point.col > 0 {
+            point.col = prev_boundary(text, point.col);
+        } else if point.row > 0 {
+            point.row -= 1;
+            point.col = self.lines[point.row].text.chars().count();
+        }
         self.text_selection = Some((anchor, point));
         self.anchor = None;
         self.cursor = point.row;
         self.ensure_visible(point.row);
         let column = super::input::width_upto(&self.lines[point.row].text, point.col);
-        if column < self.left { self.left = column; }
-        else if column >= self.left + self.width.max(1) {
+        if column < self.left {
+            self.left = column;
+        } else if column >= self.left + self.width.max(1) {
             self.left = column + 1 - self.width.max(1);
         }
     }
@@ -476,7 +521,11 @@ impl DiffView {
         let mut n = hunk.new_start;
         for (i, dl) in hunk.lines.iter().enumerate() {
             if i == li {
-                return if dl.kind == LineKind::Del { None } else { Some((f, n)) };
+                return if dl.kind == LineKind::Del {
+                    None
+                } else {
+                    Some((f, n))
+                };
             }
             if dl.kind != LineKind::Del {
                 n += 1;
@@ -494,7 +543,11 @@ impl DiffView {
         let mut n = hunk.old_start;
         for (i, dl) in hunk.lines.iter().enumerate() {
             if i == li {
-                return if dl.kind == LineKind::Add { None } else { Some((f, n)) };
+                return if dl.kind == LineKind::Add {
+                    None
+                } else {
+                    Some((f, n))
+                };
             }
             if dl.kind != LineKind::Add {
                 n += 1;
@@ -562,6 +615,10 @@ mod tests {
         let d = Arc::new(parse_diff(raw, ParseMode::Normal, false));
         let mut v = DiffView::default();
         v.set(Vec::new(), Some(d), &opts(Show::Diff));
-        assert!(v.lines.iter().all(|l| !l.text.contains('\x1b') && !l.text.contains('\x07')));
+        assert!(
+            v.lines
+                .iter()
+                .all(|l| !l.text.contains('\x1b') && !l.text.contains('\x07'))
+        );
     }
 }

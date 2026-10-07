@@ -1,6 +1,6 @@
 # Tests
 
-Etat reel de la suite de tests du prototype, a completer au fur et a mesure
+Etat de la suite de tests, a completer au fur et a mesure
 que les scenarios de la section **Next priorities** de `status.md` sont
 couverts.
 
@@ -9,11 +9,12 @@ couverts.
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
 cargo test --locked
+python3 tests/test_uninstall.py
 ```
 
-Au moment de la redaction : **64 tests unitaires** (bibliotheque, repartis
-dans `src/`) et **13 tests d'integration** (`tests/prototype.rs`), tous
-passants. Les tests d'integration prennent environ 4 s (ils creent de vrais
+Au 7 octobre 2026 : **71 tests unitaires** (bibliotheque, repartis
+dans `src/`) et **14 tests d'integration** (`tests/prototype.rs`), tous
+passants localement. Les tests d'integration prennent environ 4 s (ils creent de vrais
 depots temporaires et lancent des pseudo-terminaux).
 
 ## Tests unitaires (`src/**/*.rs`, modules `#[cfg(test)]`)
@@ -44,9 +45,10 @@ Repartis par couche, pres du code qu'ils couvrent :
 
 ## Tests d'integration (`tests/prototype.rs`)
 
-Chaque test cree un depot Git temporaire isole (`HOME` dedie,
-`GIT_CONFIG_NOSYSTEM=1`, identite locale, aucune configuration globale de
-l'utilisateur, aucun acces reseau) :
+Les tests utilisent des depots Git temporaires, une identite locale et
+`GIT_CONFIG_NOSYSTEM=1` / `GIT_CONFIG_GLOBAL=/dev/null` pour les commandes
+de preparation. Les lancements PTY isolent aussi les repertoires XDG.
+Les scenarios ne demandent aucun acces reseau :
 
 - `real_repository_renders_both_views_and_resizes` : rendu des deux vues sur
   un vrai depot (branches, merge, changements indexes/non indexes), plusieurs
@@ -80,6 +82,8 @@ l'utilisateur, aucun acces reseau) :
 - `persistence_errors_and_quit_confirmation_are_recoverable` : erreurs de
   sauvegarde explicites, confirmation de sortie avec un brouillon non vide,
   recuperation apres echec.
+- `terminal_commit_selection_preserves_color_families` : la selection d'un
+  commit preserve les familles de couleurs du theme terminal dans le rendu.
 
 ## Ce qui n'est pas encore couvert
 
@@ -112,19 +116,39 @@ manquent des scenarios d'integration dedies pour :
 
 ## CI
 
-`.github/workflows/` ne contient encore aucun workflow. Une fois ajoute,
-`ci.yml` doit executer au minimum, sur Linux (et macOS des que ce support sera
-valide) :
+`.github/workflows/ci.yml` execute sur les branches et pull requests, avec
+la toolchain de `rust-toolchain.toml`, les controles suivants sous Ubuntu 22.04 :
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
-cargo build --locked --release
+python3 tests/test_uninstall.py
+python3 scripts/package-release.py
 ```
 
-Comme note dans `docs/build-install.md`, l'etape `fmt --check` et l'etape
-Clippy stricte echouent encore aujourd'hui sur des ecarts preexistants :
-elles doivent etre corrigees (voir `status.md`, point 4) avant d'etre
-activees telles quelles en CI, ou executees d'abord sans `--check`/
-`-D warnings` le temps de la migration.
+Le formatage et Clippy strict sont des portes de qualite obligatoires et
+passent localement, sans desactivation globale de lints.
+Le script compile les deux executables en mode release pour
+`x86_64-unknown-linux-gnu`, controle leurs versions et fabrique l'archive avec
+documentation, licences et SHA-256.
+
+Deux jobs d'installation consomment **la meme archive** sur Ubuntu 22.04
+et 24.04 : verification SHA-256, extraction, installation dans `~/bin`,
+`gitt --help/--version`, `git tui -h`, `git-tui --help`,
+`git tui --version` et `git tui doctor`.
+Cette verification n'utilise pas Cargo pour installer les binaires ; les tests
+PTY restent executes depuis les sources dans le job de qualite.
+Les jobs executent ensuite le script de desinstallation fourni dans l'archive
+et verifient la disparition des deux binaires.
+
+`tests/test_uninstall.py` utilise uniquement Python et des repertoires
+temporaires : suppression manuelle, liens symboliques, conservation des autres
+fichiers et des donnees, absence de binaires, refus des repertoires et arguments
+invalides, transmission des arguments a Cargo et propagation de ses erreurs.
+
+Le workflow `release.yml` reutilise la CI avant de creer un brouillon de release
+sur un tag `v*`. Un tag different de la version Cargo est refuse. Voir la
+[procedure de publication](build-install.md#4-preparer-une-release-maintenance).
+Les workflows doivent encore etre executes sur le depot GitHub officiel :
+une execution locale ne valide pas a elle seule les runners heberges.

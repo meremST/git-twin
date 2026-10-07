@@ -72,7 +72,9 @@ pub fn quote_path(prefix: &str, p: &[u8]) -> Vec<u8> {
             b'\t' => out.extend_from_slice(b"\\t"),
             b'\n' => out.extend_from_slice(b"\\n"),
             b'\r' => out.extend_from_slice(b"\\r"),
-            c if c < 0x20 || c >= 0x7f => out.extend_from_slice(format!("\\{c:03o}").as_bytes()),
+            c if !(0x20..0x7f).contains(&c) => {
+                out.extend_from_slice(format!("\\{c:03o}").as_bytes())
+            }
             c => out.push(c),
         }
     }
@@ -158,8 +160,16 @@ pub fn build_patch(
     let old_empty = hunks_out.iter().all(|(o, _)| count(o, true) == 0);
     let new_empty = hunks_out.iter().all(|(o, _)| count(o, false) == 0);
 
-    let old_name = file.old_path.as_deref().or(file.new_path.as_deref()).unwrap_or(b"");
-    let new_name = file.new_path.as_deref().or(file.old_path.as_deref()).unwrap_or(b"");
+    let old_name = file
+        .old_path
+        .as_deref()
+        .or(file.new_path.as_deref())
+        .unwrap_or(b"");
+    let new_name = file
+        .new_path
+        .as_deref()
+        .or(file.old_path.as_deref())
+        .unwrap_or(b"");
     let mut p = Vec::new();
     p.extend_from_slice(b"diff --git ");
     p.extend_from_slice(&quote_path("a/", old_name));
@@ -227,7 +237,11 @@ fn first_line(start: u32, count: u32) -> i64 {
 }
 
 fn start_from_pos(pos: i64, count: u32) -> i64 {
-    if count == 0 { (pos - 1).max(0) } else { pos.max(1) }
+    if count == 0 {
+        (pos - 1).max(0)
+    } else {
+        pos.max(1)
+    }
 }
 
 /// Ensures that, on the side produced by the patch, a line without final
@@ -378,7 +392,10 @@ new file mode 100755
         let f = file(d);
         let p = build_patch(&f, &sel(&[(0, 1)]), Direction::Forward).unwrap();
         let s = String::from_utf8(p).unwrap();
-        assert!(s.contains("new file mode 100755\n--- /dev/null\n+++ b/n\n@@ -0,0 +1,1 @@\n+2\n"), "{s}");
+        assert!(
+            s.contains("new file mode 100755\n--- /dev/null\n+++ b/n\n@@ -0,0 +1,1 @@\n+2\n"),
+            "{s}"
+        );
     }
 
     #[test]
@@ -394,7 +411,10 @@ new file mode 100644
         let f = file(d);
         let p = build_patch(&f, &sel(&[(0, 0)]), Direction::Reverse).unwrap();
         let s = String::from_utf8(p).unwrap();
-        assert!(s.contains("--- a/n\n+++ b/n\n@@ -1,1 +1,2 @@\n+1\n 2\n"), "{s}");
+        assert!(
+            s.contains("--- a/n\n+++ b/n\n@@ -1,1 +1,2 @@\n+1\n 2\n"),
+            "{s}"
+        );
         let all = build_patch(&f, &sel(&[(0, 0), (0, 1)]), Direction::Reverse).unwrap();
         assert!(String::from_utf8(all).unwrap().contains("new file mode"));
     }
@@ -449,7 +469,10 @@ deleted file mode 100644
     fn rejects_binary_combined_truncated() {
         let mut f = file(MOD);
         f.binary = true;
-        assert_eq!(build_patch(&f, &sel(&[(0, 1)]), Direction::Forward), Err(PatchError::Binary));
+        assert_eq!(
+            build_patch(&f, &sel(&[(0, 1)]), Direction::Forward),
+            Err(PatchError::Binary)
+        );
         f.binary = false;
         f.truncated = true;
         assert_eq!(

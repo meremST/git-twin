@@ -124,7 +124,13 @@ impl TextInput {
     pub fn insert_str(&mut self, s: &str) {
         let clean: String = s
             .chars()
-            .map(|c| if c == '\n' || c == '\r' || c == '\t' { ' ' } else { c })
+            .map(|c| {
+                if c == '\n' || c == '\r' || c == '\t' {
+                    ' '
+                } else {
+                    c
+                }
+            })
             .filter(|c| !c.is_control())
             .collect();
         let b = byte_at(&self.text, self.cursor);
@@ -691,11 +697,12 @@ impl TextArea {
         while self.lines.len() > 1 && self.lines.last().is_some_and(|l| l.trim().is_empty()) {
             self.lines.pop();
         }
-        let last_is_trailer = self
-            .lines
-            .last()
-            .is_some_and(|l| l.contains(": ") && !l.starts_with(' ') && l.split(": ").next().is_some_and(|k| !k.contains(' ')));
-        if !(self.lines.len() == 1 && self.lines[0].is_empty()) && !last_is_trailer {
+        let last_is_trailer = self.lines.last().is_some_and(|l| {
+            l.contains(": ")
+                && !l.starts_with(' ')
+                && l.split(": ").next().is_some_and(|k| !k.contains(' '))
+        });
+        if !(last_is_trailer || self.lines.len() == 1 && self.lines[0].is_empty()) {
             self.lines.push(String::new());
         }
         if self.lines.len() == 1 && self.lines[0].is_empty() {

@@ -46,7 +46,12 @@ pub fn load_refs(r: &Runner) -> Result<RefSet, GitError> {
     }
     let head_oid = r
         .read_opts(
-            &[os("rev-parse"), os("-q"), os("--verify"), os("HEAD^{commit}")],
+            &[
+                os("rev-parse"),
+                os("-q"),
+                os("--verify"),
+                os("HEAD^{commit}"),
+            ],
             Opts::default(),
             &[0, 1, 128],
         )
@@ -61,7 +66,11 @@ pub fn load_refs(r: &Runner) -> Result<RefSet, GitError> {
         &[0, 1],
     )?;
     let head = if sym.status.success() {
-        let full = sym.stdout.strip_suffix(b"\n").unwrap_or(&sym.stdout).to_vec();
+        let full = sym
+            .stdout
+            .strip_suffix(b"\n")
+            .unwrap_or(&sym.stdout)
+            .to_vec();
         let short = sanitize::display_bytes(full.strip_prefix(b"refs/heads/").unwrap_or(&full));
         Head::Branch {
             full,
@@ -196,7 +205,11 @@ pub fn tag_details(r: &Runner, full_ref: &[u8]) -> Result<Option<TagDetails>, Gi
     let date = sanitize::display_bytes(next());
     let msg_bytes = next();
     let message = sanitize::display_bytes(msg_bytes.strip_suffix(b"\n").unwrap_or(msg_bytes));
-    let tagger = if email.is_empty() { name } else { format!("{name} {email}") };
+    let tagger = if email.is_empty() {
+        name
+    } else {
+        format!("{name} {email}")
+    };
     Ok(Some(TagDetails {
         tagger,
         tagger_date: date,
@@ -269,7 +282,12 @@ pub enum MergeDiff {
     Parent(usize),
 }
 
-fn run_diff(r: &Runner, args: Vec<OsString>, mode: ParseMode, ok: &[i32]) -> Result<Diff, GitError> {
+fn run_diff(
+    r: &Runner,
+    args: Vec<OsString>,
+    mode: ParseMode,
+    ok: &[i32],
+) -> Result<Diff, GitError> {
     let o = r.read_opts(
         &args,
         Opts {
@@ -290,7 +308,13 @@ pub fn commit_diff(
     opts: &DiffOpts,
     paths: &[String],
 ) -> Result<Diff, GitError> {
-    let mut a = vec![os("diff-tree"), os("-r"), os("-p"), os("--no-commit-id"), os("-M")];
+    let mut a = vec![
+        os("diff-tree"),
+        os("-r"),
+        os("-p"),
+        os("--no-commit-id"),
+        os("-M"),
+    ];
     a.extend(r.diff_safety_args());
     a.extend(opts.args());
     match (parents.len(), merge) {
@@ -313,7 +337,8 @@ pub fn commit_diff(
     a.extend(paths.iter().map(os));
     let mut d = run_diff(r, a, opts.mode(), &[0])?;
     // Pure renames / mode changes have no hunks but are still listed.
-    d.files.retain(|f| !f.header.is_empty() || !f.hunks.is_empty());
+    d.files
+        .retain(|f| !f.header.is_empty() || !f.hunks.is_empty());
     Ok(d)
 }
 
@@ -471,7 +496,11 @@ pub fn message_of(r: &Runner, rev: &str) -> Result<String, GitError> {
 
 pub fn config_get(r: &Runner, key: &str) -> Option<String> {
     let o = r
-        .read_opts(&[os("config"), os("--get"), os(key)], Opts::default(), &[0, 1])
+        .read_opts(
+            &[os("config"), os("--get"), os(key)],
+            Opts::default(),
+            &[0, 1],
+        )
         .ok()?;
     if o.status.success() {
         Some(String::from_utf8_lossy(&o.stdout).trim_end().to_string())
@@ -524,7 +553,12 @@ pub struct GuiTool {
 
 pub fn guitools(r: &Runner) -> Vec<GuiTool> {
     let Ok(o) = r.read_opts(
-        &[os("config"), os("-z"), os("--get-regexp"), os(r"^guitool\..*\.")],
+        &[
+            os("config"),
+            os("-z"),
+            os("--get-regexp"),
+            os(r"^guitool\..*\."),
+        ],
         Opts::default(),
         &[0, 1],
     ) else {
@@ -753,9 +787,7 @@ pub fn find(
                         let (head, body) = msg.split_once('\n').unwrap_or((&msg, ""));
                         let t = |b: &[u8]| m.is_match(&String::from_utf8_lossy(b));
                         match spec.field {
-                            FindField::All => {
-                                m.is_match(&msg) || t(&fields[1]) || t(&fields[2])
-                            }
+                            FindField::All => m.is_match(&msg) || t(&fields[1]) || t(&fields[2]),
                             FindField::Headline => m.is_match(head),
                             FindField::Comments => m.is_match(body),
                             FindField::Author => t(&fields[1]),
@@ -794,7 +826,10 @@ pub fn find(
 /// Resolve a user expression (SHA1 prefix, ref) to a commit.
 pub fn resolve_commit(r: &Runner, expr: &str) -> Result<Oid, GitError> {
     if expr.starts_with('-') || expr.trim().is_empty() {
-        return Err(GitError::new("git rev-parse", format!("invalid revision: {expr}")));
+        return Err(GitError::new(
+            "git rev-parse",
+            format!("invalid revision: {expr}"),
+        ));
     }
     let o = r.read_opts(
         &[

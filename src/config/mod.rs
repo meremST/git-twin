@@ -155,7 +155,10 @@ impl Config {
                 Ok(c) => (c.clamped(), None),
                 Err(e) => (Config::default(), Some(e)),
             },
-            None => (Config::default(), Some("no configuration directory (HOME unset)".into())),
+            None => (
+                Config::default(),
+                Some("no configuration directory (HOME unset)".into()),
+            ),
         }
     }
 
@@ -252,7 +255,8 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     tmp.write_all(data)
         .and_then(|_| tmp.as_file().sync_all())
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    tmp.persist(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    tmp.persist(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(())
 }
 
@@ -339,8 +343,10 @@ mod tests {
 
     #[test]
     fn state_roundtrip() {
-        let mut s = State::default();
-        s.last_view = Some(ViewKind::Worktree);
+        let mut s = State {
+            last_view: Some(ViewKind::Worktree),
+            ..Default::default()
+        };
         s.views.push(ViewSpec {
             name: "mine".into(),
             author: "me".into(),

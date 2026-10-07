@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::action::Action;
-use super::diffview::{BuildOpts, DKind, DLine, DiffView, Show, WordStyle};
 use super::dialog::Tone;
+use super::diffview::{BuildOpts, DKind, DLine, DiffView, Show, WordStyle};
 use super::input::TextInput;
 use super::worker::{After, Cancel, Payload};
 use super::{App, Handoff, Pending, StatusTone};
@@ -21,7 +21,9 @@ use crate::domain::sanitize;
 use crate::domain::textmatch::{MatchKind, Matcher};
 use crate::git::log::{self, LocalRows, ViewSpec, null_staged, null_unstaged};
 use crate::git::ops;
-use crate::git::read::{self, Blob, DiffOpts, FindField, FindSpec, FindType, MergeDiff, Related, WordMode};
+use crate::git::read::{
+    self, Blob, DiffOpts, FindField, FindSpec, FindType, MergeDiff, Related, WordMode,
+};
 use crate::git::runner::os;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -284,7 +286,11 @@ impl HistoryState {
             for (lbl, o) in [("From", a), ("To  ", b)] {
                 v.push(DLine::plain(
                     DKind::Header,
-                    format!("  {lbl}: {} ({})", o.to_hex(), self.subject_of(&o).unwrap_or("")),
+                    format!(
+                        "  {lbl}: {} ({})",
+                        o.to_hex(),
+                        self.subject_of(&o).unwrap_or("")
+                    ),
                 ));
             }
             v.push(DLine::plain(DKind::Header, String::new()));
@@ -300,12 +306,18 @@ impl HistoryState {
             if t.loading {
                 v.push(DLine::plain(DKind::Info, "Loading tag details..."));
             } else if let Some(d) = &t.details {
-                v.push(DLine::plain(DKind::Header, format!("Tagger: {}  {}", d.tagger, d.tagger_date)));
+                v.push(DLine::plain(
+                    DKind::Header,
+                    format!("Tagger: {}  {}", d.tagger, d.tagger_date),
+                ));
                 for l in d.message.lines() {
                     v.push(DLine::plain(DKind::Message, l.to_string()));
                 }
             } else {
-                v.push(DLine::plain(DKind::Info, "Lightweight tag (no annotation)."));
+                v.push(DLine::plain(
+                    DKind::Info,
+                    "Lightweight tag (no annotation).",
+                ));
             }
             v.push(DLine::plain(DKind::Header, String::new()));
         }
@@ -318,25 +330,37 @@ impl HistoryState {
             v.push(DLine::plain(DKind::Info, "Loading commit details..."));
             return v;
         };
-        v.push(DLine::plain(DKind::Header, format!("Author: {}  {}", d.author, d.author_date)));
+        v.push(DLine::plain(
+            DKind::Header,
+            format!("Author: {}  {}", d.author, d.author_date),
+        ));
         v.push(DLine::plain(
             DKind::Header,
             format!("Committer: {}  {}", d.committer, d.committer_date),
         ));
         for p in &d.parents {
             let subj = self.subject_of(p).unwrap_or("");
-            v.push(DLine::plain(DKind::Header, format!("Parent: {} ({subj})", p.to_hex())));
+            v.push(DLine::plain(
+                DKind::Header,
+                format!("Parent: {} ({subj})", p.to_hex()),
+            ));
         }
         for ch in self.children_of(&c.oid) {
             if Self::is_pseudo(&ch) {
                 continue;
             }
             let subj = self.subject_of(&ch).unwrap_or("");
-            v.push(DLine::plain(DKind::Header, format!("Child:  {} ({subj})", ch.to_hex())));
+            v.push(DLine::plain(
+                DKind::Header,
+                format!("Child:  {} ({subj})", ch.to_hex()),
+            ));
         }
         if let Some(r) = &self.related {
             if !r.branches.is_empty() {
-                v.push(DLine::plain(DKind::Header, format!("Branches: {}", r.branches.join(", "))));
+                v.push(DLine::plain(
+                    DKind::Header,
+                    format!("Branches: {}", r.branches.join(", ")),
+                ));
             }
             if let Some(t) = &r.follows {
                 v.push(DLine::plain(DKind::Header, format!("Follows: {t}")));
@@ -349,7 +373,11 @@ impl HistoryState {
             let mode = match self.merge_diff {
                 MergeDiff::Combined => "combined diff against all parents (--cc)".to_string(),
                 MergeDiff::Parent(n) => {
-                    let p = d.parents.get(n.saturating_sub(1)).map(short).unwrap_or_default();
+                    let p = d
+                        .parents
+                        .get(n.saturating_sub(1))
+                        .map(short)
+                        .unwrap_or_default();
                     format!("diff against parent {n} ({p})")
                 }
             };
@@ -359,7 +387,10 @@ impl HistoryState {
         for l in d.message.lines() {
             v.push(DLine::plain(
                 DKind::Message,
-                format!("    {}", sanitize::expand_tabs(&sanitize::sanitize(l), self.tab)),
+                format!(
+                    "    {}",
+                    sanitize::expand_tabs(&sanitize::sanitize(l), self.tab)
+                ),
             ));
         }
         v.push(DLine::plain(DKind::Message, String::new()));
@@ -397,8 +428,14 @@ impl HistoryState {
     /// Applies the result of an annotated-tag lookup requested by
     /// `App::show_tag_info`; stale answers (a different tag meanwhile
     /// selected) are dropped.
-    pub fn on_tag_info(&mut self, full: Vec<u8>, result: Result<Option<read::TagDetails>, crate::git::GitError>) {
-        let Some(info) = &mut self.tag_info else { return };
+    pub fn on_tag_info(
+        &mut self,
+        full: Vec<u8>,
+        result: Result<Option<read::TagDetails>, crate::git::GitError>,
+    ) {
+        let Some(info) = &mut self.tag_info else {
+            return;
+        };
         if info.full != full {
             return;
         }
@@ -446,7 +483,8 @@ impl App {
                     let tracked = |e: &&crate::domain::status::StatusEntry| {
                         !matches!(
                             e.kind,
-                            crate::domain::status::EntryKind::Untracked | crate::domain::status::EntryKind::Ignored
+                            crate::domain::status::EntryKind::Untracked
+                                | crate::domain::status::EntryKind::Ignored
                         )
                     };
                     LocalRows {
@@ -485,19 +523,19 @@ impl App {
         }
         h.graph.extend(graph);
         h.total = h.commits.len();
-        if let Some(p) = h.pending_select {
-            if let Some(&i) = h.index.get(&p) {
-                h.pending_select = None;
-                let keep_top = h.top;
-                self.select_row_ex(i, false, false);
-                if !first {
-                    self.hist.top = keep_top;
-                    self.hist.ensure_visible(i);
-                } else {
-                    self.center_selection();
-                }
-                return;
+        if let Some(p) = h.pending_select
+            && let Some(&i) = h.index.get(&p)
+        {
+            h.pending_select = None;
+            let keep_top = h.top;
+            self.select_row_ex(i, false, false);
+            if !first {
+                self.hist.top = keep_top;
+                self.hist.ensure_visible(i);
+            } else {
+                self.center_selection();
             }
+            return;
         }
         if first && self.hist.sel.is_none() && !self.hist.commits.is_empty() {
             // Provisional selection: HEAD's row (or the first row).
@@ -514,23 +552,28 @@ impl App {
         self.hist.loading = false;
         match r {
             Ok(_) => {
-                if let Some(p) = self.hist.pending_select.take() {
-                    if !HistoryState::is_pseudo(&p) {
-                        self.set_status(
-                            format!("Commit {} is not in the current view.", p.short(10)),
-                            StatusTone::Info,
-                        );
-                    }
+                if let Some(p) = self.hist.pending_select.take()
+                    && !HistoryState::is_pseudo(&p)
+                {
+                    self.set_status(
+                        format!("Commit {} is not in the current view.", p.short(10)),
+                        StatusTone::Info,
+                    );
                 }
                 if self.hist.commits.is_empty() {
-                    self.hist.diff.set_message(DKind::Info, "No commits in this view.");
+                    self.hist
+                        .diff
+                        .set_message(DKind::Info, "No commits in this view.");
                     self.hist.files.clear();
                 }
             }
             Err(e) => {
                 let msg = e.to_string();
                 self.hist.load_error = Some(msg.clone());
-                self.set_status(format!("History: {}", msg.lines().next().unwrap_or("")), StatusTone::Error);
+                self.set_status(
+                    format!("History: {}", msg.lines().next().unwrap_or("")),
+                    StatusTone::Error,
+                );
                 if self.hist.commits.is_empty() {
                     self.hist.diff.set_message(DKind::Error, &msg);
                 }
@@ -539,18 +582,17 @@ impl App {
     }
 
     pub fn history_tick(&mut self, now: Instant) {
-        if let Some(t) = self.hist.sel_changed_at {
-            if now.duration_since(t) >= DETAIL_DEBOUNCE {
-                self.hist.sel_changed_at = None;
-                self.load_selected();
-            }
+        if let Some(t) = self.hist.sel_changed_at
+            && now.duration_since(t) >= DETAIL_DEBOUNCE
+        {
+            self.hist.sel_changed_at = None;
+            self.load_selected();
         }
-        if self.hist.find_dirty {
-            if let Some(t) = self.hist.find_changed_at {
-                if now.duration_since(t) >= FIND_DEBOUNCE {
-                    self.run_find();
-                }
-            }
+        if self.hist.find_dirty
+            && let Some(t) = self.hist.find_changed_at
+            && now.duration_since(t) >= FIND_DEBOUNCE
+        {
+            self.run_find();
         }
     }
 
@@ -583,11 +625,13 @@ impl App {
         if !HistoryState::is_pseudo(&c.oid) && h.compare.is_none() {
             let r = self.runner.clone();
             let oid = c.oid;
-            self.req.details = self.workers.read(self.generation, move || Payload::Details {
-                oid,
-                details: read::commit_details(&r, &oid),
-                related: read::related(&r, &oid),
-            });
+            self.req.details = self
+                .workers
+                .read(self.generation, move || Payload::Details {
+                    oid,
+                    details: read::commit_details(&r, &oid),
+                    related: read::related(&r, &oid),
+                });
         }
         self.reload_diff();
         if self.hist.tree_mode {
@@ -622,10 +666,12 @@ impl App {
             self.select_row(i);
         }
         let runner = self.runner.clone();
-        self.req.tag_info = self.workers.read(self.generation, move || Payload::TagInfo {
-            full: full.clone(),
-            result: read::tag_details(&runner, &full),
-        });
+        self.req.tag_info = self
+            .workers
+            .read(self.generation, move || Payload::TagInfo {
+                full: full.clone(),
+                result: read::tag_details(&runner, &full),
+            });
     }
 
     /// Re-requests only the diff (options changed).
@@ -666,12 +712,17 @@ impl App {
             }
         }
         let r = self.runner.clone();
-        self.req.tree = self
-            .workers
-            .read(self.generation, move || Payload::Tree(read::tree_paths(&r, &oid)));
+        self.req.tree = self.workers.read(self.generation, move || {
+            Payload::Tree(read::tree_paths(&r, &oid))
+        });
     }
 
-    pub fn on_details(&mut self, oid: Oid, details: Result<CommitDetails, crate::git::GitError>, related: Related) {
+    pub fn on_details(
+        &mut self,
+        oid: Oid,
+        details: Result<CommitDetails, crate::git::GitError>,
+        related: Related,
+    ) {
         if self.hist.detail_oid != Some(oid) {
             return;
         }
@@ -699,7 +750,10 @@ impl App {
                 self.hist.cur_diff = None;
                 self.hist.files.clear();
                 self.hist.rebuild_diff();
-                self.hist.diff.lines.push(DLine::plain(DKind::Error, e.to_string()));
+                self.hist
+                    .diff
+                    .lines
+                    .push(DLine::plain(DKind::Error, e.to_string()));
             }
         }
     }
@@ -708,7 +762,10 @@ impl App {
         match r {
             Ok(t) => {
                 self.hist.tree = t;
-                self.hist.file_sel = self.hist.file_sel.min(self.hist.tree.len().saturating_sub(1));
+                self.hist.file_sel = self
+                    .hist
+                    .file_sel
+                    .min(self.hist.tree.len().saturating_sub(1));
             }
             Err(e) => self.set_status(format!("Tree: {e}"), StatusTone::Error),
         }
@@ -717,15 +774,26 @@ impl App {
     pub fn on_blob(&mut self, path: Vec<u8>, blob: Result<Blob, crate::git::GitError>) {
         let d = &mut self.hist.diff;
         d.clear();
-        d.lines.push(DLine::plain(DKind::FileTitle, sanitize::display_bytes(&path)));
+        d.lines.push(DLine::plain(
+            DKind::FileTitle,
+            sanitize::display_bytes(&path),
+        ));
         match blob {
-            Ok(b) if b.is_binary() => d.lines.push(DLine::plain(DKind::Info, "Binary file, not shown.")),
+            Ok(b) if b.is_binary() => d
+                .lines
+                .push(DLine::plain(DKind::Info, "Binary file, not shown.")),
             Ok(b) => {
                 for l in b.data.split(|c| *c == b'\n') {
-                    d.lines.push(DLine::plain(DKind::Ctx, sanitize::display_bytes_tabs(l, self.hist.tab)));
+                    d.lines.push(DLine::plain(
+                        DKind::Ctx,
+                        sanitize::display_bytes_tabs(l, self.hist.tab),
+                    ));
                 }
                 if b.truncated {
-                    d.lines.push(DLine::plain(DKind::Error, "[file truncated: too large to display]"));
+                    d.lines.push(DLine::plain(
+                        DKind::Error,
+                        "[file truncated: too large to display]",
+                    ));
                 }
             }
             Err(e) => d.lines.push(DLine::plain(DKind::Error, e.to_string())),
@@ -738,14 +806,20 @@ impl App {
             Ok(s) => {
                 let n = s.len();
                 self.hist.highlight = Some(s);
-                self.set_status(format!("Find: {n} matching commit(s) in this view."), StatusTone::Info);
+                self.set_status(
+                    format!("Find: {n} matching commit(s) in this view."),
+                    StatusTone::Info,
+                );
                 if let Some(fwd) = self.hist.find_pending_step.take() {
                     self.find_step(fwd);
                 }
             }
             Err(e) => {
                 self.hist.find_pending_step = None;
-                self.set_status(format!("Find: {}", e.message.lines().next().unwrap_or("")), StatusTone::Error);
+                self.set_status(
+                    format!("Find: {}", e.message.lines().next().unwrap_or("")),
+                    StatusTone::Error,
+                );
             }
         }
     }
@@ -766,10 +840,8 @@ impl App {
             h.ensure_visible(i);
             return;
         }
-        if push {
-            if let Some(old) = h.selected_oid() {
-                h.push_nav(old);
-            }
+        if push && let Some(old) = h.selected_oid() {
+            h.push_nav(old);
         }
         if user {
             h.pending_select = None;
@@ -778,7 +850,11 @@ impl App {
         h.compare = None;
         h.ensure_visible(i);
         let oid = h.commits[i].oid;
-        h.sha.set(&if HistoryState::is_pseudo(&oid) { String::new() } else { oid.to_hex() });
+        h.sha.set(&if HistoryState::is_pseudo(&oid) {
+            String::new()
+        } else {
+            oid.to_hex()
+        });
         h.sel_changed_at = Some(Instant::now());
         h.file_sel = 0;
         h.file_top = 0;
@@ -794,12 +870,18 @@ impl App {
         } else if self.hist.loading {
             self.hist.pending_select = Some(oid);
             self.set_status(
-                format!("Commit {} not loaded yet; it will be selected when it appears.", oid.short(10)),
+                format!(
+                    "Commit {} not loaded yet; it will be selected when it appears.",
+                    oid.short(10)
+                ),
                 StatusTone::Busy,
             );
         } else {
             self.set_status(
-                format!("SHA1 id {} is not known in the current view.", oid.short(10)),
+                format!(
+                    "SHA1 id {} is not known in the current view.",
+                    oid.short(10)
+                ),
                 StatusTone::Error,
             );
         }
@@ -843,9 +925,9 @@ impl App {
             }
         }
         let r = self.runner.clone();
-        self.req.goto = self
-            .workers
-            .read(self.generation, move || Payload::Goto(read::resolve_commit(&r, &t)));
+        self.req.goto = self.workers.read(self.generation, move || {
+            Payload::Goto(read::resolve_commit(&r, &t))
+        });
         self.hist.focus = HFocus::List;
     }
 
@@ -872,12 +954,16 @@ impl App {
             h.find_pending_step = None;
             return;
         }
-        if h.find_match == MatchKind::Regexp && h.find_type == FindType::Containing {
-            if let Err(e) = Matcher::new(MatchKind::Regexp, &pattern) {
-                h.find_pending_step = None;
-                self.set_status(format!("Find: invalid regular expression: {e}"), StatusTone::Error);
-                return;
-            }
+        if h.find_match == MatchKind::Regexp
+            && h.find_type == FindType::Containing
+            && let Err(e) = Matcher::new(MatchKind::Regexp, &pattern)
+        {
+            h.find_pending_step = None;
+            self.set_status(
+                format!("Find: invalid regular expression: {e}"),
+                StatusTone::Error,
+            );
+            return;
         }
         h.find_cancel = Cancel::default();
         h.find_running = true;
@@ -898,7 +984,9 @@ impl App {
 
     /// Moves to the next match: `forward` = towards older commits (down).
     fn find_step(&mut self, forward: bool) {
-        if self.hist.find_dirty || (self.hist.highlight.is_none() && !self.hist.find.text.trim().is_empty()) {
+        if self.hist.find_dirty
+            || (self.hist.highlight.is_none() && !self.hist.find.text.trim().is_empty())
+        {
             self.hist.find_pending_step = Some(forward);
             self.run_find();
             return;
@@ -916,7 +1004,9 @@ impl App {
         let found = if forward {
             ((cur + 1).max(0) as usize..n).find(|i| set.contains(&self.hist.commits[*i].oid))
         } else {
-            (0..cur.max(0) as usize).rev().find(|i| set.contains(&self.hist.commits[*i].oid))
+            (0..cur.max(0) as usize)
+                .rev()
+                .find(|i| set.contains(&self.hist.commits[*i].oid))
         };
         match found {
             Some(i) => {
@@ -971,7 +1061,8 @@ impl App {
             self.hist.file_top = i + 1 - fh;
         }
         if self.hist.tree_mode {
-            let (Some(path), Some(mut oid)) = (self.hist.file_path(i), self.hist.selected_oid()) else {
+            let (Some(path), Some(mut oid)) = (self.hist.file_path(i), self.hist.selected_oid())
+            else {
                 return;
             };
             if HistoryState::is_pseudo(&oid) {
@@ -1008,7 +1099,11 @@ impl App {
     }
 
     fn row_oid(&self, row: usize) -> Option<Oid> {
-        self.hist.commits.get(row).map(|c| c.oid).filter(|o| !HistoryState::is_pseudo(o))
+        self.hist
+            .commits
+            .get(row)
+            .map(|c| c.oid)
+            .filter(|o| !HistoryState::is_pseudo(o))
     }
 
     fn compare_rows(&mut self, from: Oid, to: Oid) {
@@ -1052,7 +1147,10 @@ impl App {
             A::NewView => self.open_view_editor(None),
             A::EditView => {
                 if self.hist.cur_view == 0 {
-                    self.set_status("The \"All files\" view cannot be edited.", StatusTone::Error);
+                    self.set_status(
+                        "The \"All files\" view cannot be edited.",
+                        StatusTone::Error,
+                    );
                 } else {
                     self.open_view_editor(Some(self.hist.cur_view));
                 }
@@ -1102,7 +1200,11 @@ impl App {
                 }
             }
             A::GotoParent(n) => {
-                if let Some(p) = self.hist.selected().and_then(|c| c.parents.get(n.saturating_sub(1)).copied()) {
+                if let Some(p) = self
+                    .hist
+                    .selected()
+                    .and_then(|c| c.parents.get(n.saturating_sub(1)).copied())
+                {
                     self.select_oid(p, true);
                 }
             }
@@ -1127,17 +1229,26 @@ impl App {
                 self.find_changed();
             }
             A::CycleFindType => {
-                let i = FindType::ALL.iter().position(|t| *t == self.hist.find_type).unwrap_or(0);
+                let i = FindType::ALL
+                    .iter()
+                    .position(|t| *t == self.hist.find_type)
+                    .unwrap_or(0);
                 self.hist.find_type = FindType::ALL[(i + 1) % FindType::ALL.len()];
                 self.find_changed();
             }
             A::CycleFindMatch => {
-                let i = MatchKind::ALL.iter().position(|t| *t == self.hist.find_match).unwrap_or(0);
+                let i = MatchKind::ALL
+                    .iter()
+                    .position(|t| *t == self.hist.find_match)
+                    .unwrap_or(0);
                 self.hist.find_match = MatchKind::ALL[(i + 1) % MatchKind::ALL.len()];
                 self.find_changed();
             }
             A::CycleFindField => {
-                let i = FindField::ALL.iter().position(|t| *t == self.hist.find_field).unwrap_or(0);
+                let i = FindField::ALL
+                    .iter()
+                    .position(|t| *t == self.hist.find_field)
+                    .unwrap_or(0);
                 self.hist.find_field = FindField::ALL[(i + 1) % FindField::ALL.len()];
                 self.find_changed();
             }
@@ -1172,7 +1283,10 @@ impl App {
             A::ContextMore | A::ContextLess => {
                 let c = self.hist.context as i64 + if *a == A::ContextMore { 1 } else { -1 };
                 self.hist.context = c.clamp(0, 10_000) as u32;
-                self.set_status(format!("Lines of context: {}", self.hist.context), StatusTone::Info);
+                self.set_status(
+                    format!("Lines of context: {}", self.hist.context),
+                    StatusTone::Info,
+                );
                 self.reload_diff();
             }
             A::ToggleIgnoreSpace => {
@@ -1197,7 +1311,11 @@ impl App {
                 self.select_file_row(*i);
             }
             A::ParentDiffMode(n) => {
-                self.hist.merge_diff = if *n == 0 { MergeDiff::Combined } else { MergeDiff::Parent(*n) };
+                self.hist.merge_diff = if *n == 0 {
+                    MergeDiff::Combined
+                } else {
+                    MergeDiff::Parent(*n)
+                };
                 self.hist.rebuild_diff();
                 self.reload_diff();
             }
@@ -1216,7 +1334,10 @@ impl App {
             }
             A::MakePatch(row) => {
                 if let Some(this) = self.row_oid(*row) {
-                    let sel = self.hist.selected_oid().filter(|o| !HistoryState::is_pseudo(o));
+                    let sel = self
+                        .hist
+                        .selected_oid()
+                        .filter(|o| !HistoryState::is_pseudo(o));
                     let (from, to) = match sel {
                         Some(s) if s != this => (this, s),
                         _ => {
@@ -1224,7 +1345,10 @@ impl App {
                             match p {
                                 Some(p) => (p, this),
                                 None => {
-                                    self.set_status("Root commit: no parent to diff against.", StatusTone::Error);
+                                    self.set_status(
+                                        "Root commit: no parent to diff against.",
+                                        StatusTone::Error,
+                                    );
                                     return true;
                                 }
                             }
@@ -1329,8 +1453,14 @@ impl App {
                     self.confirm(
                         "Check out commit",
                         &[
-                            (&format!("Check out commit {} (detached HEAD)?", o.short(10)), Tone::Normal),
-                            ("Local changes are kept; Git refuses if they conflict.", Tone::Normal),
+                            (
+                                &format!("Check out commit {} (detached HEAD)?", o.short(10)),
+                                Tone::Normal,
+                            ),
+                            (
+                                "Local changes are kept; Git refuses if they conflict.",
+                                Tone::Normal,
+                            ),
                         ],
                         "Check out",
                         Pending::Op {
@@ -1413,7 +1543,10 @@ impl App {
             self.confirm(
                 "Confirm cherry-pick",
                 &[(
-                    &format!("Commit {} is already included in branch {branch} -- really re-apply it?", oid.short(10)),
+                    &format!(
+                        "Commit {} is already included in branch {branch} -- really re-apply it?",
+                        oid.short(10)
+                    ),
                     Tone::Warn,
                 )],
                 "Cherry-pick",
@@ -1422,7 +1555,10 @@ impl App {
         } else {
             self.confirm(
                 "Cherry-pick",
-                &[(&format!("Cherry-pick commit {} onto {branch}?", oid.short(10)), Tone::Normal)],
+                &[(
+                    &format!("Cherry-pick commit {} onto {branch}?", oid.short(10)),
+                    Tone::Normal,
+                )],
                 "Cherry-pick",
                 p,
             );
@@ -1443,11 +1579,20 @@ impl App {
         let q = if contained {
             format!("Revert commit {} on {branch}?", oid.short(10))
         } else {
-            format!("Commit {} is not included in branch {branch} -- really revert it?", oid.short(10))
+            format!(
+                "Commit {} is not included in branch {branch} -- really revert it?",
+                oid.short(10)
+            )
         };
-        body.push((q.as_str(), if contained { Tone::Normal } else { Tone::Warn }));
+        body.push((
+            q.as_str(),
+            if contained { Tone::Normal } else { Tone::Warn },
+        ));
         if merge {
-            body.push(("Merge commit: reverted against its first parent (-m 1).", Tone::Warn));
+            body.push((
+                "Merge commit: reverted against its first parent (-m 1).",
+                Tone::Warn,
+            ));
         }
         self.confirm(
             "Revert commit",
@@ -1479,7 +1624,10 @@ impl App {
                 self.select_row(i);
                 self.center_selection();
             }
-            None => self.set_status("No common descendant in the loaded commits.", StatusTone::Info),
+            None => self.set_status(
+                "No common descendant in the loaded commits.",
+                StatusTone::Info,
+            ),
         }
     }
 
@@ -1487,7 +1635,9 @@ impl App {
         if !self.guard_write() {
             return;
         }
-        let Some(r) = self.refs.find_full(&full).cloned() else { return };
+        let Some(r) = self.refs.find_full(&full).cloned() else {
+            return;
+        };
         if self.refs.is_head_ref(&r) {
             self.set_status("Already on this branch.", StatusTone::Info);
             return;
@@ -1504,7 +1654,10 @@ impl App {
             }
             RefKind::RemoteBranch => {
                 let remote_short = String::from_utf8_lossy(r.short_bytes()).into_owned();
-                let local = remote_short.split_once('/').map(|(_, b)| b.to_string()).unwrap_or_default();
+                let local = remote_short
+                    .split_once('/')
+                    .map(|(_, b)| b.to_string())
+                    .unwrap_or_default();
                 let exists = self
                     .refs
                     .local_branches()
@@ -1520,7 +1673,9 @@ impl App {
                 } else {
                     (
                         format!("Create local branch {local} tracking {shown}"),
-                        Box::new(move |rr| ops::create_branch(rr, &local, &remote_short, false, true)),
+                        Box::new(move |rr| {
+                            ops::create_branch(rr, &local, &remote_short, false, true)
+                        }),
                     )
                 }
             }
@@ -1549,13 +1704,21 @@ impl App {
         if !self.guard_write() {
             return;
         }
-        let Some(r) = self.refs.find_full(&full).cloned() else { return };
+        let Some(r) = self.refs.find_full(&full).cloned() else {
+            return;
+        };
         if r.kind != RefKind::LocalBranch {
-            self.set_status("Only local branches can be removed here.", StatusTone::Error);
+            self.set_status(
+                "Only local branches can be removed here.",
+                StatusTone::Error,
+            );
             return;
         }
         if self.refs.is_head_ref(&r) {
-            self.set_status("Cannot delete the currently checked out branch.", StatusTone::Error);
+            self.set_status(
+                "Cannot delete the currently checked out branch.",
+                StatusTone::Error,
+            );
             return;
         }
         let name = r.short_bytes().to_vec();
@@ -1575,10 +1738,15 @@ impl App {
 
     fn external_diff(&mut self, path: Vec<u8>) {
         if self.hist.tree_mode {
-            self.set_status("External diff is not available in Tree mode.", StatusTone::Error);
+            self.set_status(
+                "External diff is not available in Tree mode.",
+                StatusTone::Error,
+            );
             return;
         }
-        let Some(c) = self.hist.selected().cloned() else { return };
+        let Some(c) = self.hist.selected().cloned() else {
+            return;
+        };
         let mut args = vec![os("difftool"), os("--no-prompt")];
         if let Some((a, b)) = self.hist.compare {
             args.push(os(a.to_hex()));
@@ -1602,7 +1770,9 @@ impl App {
     }
 
     fn blame_parent(&mut self, path: Vec<u8>) {
-        let Some(c) = self.hist.selected().cloned() else { return };
+        let Some(c) = self.hist.selected().cloned() else {
+            return;
+        };
         let rev = if HistoryState::is_pseudo(&c.oid) {
             self.head()
         } else {
@@ -1613,7 +1783,11 @@ impl App {
             return;
         };
         let r = self.runner.clone();
-        let title = format!("Blame {} at {}", sanitize::display_bytes(&path), rev.short(10));
+        let title = format!(
+            "Blame {} at {}",
+            sanitize::display_bytes(&path),
+            rev.short(10)
+        );
         self.workers.read(self.generation, move || {
             let res = r
                 .read_opts(
@@ -1637,12 +1811,16 @@ impl App {
     }
 
     fn line_origin(&mut self, idx: usize) {
-        let Some(c) = self.hist.selected().cloned() else { return };
+        let Some(c) = self.hist.selected().cloned() else {
+            return;
+        };
         let d = &self.hist.diff;
         let Some(fi) = d.lines.get(idx).and_then(|l| l.file) else {
             return;
         };
-        let Some(path) = self.hist.files.get(fi).cloned() else { return };
+        let Some(path) = self.hist.files.get(fi).cloned() else {
+            return;
+        };
         let (rev, line) = if let Some((_, n)) = d.new_line_number(idx) {
             let rev = if HistoryState::is_pseudo(&c.oid) {
                 None
@@ -1663,13 +1841,16 @@ impl App {
             return;
         };
         let Some(rev) = rev else {
-            self.set_status("Origin of uncommitted lines: not committed yet.", StatusTone::Info);
+            self.set_status(
+                "Origin of uncommitted lines: not committed yet.",
+                StatusTone::Info,
+            );
             return;
         };
         let r = self.runner.clone();
-        self.req.origin = self
-            .workers
-            .read(self.generation, move || Payload::Origin(read::blame_line(&r, &rev, &path, line)));
+        self.req.origin = self.workers.read(self.generation, move || {
+            Payload::Origin(read::blame_line(&r, &rev, &path, line))
+        });
     }
 }
 
@@ -1681,9 +1862,17 @@ pub fn about_text(which: &str) -> String {
          F6 switches between history and working tree.\n\n\
          Repository operations use the Git command line.\n\
          License: Apache-2.0",
-        if which == "git gui" { "Git TUI" } else { "Git Twin" },
+        if which == "git gui" {
+            "Git TUI"
+        } else {
+            "Git Twin"
+        },
         env!("CARGO_PKG_VERSION"),
-        if which == "git gui" { "git tui (executable: git-tui)" } else { "gitt" }
+        if which == "git gui" {
+            "git tui (executable: git-tui)"
+        } else {
+            "gitt"
+        }
     )
 }
 

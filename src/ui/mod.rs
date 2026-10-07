@@ -1106,7 +1106,10 @@ mod tests {
                 (11, 2, t.fg),
             ] {
                 let cell = &buffer[(x, y)];
-                assert_eq!(cell.fg, fg, "semantic colour must stay visible when selected");
+                assert_eq!(
+                    cell.fg, fg,
+                    "semantic colour must stay visible when selected"
+                );
                 assert_eq!(cell.bg, if focused { t.sel_bg } else { t.sel_dim_bg });
                 assert_eq!(cell.modifier.contains(Modifier::BOLD), focused);
                 assert!(!cell.modifier.contains(Modifier::REVERSED));

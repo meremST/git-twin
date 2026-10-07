@@ -285,13 +285,17 @@ mod tests {
         let b = w.write(1, "b", || Payload::Remotes(vec!["b".into()]));
         let mut got = Vec::new();
         for _ in 0..2 {
-            let m = w.rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+            let m =
+                w.rx.recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
             got.push(m.id);
         }
         assert_eq!(got, vec![a, b]);
         assert!(!w.writing());
         let r = w.read(7, || Payload::Remotes(Vec::new()));
-        let m = w.rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        let m =
+            w.rx.recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
         assert_eq!((m.id, m.generation), (r, 7));
     }
 
@@ -304,7 +308,9 @@ mod tests {
             }
         });
         for _ in 0..3 {
-            let m = w.rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+            let m =
+                w.rx.recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
             assert_eq!(m.id, id);
         }
     }

@@ -1,10 +1,10 @@
 //! Menu bar and context menus. Menus are rebuilt from the application state
 //! every time they open, so enabled/checked states are always current.
 
+use super::App;
 use super::action::{Action, FileList};
 use super::diffview::Show;
 use super::history::HistoryState;
-use super::App;
 use crate::config::ViewKind;
 use crate::domain::refs::RefKind;
 use crate::git::read::WordMode;
@@ -156,9 +156,15 @@ pub fn menu_width(items: &[MenuItem]) -> u16 {
             MenuItem::Entry { label, key, .. } => {
                 unicode_width::UnicodeWidthStr::width(label.as_str())
                     + 4
-                    + if key.is_empty() { 0 } else { unicode_width::UnicodeWidthStr::width(key.as_str()) + 3 }
+                    + if key.is_empty() {
+                        0
+                    } else {
+                        unicode_width::UnicodeWidthStr::width(key.as_str()) + 3
+                    }
             }
-            MenuItem::Sub { label, .. } => unicode_width::UnicodeWidthStr::width(label.as_str()) + 6,
+            MenuItem::Sub { label, .. } => {
+                unicode_width::UnicodeWidthStr::width(label.as_str()) + 6
+            }
             MenuItem::Sep => 3,
         })
         .max()
@@ -169,7 +175,16 @@ pub fn menu_width(items: &[MenuItem]) -> u16 {
 pub fn titles(view: ViewKind) -> &'static [&'static str] {
     match view {
         ViewKind::History => &["File", "Edit", "View", "Help"],
-        ViewKind::Worktree => &["Repository", "Edit", "Branch", "Commit", "Merge", "Remote", "Tools", "Help"],
+        ViewKind::Worktree => &[
+            "Repository",
+            "Edit",
+            "Branch",
+            "Commit",
+            "Merge",
+            "Remote",
+            "Tools",
+            "Help",
+        ],
     }
 }
 
@@ -219,7 +234,11 @@ impl App {
         let h = items.len() as u16 + 2;
         let (sw, sh) = self.size;
         let x = x.min(sw.saturating_sub(w));
-        let y = if y + 1 + h > sh { y.saturating_sub(h) } else { y + 1 };
+        let y = if y + 1 + h > sh {
+            y.saturating_sub(h)
+        } else {
+            y + 1
+        };
         let mut m = MenuState::new(None, items, x, y);
         m.title = title;
         self.menu = Some(m);
@@ -233,7 +252,9 @@ impl App {
         }
         let l = m.top();
         if let Some(MenuItem::Entry {
-            action, enabled: true, ..
+            action,
+            enabled: true,
+            ..
         }) = l.items.get(l.sel)
         {
             let a = action.clone();
@@ -262,7 +283,10 @@ impl App {
                 MenuItem::Sep,
                 e("Quit", "Ctrl-Q", Action::Quit),
             ],
-            1 => vec![e("Preferences", "", Action::Preferences), e("Copy", "Ctrl-C", Action::Copy)],
+            1 => vec![
+                e("Preferences", "", Action::Preferences),
+                e("Copy", "Ctrl-C", Action::Copy),
+            ],
             2 => {
                 let mut v = vec![
                     e("New view...", "Shift-F4", Action::NewView),
@@ -277,17 +301,52 @@ impl App {
                 v.push(sub(
                     "Diff display",
                     vec![
-                        chk("Diff", "", Action::SetShow(Show::Diff), h.show == Show::Diff),
-                        chk("Old version", "", Action::SetShow(Show::Old), h.show == Show::Old),
-                        chk("New version", "", Action::SetShow(Show::New), h.show == Show::New),
+                        chk(
+                            "Diff",
+                            "",
+                            Action::SetShow(Show::Diff),
+                            h.show == Show::Diff,
+                        ),
+                        chk(
+                            "Old version",
+                            "",
+                            Action::SetShow(Show::Old),
+                            h.show == Show::Old,
+                        ),
+                        chk(
+                            "New version",
+                            "",
+                            Action::SetShow(Show::New),
+                            h.show == Show::New,
+                        ),
                         MenuItem::Sep,
                         e("More context", "Ctrl-+", Action::ContextMore),
                         e("Less context", "Ctrl--", Action::ContextLess),
-                        chk("Ignore space change", "", Action::ToggleIgnoreSpace, h.ignore_space),
+                        chk(
+                            "Ignore space change",
+                            "",
+                            Action::ToggleIgnoreSpace,
+                            h.ignore_space,
+                        ),
                         MenuItem::Sep,
-                        chk("Line diff", "", Action::SetWordMode(WordMode::Line), h.word_mode == WordMode::Line),
-                        chk("Markup words", "", Action::SetWordMode(WordMode::Markup), h.word_mode == WordMode::Markup),
-                        chk("Color words", "", Action::SetWordMode(WordMode::Color), h.word_mode == WordMode::Color),
+                        chk(
+                            "Line diff",
+                            "",
+                            Action::SetWordMode(WordMode::Line),
+                            h.word_mode == WordMode::Line,
+                        ),
+                        chk(
+                            "Markup words",
+                            "",
+                            Action::SetWordMode(WordMode::Markup),
+                            h.word_mode == WordMode::Markup,
+                        ),
+                        chk(
+                            "Color words",
+                            "",
+                            Action::SetWordMode(WordMode::Color),
+                            h.word_mode == WordMode::Color,
+                        ),
                     ],
                 ));
                 v.push(sub(
@@ -298,10 +357,18 @@ impl App {
                     ],
                 ));
                 v.push(e("Maximize pane", "F11", Action::ToggleMaximize));
-                v.push(en("Working tree view", "F6", Action::SwitchView(ViewKind::Worktree), !self.is_bare()));
+                v.push(en(
+                    "Working tree view",
+                    "F6",
+                    Action::SwitchView(ViewKind::Worktree),
+                    !self.is_bare(),
+                ));
                 v
             }
-            _ => vec![e("About Git Twin (gitt)", "", Action::AboutGitk), e("Key bindings", "F1", Action::KeyBindings)],
+            _ => vec![
+                e("About Git Twin (gitt)", "", Action::AboutGitk),
+                e("Key bindings", "F1", Action::KeyBindings),
+            ],
         }
     }
 
@@ -315,10 +382,18 @@ impl App {
             0 => vec![
                 e("Explore Working Copy", "", Action::ExploreWorkingCopy),
                 MenuItem::Sep,
-                e("Browse Current Branch's Files", "", Action::BrowseFiles(None)),
+                e(
+                    "Browse Current Branch's Files",
+                    "",
+                    Action::BrowseFiles(None),
+                ),
                 e("Browse Branch Files...", "", Action::BrowseBranchFiles),
                 MenuItem::Sep,
-                e("Visualize Current Branch's History", "F6", Action::VisualizeCurrent),
+                e(
+                    "Visualize Current Branch's History",
+                    "F6",
+                    Action::VisualizeCurrent,
+                ),
                 e("Visualize All Branch History", "", Action::VisualizeAll),
                 MenuItem::Sep,
                 e("Database Statistics", "", Action::DbStats),
@@ -338,7 +413,11 @@ impl App {
                 MenuItem::Sep,
                 e("Select All", "Ctrl-A", Action::SelectAll),
                 MenuItem::Sep,
-                e("Edit message in $GIT_EDITOR", "F4", Action::EditMessageExternally),
+                e(
+                    "Edit message in $GIT_EDITOR",
+                    "F4",
+                    Action::EditMessageExternally,
+                ),
                 e("Options...", "", Action::WtOptions),
             ],
             2 => vec![
@@ -352,14 +431,38 @@ impl App {
                 let staged_side = self.wt.focus == super::worktree::WFocus::Staged;
                 vec![
                     chk("New Commit", "", Action::SetAmend(false), !self.wt.amend),
-                    chk("Amend Last Commit", "Ctrl-E", Action::SetAmend(true), self.wt.amend),
+                    chk(
+                        "Amend Last Commit",
+                        "Ctrl-E",
+                        Action::SetAmend(true),
+                        self.wt.amend,
+                    ),
                     MenuItem::Sep,
                     e("Rescan", "F5", Action::Rescan),
-                    en("Stage To Commit", "Ctrl-T", Action::StageSelected, !staged_side),
-                    e("Stage Changed Files To Commit", "Ctrl-I", Action::StageChanged),
-                    en("Unstage From Commit", "Ctrl-U", Action::UnstageSelected, staged_side),
+                    en(
+                        "Stage To Commit",
+                        "Ctrl-T",
+                        Action::StageSelected,
+                        !staged_side,
+                    ),
+                    e(
+                        "Stage Changed Files To Commit",
+                        "Ctrl-I",
+                        Action::StageChanged,
+                    ),
+                    en(
+                        "Unstage From Commit",
+                        "Ctrl-U",
+                        Action::UnstageSelected,
+                        staged_side,
+                    ),
                     e("Revert Changes", "Ctrl-J", Action::RevertSelected),
-                    en("Undo Last Revert", "", Action::UndoLastRevert, self.wt.last_revert.is_some()),
+                    en(
+                        "Undo Last Revert",
+                        "",
+                        Action::UndoLastRevert,
+                        self.wt.last_revert.is_some(),
+                    ),
                     MenuItem::Sep,
                     e("Show Less Context", "Ctrl--", Action::WtContextLess),
                     e("Show More Context", "Ctrl-+", Action::WtContextMore),
@@ -385,7 +488,10 @@ impl App {
                 let mut v = Vec::new();
                 if !self.remotes.is_empty() {
                     let mk = |f: fn(String) -> Action| -> Vec<MenuItem> {
-                        self.remotes.iter().map(|r| e(r, "", f(r.clone()))).collect()
+                        self.remotes
+                            .iter()
+                            .map(|r| e(r, "", f(r.clone())))
+                            .collect()
                     };
                     v.push(sub("Fetch from", mk(Action::Fetch)));
                     v.push(sub("Prune from", mk(Action::Prune)));
@@ -405,7 +511,12 @@ impl App {
                     .map(|(k, t)| e(&t.name, "", Action::RunTool(k)))
                     .collect();
                 if v.is_empty() {
-                    v.push(en("(no tools: set guitool.<name>.cmd)", "", Action::Noop, false));
+                    v.push(en(
+                        "(no tools: set guitool.<name>.cmd)",
+                        "",
+                        Action::Noop,
+                        false,
+                    ));
                 }
                 v
             }
@@ -421,25 +532,44 @@ impl App {
     fn context_items(&self, c: &Ctx) -> (Option<String>, Vec<MenuItem>) {
         match c {
             Ctx::Commit(row) => {
-                let Some(cm) = self.hist.commits.get(*row) else { return (None, vec![]) };
+                let Some(cm) = self.hist.commits.get(*row) else {
+                    return (None, vec![]);
+                };
                 if HistoryState::is_pseudo(&cm.oid) {
                     return (
                         Some("Local changes".into()),
                         vec![
-                            e("Open working tree view", "", Action::SwitchView(ViewKind::Worktree)),
+                            e(
+                                "Open working tree view",
+                                "",
+                                Action::SwitchView(ViewKind::Worktree),
+                            ),
                             e("Rescan", "", Action::Rescan),
                         ],
                     );
                 }
-                let has_sel = self.hist.selected_oid().is_some_and(|o| o != cm.oid && !HistoryState::is_pseudo(&o));
+                let has_sel = self
+                    .hist
+                    .selected_oid()
+                    .is_some_and(|o| o != cm.oid && !HistoryState::is_pseudo(&o));
                 let marked = self.hist.mark.is_some();
                 let detached = matches!(self.refs.head, crate::domain::refs::Head::Detached(_));
                 let ro = !self.read_only;
                 (
                     Some(cm.oid.short(10)),
                     vec![
-                        en("Diff this -> selected", "", Action::DiffThisSelected(*row), has_sel),
-                        en("Diff selected -> this", "", Action::DiffSelectedThis(*row), has_sel),
+                        en(
+                            "Diff this -> selected",
+                            "",
+                            Action::DiffThisSelected(*row),
+                            has_sel,
+                        ),
+                        en(
+                            "Diff selected -> this",
+                            "",
+                            Action::DiffSelectedThis(*row),
+                            has_sel,
+                        ),
                         e("Make patch", "", Action::MakePatch(*row)),
                         en("Create tag", "", Action::CreateTag(*row), ro),
                         e("Copy commit reference", "", Action::CopyCommitRef(*row)),
@@ -448,78 +578,183 @@ impl App {
                         en("Create new branch", "", Action::CreateBranchAt(*row), ro),
                         en("Cherry-pick this commit", "", Action::CherryPick(*row), ro),
                         en(
-                            if detached { "Detached head: can't reset" } else { "Reset HEAD branch to here" },
+                            if detached {
+                                "Detached head: can't reset"
+                            } else {
+                                "Reset HEAD branch to here"
+                            },
                             "",
                             Action::ResetHere(*row),
                             ro && !detached,
                         ),
                         e("Mark this commit", "", Action::MarkCommit(*row)),
                         en("Return to mark", "", Action::ReturnToMark, marked),
-                        en("Find descendant of this and mark", "", Action::FindDescendant(*row), marked),
-                        en("Compare with marked commit", "", Action::CompareWithMarked(*row), marked),
-                        en("Diff this -> marked commit", "", Action::DiffMarked(*row, true), marked),
-                        en("Diff marked commit -> this", "", Action::DiffMarked(*row, false), marked),
+                        en(
+                            "Find descendant of this and mark",
+                            "",
+                            Action::FindDescendant(*row),
+                            marked,
+                        ),
+                        en(
+                            "Compare with marked commit",
+                            "",
+                            Action::CompareWithMarked(*row),
+                            marked,
+                        ),
+                        en(
+                            "Diff this -> marked commit",
+                            "",
+                            Action::DiffMarked(*row, true),
+                            marked,
+                        ),
+                        en(
+                            "Diff marked commit -> this",
+                            "",
+                            Action::DiffMarked(*row, false),
+                            marked,
+                        ),
                         en("Revert this commit", "", Action::RevertCommit(*row), ro),
-                        en("Check out this commit", "", Action::CheckoutCommit(*row), ro),
+                        en(
+                            "Check out this commit",
+                            "",
+                            Action::CheckoutCommit(*row),
+                            ro,
+                        ),
                     ],
                 )
             }
             Ctx::Ref(full) => {
-                let Some(r) = self.refs.find_full(full) else { return (None, vec![]) };
+                let Some(r) = self.refs.find_full(full) else {
+                    return (None, vec![]);
+                };
                 let local = r.kind == RefKind::LocalBranch;
                 let is_head = self.refs.is_head_ref(r);
                 let ro = !self.read_only;
                 (
                     Some(r.short.clone()),
                     vec![
-                        en("Check out this branch", "", Action::CheckoutRef(full.clone()), ro && !is_head),
-                        en("Rename this branch", "", Action::RenameBranch(full.clone()), ro && local),
-                        en("Remove this branch", "", Action::RemoveBranch(full.clone()), ro && local && !is_head),
+                        en(
+                            "Check out this branch",
+                            "",
+                            Action::CheckoutRef(full.clone()),
+                            ro && !is_head,
+                        ),
+                        en(
+                            "Rename this branch",
+                            "",
+                            Action::RenameBranch(full.clone()),
+                            ro && local,
+                        ),
+                        en(
+                            "Remove this branch",
+                            "",
+                            Action::RemoveBranch(full.clone()),
+                            ro && local && !is_head,
+                        ),
                         e("Copy branch name", "", Action::CopyRefName(full.clone())),
                     ],
                 )
             }
             Ctx::HFile(i) => {
-                let Some(p) = self.hist.file_path(*i) else { return (None, vec![]) };
+                let Some(p) = self.hist.file_path(*i) else {
+                    return (None, vec![]);
+                };
                 (
                     Some(crate::domain::sanitize::display_bytes(&p)),
                     vec![
-                        e("Highlight this too", "", Action::HighlightPath(p.clone(), false)),
-                        e("Highlight this only", "", Action::HighlightPath(p.clone(), true)),
-                        en("External diff", "", Action::ExternalDiff(p.clone()), !self.hist.tree_mode && !self.read_only),
+                        e(
+                            "Highlight this too",
+                            "",
+                            Action::HighlightPath(p.clone(), false),
+                        ),
+                        e(
+                            "Highlight this only",
+                            "",
+                            Action::HighlightPath(p.clone(), true),
+                        ),
+                        en(
+                            "External diff",
+                            "",
+                            Action::ExternalDiff(p.clone()),
+                            !self.hist.tree_mode && !self.read_only,
+                        ),
                         e("Blame parent commit", "", Action::BlameParent(p.clone())),
                         e("Copy path", "", Action::CopyPath(p)),
                     ],
                 )
             }
             Ctx::HDiff(idx) => {
-                let has_file = self.hist.diff.lines.get(*idx).and_then(|l| l.file).is_some();
+                let has_file = self
+                    .hist
+                    .diff
+                    .lines
+                    .get(*idx)
+                    .and_then(|l| l.file)
+                    .is_some();
                 (
                     None,
                     vec![
-                        en("Show origin of this line", "", Action::LineOrigin(*idx), has_file && !self.hist.tree_mode),
+                        en(
+                            "Show origin of this line",
+                            "",
+                            Action::LineOrigin(*idx),
+                            has_file && !self.hist.tree_mode,
+                        ),
                         e("Copy", "c", Action::Copy),
                         MenuItem::Sep,
-                        chk("Diff", "", Action::SetShow(Show::Diff), self.hist.show == Show::Diff),
-                        chk("Old version", "", Action::SetShow(Show::Old), self.hist.show == Show::Old),
-                        chk("New version", "", Action::SetShow(Show::New), self.hist.show == Show::New),
+                        chk(
+                            "Diff",
+                            "",
+                            Action::SetShow(Show::Diff),
+                            self.hist.show == Show::Diff,
+                        ),
+                        chk(
+                            "Old version",
+                            "",
+                            Action::SetShow(Show::Old),
+                            self.hist.show == Show::Old,
+                        ),
+                        chk(
+                            "New version",
+                            "",
+                            Action::SetShow(Show::New),
+                            self.hist.show == Show::New,
+                        ),
                     ],
                 )
             }
             Ctx::WtFile(l, i) => {
-                let Some(f) = self.wt.list(*l).get(*i) else { return (None, vec![]) };
+                let Some(f) = self.wt.list(*l).get(*i) else {
+                    return (None, vec![]);
+                };
                 let mut v = match l {
                     FileList::Unstaged => vec![
                         e("Stage To Commit", "Ctrl-T", Action::StageToggle(*l, *i)),
                         e("Revert Changes", "Ctrl-J", Action::RevertSelected),
                     ],
-                    FileList::Staged => vec![e("Unstage From Commit", "Ctrl-U", Action::StageToggle(*l, *i))],
+                    FileList::Staged => vec![e(
+                        "Unstage From Commit",
+                        "Ctrl-U",
+                        Action::StageToggle(*l, *i),
+                    )],
                 };
                 if f.unmerged {
                     v.push(MenuItem::Sep);
-                    v.push(e("Use Local Version (ours)", "", Action::UseVersion(f.path.clone(), true)));
-                    v.push(e("Use Remote Version (theirs)", "", Action::UseVersion(f.path.clone(), false)));
-                    v.push(e("Run Merge Tool", "", Action::RunMergeTool(f.path.clone())));
+                    v.push(e(
+                        "Use Local Version (ours)",
+                        "",
+                        Action::UseVersion(f.path.clone(), true),
+                    ));
+                    v.push(e(
+                        "Use Remote Version (theirs)",
+                        "",
+                        Action::UseVersion(f.path.clone(), false),
+                    ));
+                    v.push(e(
+                        "Run Merge Tool",
+                        "",
+                        Action::RunMergeTool(f.path.clone()),
+                    ));
                 }
                 v.push(MenuItem::Sep);
                 v.push(e("Copy path", "", Action::CopyPath(f.path.clone())));
@@ -527,22 +762,43 @@ impl App {
             }
             Ctx::WtDiff(idx) => {
                 let staged = self.wt.diff_side() == Some(FileList::Staged);
-                let on_hunk = self.wt.diff.hunk_at(*idx).is_some() && self.wt.diff.text_range().is_none();
+                let on_hunk =
+                    self.wt.diff.hunk_at(*idx).is_some() && self.wt.diff.text_range().is_none();
                 let lines = self.wt.diff.selected_lines().is_some();
                 let mut v = if staged {
                     vec![
-                        en("Unstage Hunk From Commit", "s", Action::StageHunk(*idx), on_hunk),
-                        en("Unstage Line(s) From Commit", "s", Action::StageLines, lines),
+                        en(
+                            "Unstage Hunk From Commit",
+                            "s",
+                            Action::StageHunk(*idx),
+                            on_hunk,
+                        ),
+                        en(
+                            "Unstage Line(s) From Commit",
+                            "s",
+                            Action::StageLines,
+                            lines,
+                        ),
                     ]
                 } else {
                     vec![
-                        en("Stage Hunk For Commit", "s", Action::StageHunk(*idx), on_hunk),
+                        en(
+                            "Stage Hunk For Commit",
+                            "s",
+                            Action::StageHunk(*idx),
+                            on_hunk,
+                        ),
                         en("Stage Line(s) For Commit", "s", Action::StageLines, lines),
                         en("Revert Hunk", "r", Action::RevertHunk(*idx), on_hunk),
                         en("Revert Line(s)", "r", Action::RevertLines, lines),
                     ]
                 };
-                v.push(en("Undo Last Revert", "", Action::UndoLastRevert, self.wt.last_revert.is_some()));
+                v.push(en(
+                    "Undo Last Revert",
+                    "",
+                    Action::UndoLastRevert,
+                    self.wt.last_revert.is_some(),
+                ));
                 v.push(MenuItem::Sep);
                 v.push(e("Show Less Context", "Ctrl--", Action::WtContextLess));
                 v.push(e("Show More Context", "Ctrl-+", Action::WtContextMore));

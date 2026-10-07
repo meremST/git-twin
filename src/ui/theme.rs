@@ -409,8 +409,16 @@ impl Theme {
             // A plain colour background (instead of reversing each span) keeps
             // the row's own semantic colours (add/del/branch/...) readable and
             // avoids a stripe of differently-reversed colours on one line.
-            let s = Style::default().bg(if focused { self.sel_bg } else { self.sel_dim_bg });
-            return if focused { s.add_modifier(Modifier::BOLD) } else { s };
+            let s = Style::default().bg(if focused {
+                self.sel_bg
+            } else {
+                self.sel_dim_bg
+            });
+            return if focused {
+                s.add_modifier(Modifier::BOLD)
+            } else {
+                s
+            };
         }
         if self.low_color {
             return Style::default().add_modifier(Modifier::REVERSED);

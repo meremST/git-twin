@@ -89,7 +89,9 @@ impl Head {
 
     pub fn label(&self) -> String {
         match self {
-            Head::Branch { short, oid: None, .. } => format!("{short} (unborn)"),
+            Head::Branch {
+                short, oid: None, ..
+            } => format!("{short} (unborn)"),
             Head::Branch { short, .. } => short.clone(),
             Head::Detached(o) => format!("HEAD detached at {}", o.short(8)),
         }

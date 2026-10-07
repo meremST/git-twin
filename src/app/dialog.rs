@@ -72,7 +72,12 @@ pub fn search_match(pattern: &str, key: &str) -> bool {
     }
     let kc: Vec<char> = k.chars().collect();
     std::iter::once(0)
-        .chain(kc.iter().enumerate().filter(|(_, c)| **c == '/').map(|(i, _)| i + 1))
+        .chain(
+            kc.iter()
+                .enumerate()
+                .filter(|(_, c)| **c == '/')
+                .map(|(i, _)| i + 1),
+        )
         .any(|start| glob(&p, &kc[start..]))
 }
 
@@ -98,7 +103,13 @@ fn glob(p: &[char], s: &[char]) -> bool {
 }
 
 impl ListSearch {
-    fn apply(&self, items: &mut Vec<String>, values: &mut Vec<Vec<u8>>, sel: &mut usize, top: &mut usize) {
+    fn apply(
+        &self,
+        items: &mut Vec<String>,
+        values: &mut Vec<Vec<u8>>,
+        sel: &mut usize,
+        top: &mut usize,
+    ) {
         let pat = self.input.text.trim();
         let keep: Vec<usize> = (0..self.keys.len())
             .filter(|i| search_match(pat, &self.keys[*i]))
@@ -133,7 +144,13 @@ impl Field {
             sel,
         }
     }
-    pub fn list(label: &str, items: Vec<String>, values: Vec<Vec<u8>>, sel: usize, rows: u16) -> Field {
+    pub fn list(
+        label: &str,
+        items: Vec<String>,
+        values: Vec<Vec<u8>>,
+        sel: usize,
+        rows: u16,
+    ) -> Field {
         Field::List {
             label: label.into(),
             items,
@@ -275,7 +292,10 @@ impl Dialog {
 
     pub fn info(title: &str, text: &str) -> Dialog {
         let mut d = Dialog::new(title, Kind::Info);
-        d.body = text.lines().map(|l| (l.to_string(), Tone::Normal)).collect();
+        d.body = text
+            .lines()
+            .map(|l| (l.to_string(), Tone::Normal))
+            .collect();
         d.buttons = vec!["Close".into()];
         d.width = 78;
         d
@@ -302,7 +322,11 @@ impl Dialog {
 
     pub fn with_fields(mut self, f: Vec<Field>) -> Dialog {
         self.fields = f;
-        self.focus = self.fields.iter().position(Field::focusable).unwrap_or(self.fields.len());
+        self.focus = self
+            .fields
+            .iter()
+            .position(Field::focusable)
+            .unwrap_or(self.fields.len());
         self
     }
 
@@ -331,7 +355,9 @@ impl Dialog {
     }
 
     pub fn scroll_by(&mut self, delta: isize) {
-        self.scroll = self.scroll.saturating_add_signed(delta)
+        self.scroll = self
+            .scroll
+            .saturating_add_signed(delta)
             .min(self.content_height.saturating_sub(self.viewport_height));
         self.reveal_focus = false;
         self.last_focus = Some(self.focus);
@@ -388,8 +414,14 @@ impl Dialog {
         }
         self.reveal_focus = true;
         if k.code == C::Esc
-            && let Some(Field::List { items, values, sel, top, search: Some(s), .. }) =
-                self.fields.get_mut(self.focus)
+            && let Some(Field::List {
+                items,
+                values,
+                sel,
+                top,
+                search: Some(s),
+                ..
+            }) = self.fields.get_mut(self.focus)
             && s.active
         {
             s.active = false;
@@ -469,7 +501,12 @@ impl Dialog {
                 _ => {}
             },
             Field::List {
-                items, values, sel, top, rows, search,
+                items,
+                values,
+                sel,
+                top,
+                rows,
+                search,
                 ..
             } => {
                 let h = *rows as usize;
@@ -483,9 +520,7 @@ impl Dialog {
                             s.active = false;
                             return DialogResult::None;
                         }
-                        C::Char(_) | C::Backspace | C::Delete | C::Left | C::Right
-                            if s.active =>
-                        {
+                        C::Char(_) | C::Backspace | C::Delete | C::Left | C::Right if s.active => {
                             edit_input(&mut s.input, k);
                             s.apply(items, values, sel, top);
                             return DialogResult::None;
@@ -521,7 +556,14 @@ impl Dialog {
         match self.focused_field() {
             Some(Field::Text { input, .. }) => input.insert_str(s),
             Some(Field::Area { area, .. }) => area.insert_str(s),
-            Some(Field::List { items, values, sel, top, search: Some(ls), .. }) if ls.active => {
+            Some(Field::List {
+                items,
+                values,
+                sel,
+                top,
+                search: Some(ls),
+                ..
+            }) if ls.active => {
                 ls.input.insert_str(s);
                 ls.apply(items, values, sel, top);
             }
@@ -576,7 +618,9 @@ mod tests {
     #[test]
     fn list_filtering_keys() {
         let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
-        let items: Vec<String> = ["H main", "H master", "H dev", "R origin/main"].map(String::from).into();
+        let items: Vec<String> = ["H main", "H master", "H dev", "R origin/main"]
+            .map(String::from)
+            .into();
         let keys = items.iter().map(|s| s[2..].to_string()).collect();
         let values = items.iter().map(|s| s.as_bytes().to_vec()).collect();
         let mut d = Dialog::new("t", Kind::Info)
@@ -585,10 +629,14 @@ mod tests {
         for c in "ma*".chars() {
             d.on_key(key(c));
         }
-        let Some(Field::List { items, .. }) = d.fields.first() else { panic!() };
+        let Some(Field::List { items, .. }) = d.fields.first() else {
+            panic!()
+        };
         assert_eq!(items, &["H main", "H master", "R origin/main"]);
         d.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-        let Some(Field::List { items, search, .. }) = d.fields.first() else { panic!() };
+        let Some(Field::List { items, search, .. }) = d.fields.first() else {
+            panic!()
+        };
         assert_eq!(items.len(), 4);
         assert!(!search.as_ref().unwrap().active);
     }

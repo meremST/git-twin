@@ -3,7 +3,7 @@ name = "git-twin"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.93"
-description = "Terminal Git client reproducing the gitk (history) and git gui (worktree) layouts"
+description = "Terminal Git client with history and worktree views inspired by gitk and git gui"
 license = "Apache-2.0"
 readme = "README.md"
 publish = false
@@ -37,3 +37,4 @@ vt100 = "0.16"
 [profile.release]
 lto = "thin"
 codegen-units = 4
+strip = "debuginfo"

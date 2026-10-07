@@ -22,7 +22,10 @@ impl App {
         }
         if k.code == C::Char('c') && k.modifiers.contains(M::CONTROL) {
             let now = Instant::now();
-            if self.last_ctrl_c.is_some_and(|t| now.duration_since(t) < Duration::from_millis(1200)) {
+            if self
+                .last_ctrl_c
+                .is_some_and(|t| now.duration_since(t) < Duration::from_millis(1200))
+            {
                 self.last_ctrl_c = None;
                 self.request_quit();
                 return;
@@ -78,10 +81,10 @@ impl App {
                 }
             }
             C::Right => {
-                if !m.open_sub() {
-                    if let Some(b) = m.bar {
-                        self.open_menu(b + 1);
-                    }
+                if !m.open_sub()
+                    && let Some(b) = m.bar
+                {
+                    self.open_menu(b + 1);
                 }
             }
             C::Enter | C::Char(' ') => self.menu_activate(),
@@ -89,7 +92,8 @@ impl App {
                 let c = c.to_ascii_lowercase();
                 let l = m.top();
                 let found = l.items.iter().position(|i| {
-                    i.selectable() && i.label().chars().next().map(|f| f.to_ascii_lowercase()) == Some(c)
+                    i.selectable()
+                        && i.label().chars().next().map(|f| f.to_ascii_lowercase()) == Some(c)
                 });
                 if let Some(i) = found {
                     l.sel = i;
@@ -142,7 +146,9 @@ impl App {
 
     fn in_text_field(&self) -> bool {
         match self.view {
-            ViewKind::History => matches!(self.hist.focus, HFocus::Sha | HFocus::Find | HFocus::Search),
+            ViewKind::History => {
+                matches!(self.hist.focus, HFocus::Sha | HFocus::Find | HFocus::Search)
+            }
             ViewKind::Worktree => self.wt.focus == WFocus::Message,
         }
     }
@@ -211,7 +217,9 @@ impl App {
             C::Home if ctrl => Action::ScrollList(isize::MIN / 2),
             C::End if ctrl => Action::ScrollList(isize::MAX / 2),
             // Files pane: arrows move in the file list.
-            C::Up if focus == HFocus::Files => Action::SelectFileRow(self.hist.file_sel.saturating_sub(1)),
+            C::Up if focus == HFocus::Files => {
+                Action::SelectFileRow(self.hist.file_sel.saturating_sub(1))
+            }
             C::Down if focus == HFocus::Files => Action::SelectFileRow(self.hist.file_sel + 1),
             C::Enter if focus == HFocus::Files => Action::OpenFileRow(self.hist.file_sel),
             // Diff pane: arrows move the line cursor (Shift extends).
@@ -337,10 +345,20 @@ impl App {
             C::Char('-') if ctrl => Some(Action::WtContextLess),
             C::Char('+') | C::Char('=') if ctrl => Some(Action::WtContextMore),
             C::Char(c @ '1'..='4') if alt => {
-                self.wt.focus = [WFocus::Unstaged, WFocus::Staged, WFocus::Diff, WFocus::Message]
-                    [c as usize - '1' as usize];
-                if let (WFocus::Unstaged | WFocus::Staged, None) = (self.wt.focus, self.wt.cursor_index()) {
-                    let l = if self.wt.focus == WFocus::Staged { FileList::Staged } else { FileList::Unstaged };
+                self.wt.focus = [
+                    WFocus::Unstaged,
+                    WFocus::Staged,
+                    WFocus::Diff,
+                    WFocus::Message,
+                ][c as usize - '1' as usize];
+                if let (WFocus::Unstaged | WFocus::Staged, None) =
+                    (self.wt.focus, self.wt.cursor_index())
+                {
+                    let l = if self.wt.focus == WFocus::Staged {
+                        FileList::Staged
+                    } else {
+                        FileList::Unstaged
+                    };
                     if !self.wt.list(l).is_empty() {
                         self.dispatch(Action::SelectFile(l, 0));
                     }
@@ -357,15 +375,28 @@ impl App {
             WFocus::Message => self.message_key(k),
             WFocus::Diff => self.wt_diff_key(k),
             WFocus::Unstaged | WFocus::Staged => {
-                let l = if self.wt.focus == WFocus::Staged { FileList::Staged } else { FileList::Unstaged };
-                let cur = self.wt.cursor_index().filter(|(cl, _)| *cl == l).map(|(_, i)| i);
+                let l = if self.wt.focus == WFocus::Staged {
+                    FileList::Staged
+                } else {
+                    FileList::Unstaged
+                };
+                let cur = self
+                    .wt
+                    .cursor_index()
+                    .filter(|(cl, _)| *cl == l)
+                    .map(|(_, i)| i);
                 let a = match k.code {
-                    C::Up | C::Char('k') if shift => cur.map(|i| Action::ExtendFile(l, i.saturating_sub(1))),
+                    C::Up | C::Char('k') if shift => {
+                        cur.map(|i| Action::ExtendFile(l, i.saturating_sub(1)))
+                    }
                     C::Down | C::Char('j') if shift => cur.map(|i| Action::ExtendFile(l, i + 1)),
                     C::Up | C::Char('k') => Some(Action::MoveFile(-1)),
                     C::Down | C::Char('j') => Some(Action::MoveFile(1)),
                     C::Home => Some(Action::SelectFile(l, 0)),
-                    C::End => Some(Action::SelectFile(l, self.wt.list(l).len().saturating_sub(1))),
+                    C::End => Some(Action::SelectFile(
+                        l,
+                        self.wt.list(l).len().saturating_sub(1),
+                    )),
                     C::Char(' ') | C::Enter => cur.map(|i| Action::StageToggle(l, i)),
                     C::Right | C::Char('l') => {
                         self.wt.focus = WFocus::Diff;
@@ -411,7 +442,10 @@ impl App {
             C::Left | C::Right if shift => d.text_move(k.code == C::Right),
             C::Left | C::Char('h') => d.scroll_h(-4),
             C::Right | C::Char('l') => d.scroll_h(4),
-            C::Esc => { d.anchor = None; d.text_selection = None; }
+            C::Esc => {
+                d.anchor = None;
+                d.text_selection = None;
+            }
             C::Char('c') if ctrl => self.dispatch(Action::Copy),
             C::Char('a') if ctrl => self.dispatch(Action::SelectAll),
             C::Char('s') => {

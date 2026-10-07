@@ -139,7 +139,12 @@ impl WorktreeState {
     }
 
     pub fn cycle_focus(&mut self, dir: isize) {
-        const ORDER: [WFocus; 4] = [WFocus::Unstaged, WFocus::Staged, WFocus::Diff, WFocus::Message];
+        const ORDER: [WFocus; 4] = [
+            WFocus::Unstaged,
+            WFocus::Staged,
+            WFocus::Diff,
+            WFocus::Message,
+        ];
         let i = ORDER.iter().position(|f| *f == self.focus).unwrap_or(0) as isize;
         self.focus = ORDER[(i + dir).rem_euclid(4) as usize];
     }
@@ -296,7 +301,10 @@ impl App {
         let snap = match r {
             Ok(s) => s,
             Err(e) => {
-                self.set_status(format!("Rescan failed: {}", e.message.lines().next().unwrap_or("")), StatusTone::Error);
+                self.set_status(
+                    format!("Rescan failed: {}", e.message.lines().next().unwrap_or("")),
+                    StatusTone::Error,
+                );
                 return;
             }
         };
@@ -342,7 +350,11 @@ impl App {
                 if here.contains(p.as_slice()) {
                     Some((l, p))
                 } else if there.contains(p.as_slice()) {
-                    let other = if l == FileList::Unstaged { FileList::Staged } else { FileList::Unstaged };
+                    let other = if l == FileList::Unstaged {
+                        FileList::Staged
+                    } else {
+                        FileList::Unstaged
+                    };
                     Some((other, p))
                 } else {
                     None
@@ -367,14 +379,17 @@ impl App {
         let head_changed = self.wt.snapshot.as_ref().map(|o| o.head) != Some(snap.head);
         self.wt.snapshot = Some(snap);
         // Keep gitk's local-changes rows in sync.
-        if self.hist.view().includes_head() && !self.hist.loading && (flags != self.hist.local_flags || head_changed) {
+        if self.hist.view().includes_head()
+            && !self.hist.loading
+            && (flags != self.hist.local_flags || head_changed)
+        {
             if self.hist.local_flags != flags {
                 self.load_history(None);
             }
-        } else if let Some(o) = self.hist.selected_oid() {
-            if super::history::HistoryState::is_pseudo(&o) {
-                self.hist.sel_changed_at = Some(std::time::Instant::now());
-            }
+        } else if let Some(o) = self.hist.selected_oid()
+            && super::history::HistoryState::is_pseudo(&o)
+        {
+            self.hist.sel_changed_at = Some(std::time::Instant::now());
         }
         self.load_wt_diff(true);
     }
@@ -395,7 +410,11 @@ impl App {
         }
         let r = self.runner.clone();
         let opts = self.wt_diff_opts();
-        let amend = self.wt.snapshot.as_ref().and_then(|s| s.amend_staged.as_ref().map(|_| s.amend_base));
+        let amend = self
+            .wt
+            .snapshot
+            .as_ref()
+            .and_then(|s| s.amend_staged.as_ref().map(|_| s.amend_base));
         self.req.wtdiff = self.workers.read(self.generation, move || {
             let p: &[u8] = &path;
             let d = match list {
@@ -405,8 +424,10 @@ impl App {
                     Some(Some(base)) => read::worktree_diff(&r, true, Some(&base), &opts, &[p]),
                     // Amending the root commit: compare with the empty tree.
                     Some(None) => read::empty_tree(&r).and_then(|t| {
-                        let base = crate::domain::oid::Oid::from_hex(t.trim())
-                            .ok_or_else(|| GitError::new("git hash-object", "invalid empty tree id"))?;
+                        let base =
+                            crate::domain::oid::Oid::from_hex(t.trim()).ok_or_else(|| {
+                                GitError::new("git hash-object", "invalid empty tree id")
+                            })?;
                         read::worktree_diff(&r, true, Some(&base), &opts, &[p])
                     }),
                     None => read::worktree_diff(&r, true, None, &opts, &[p]),
@@ -444,17 +465,27 @@ impl App {
                 let empty = d.files.is_empty();
                 self.wt.diff.set(prefix, Some(Arc::new(d)), &o);
                 if empty {
-                    self.wt.diff.lines.push(DLine::plain(DKind::Info, "No differences."));
+                    self.wt
+                        .diff
+                        .lines
+                        .push(DLine::plain(DKind::Info, "No differences."));
                 }
             }
             Err(e) => {
-                self.wt.diff.set(prefix, None, &BuildOpts {
-                    tab: 8,
-                    show: Show::Diff,
-                    words: WordStyle::Markup,
-                    compact_headers: true,
-                });
-                self.wt.diff.lines.push(DLine::plain(DKind::Error, e.to_string()));
+                self.wt.diff.set(
+                    prefix,
+                    None,
+                    &BuildOpts {
+                        tab: 8,
+                        show: Show::Diff,
+                        words: WordStyle::Markup,
+                        compact_headers: true,
+                    },
+                );
+                self.wt
+                    .diff
+                    .lines
+                    .push(DLine::plain(DKind::Error, e.to_string()));
             }
         }
     }
@@ -478,7 +509,9 @@ impl App {
     // Selection
 
     fn select_file(&mut self, l: FileList, i: usize) {
-        let Some(f) = self.wt.list(l).get(i).cloned() else { return };
+        let Some(f) = self.wt.list(l).get(i).cloned() else {
+            return;
+        };
         self.wt.last_list = l;
         self.wt.anchor = Some(i);
         self.wt.sel_unstaged.clear();
@@ -532,7 +565,10 @@ impl App {
             let shown = sanitize::display_bytes(p);
             self.confirm(
                 "Stage file",
-                &[(&format!("File {shown} seems to have unresolved conflicts, still stage?"), Tone::Warn)],
+                &[(
+                    &format!("File {shown} seems to have unresolved conflicts, still stage?"),
+                    Tone::Warn,
+                )],
                 "Stage",
                 Pending::Op {
                     label: "Stage".into(),
@@ -608,12 +644,15 @@ impl App {
                 StageUntracked::No => false,
                 StageUntracked::Ask if untracked.is_empty() => false,
                 StageUntracked::Ask => {
-                    let mut d = Dialog::new("Stage changed files", Kind::Form(FormKind::UntrackedStage(untracked.clone())))
-                        .with_body(&[(
-                            &format!("Stage {} untracked file(s) as well?", untracked.len()),
-                            Tone::Normal,
-                        )])
-                        .with_buttons(&["Yes", "No", "Cancel"]);
+                    let mut d = Dialog::new(
+                        "Stage changed files",
+                        Kind::Form(FormKind::UntrackedStage(untracked.clone())),
+                    )
+                    .with_body(&[(
+                        &format!("Stage {} untracked file(s) as well?", untracked.len()),
+                        Tone::Normal,
+                    )])
+                    .with_buttons(&["Yes", "No", "Cancel"]);
                     d.cancel = Some(2);
                     self.dialogs.push(d);
                     return;
@@ -637,7 +676,10 @@ impl App {
         }
         let l = self.focused_list();
         if l == FileList::Staged {
-            self.set_status("Revert only applies to unstaged changes.", StatusTone::Error);
+            self.set_status(
+                "Revert only applies to unstaged changes.",
+                StatusTone::Error,
+            );
             return;
         }
         let paths = self.wt.targets(FileList::Unstaged);
@@ -649,7 +691,11 @@ impl App {
             .into_iter()
             .partition(|p| self.wt.unstaged.iter().any(|f| &f.path == p && f.untracked));
         let names = |v: &[Vec<u8>]| -> String {
-            let mut s: Vec<String> = v.iter().take(5).map(|p| sanitize::display_bytes(p)).collect();
+            let mut s: Vec<String> = v
+                .iter()
+                .take(5)
+                .map(|p| sanitize::display_bytes(p))
+                .collect();
             if v.len() > 5 {
                 s.push(format!("... and {} more", v.len() - 5));
             }
@@ -659,7 +705,11 @@ impl App {
             let body = if tracked.len() == 1 {
                 format!("Revert changes in file {}?", names(&tracked))
             } else {
-                format!("Revert changes in these {} files?\n  {}", tracked.len(), names(&tracked))
+                format!(
+                    "Revert changes in these {} files?\n  {}",
+                    tracked.len(),
+                    names(&tracked)
+                )
             };
             let body2 = "Any unstaged changes will be permanently lost by the revert.";
             self.confirm(
@@ -678,12 +728,19 @@ impl App {
             let body = if untracked.len() == 1 {
                 format!("Delete untracked file {}?", names(&untracked))
             } else {
-                format!("Delete these {} untracked files?\n  {}", untracked.len(), names(&untracked))
+                format!(
+                    "Delete these {} untracked files?\n  {}",
+                    untracked.len(),
+                    names(&untracked)
+                )
             };
             let workdir = self.repo.cwd().to_path_buf();
             self.confirm(
                 "Delete Files",
-                &[(&body, Tone::Normal), ("Files will be permanently deleted.", Tone::Warn)],
+                &[
+                    (&body, Tone::Normal),
+                    ("Files will be permanently deleted.", Tone::Warn),
+                ],
                 "Delete",
                 Pending::Op {
                     label: "Delete untracked".into(),
@@ -706,27 +763,42 @@ impl App {
         if !self.guard_write() {
             return;
         }
-        let Some(side) = self.wt.diff_side() else { return };
-        let Some(f) = self.wt.cursor_file().cloned() else { return };
+        let Some(side) = self.wt.diff_side() else {
+            return;
+        };
+        let Some(f) = self.wt.cursor_file().cloned() else {
+            return;
+        };
         if f.untracked {
-            self.set_status("Untracked file: stage the whole file instead.", StatusTone::Error);
+            self.set_status(
+                "Untracked file: stage the whole file instead.",
+                StatusTone::Error,
+            );
             return;
         }
         if f.typechange {
-            self.set_status("File type changed: only whole-file operations are supported.", StatusTone::Error);
+            self.set_status(
+                "File type changed: only whole-file operations are supported.",
+                StatusTone::Error,
+            );
             return;
         }
         if revert && side == FileList::Staged {
-            self.set_status("Revert only applies to unstaged changes.", StatusTone::Error);
+            self.set_status(
+                "Revert only applies to unstaged changes.",
+                StatusTone::Error,
+            );
             return;
         }
-        let Some(diff) = self.wt.diff.diff.clone() else { return };
+        let Some(diff) = self.wt.diff.diff.clone() else {
+            return;
+        };
         let sel = match hunk_line {
-            Some(idx) => self
-                .wt
-                .diff
-                .hunk_at(idx)
-                .and_then(|(fi, hi)| diff.files.get(fi).map(|fd| (fi, patch::hunk_selection(fd, hi)))),
+            Some(idx) => self.wt.diff.hunk_at(idx).and_then(|(fi, hi)| {
+                diff.files
+                    .get(fi)
+                    .map(|fd| (fi, patch::hunk_selection(fd, hi)))
+            }),
             None => self.wt.diff.selected_lines(),
         };
         let Some((fi, set)) = sel else {
@@ -736,7 +808,9 @@ impl App {
             );
             return;
         };
-        let Some(file) = diff.files.get(fi) else { return };
+        let Some(file) = diff.files.get(fi) else {
+            return;
+        };
         let dir = if side == FileList::Unstaged && !revert {
             Direction::Forward
         } else {
@@ -749,15 +823,25 @@ impl App {
                 return;
             }
         };
-        let what = if hunk_line.is_some() { "hunk" } else { "line(s)" };
+        let what = if hunk_line.is_some() {
+            "hunk"
+        } else {
+            "line(s)"
+        };
         if revert {
             let shown = f.display.clone();
             let p2 = p.clone();
             self.confirm(
                 "Revert Changes",
                 &[
-                    (&format!("Revert the selected {what} in {shown}?"), Tone::Normal),
-                    ("Use Commit > Undo Last Revert to restore them.", Tone::Normal),
+                    (
+                        &format!("Revert the selected {what} in {shown}?"),
+                        Tone::Normal,
+                    ),
+                    (
+                        "Use Commit > Undo Last Revert to restore them.",
+                        Tone::Normal,
+                    ),
                 ],
                 "Revert",
                 Pending::Op {
@@ -822,7 +906,10 @@ impl App {
         };
         self.save_draft();
         if handoff {
-            self.request_handoff(Handoff::Commit { message: msg, amend });
+            self.request_handoff(Handoff::Commit {
+                message: msg,
+                amend,
+            });
         } else {
             self.run_op(
                 if amend { "Amend commit" } else { "Commit" },
@@ -867,9 +954,9 @@ impl App {
             }
             self.wt.amend = true;
             let r = self.runner.clone();
-            self.req.amend = self
-                .workers
-                .read(self.generation, move || Payload::Amend(read::message_of(&r, "HEAD")));
+            self.req.amend = self.workers.read(self.generation, move || {
+                Payload::Amend(read::message_of(&r, "HEAD"))
+            });
         } else {
             self.wt.amend = false;
             if let Some(m) = self.wt.saved_message.take() {
@@ -1219,8 +1306,11 @@ impl App {
     }
 
     fn run_tool(&mut self, i: usize) {
-        let Some(t) = self.guitools.get(i).cloned() else { return };
-        let mut envs: Vec<(String, OsString)> = vec![(String::from("GIT_GUITOOL"), OsString::from(&t.name))];
+        let Some(t) = self.guitools.get(i).cloned() else {
+            return;
+        };
+        let mut envs: Vec<(String, OsString)> =
+            vec![(String::from("GIT_GUITOOL"), OsString::from(&t.name))];
         if let Some(f) = self.wt.cursor_file() {
             envs.push(("FILENAME".into(), OsString::from_vec(f.path.clone())));
         } else if t.needs_file {
@@ -1238,7 +1328,13 @@ impl App {
         if t.confirm {
             self.confirm(
                 "Run tool",
-                &[(&format!("Are you sure you want to run {}?", t.name), Tone::Normal), (&t.cmd, Tone::Code)],
+                &[
+                    (
+                        &format!("Are you sure you want to run {}?", t.name),
+                        Tone::Normal,
+                    ),
+                    (&t.cmd, Tone::Code),
+                ],
                 "Run",
                 Pending::Handoff(h),
             );
@@ -1251,8 +1347,15 @@ impl App {
 /// git gui strips trailing whitespace and leading/trailing blank lines.
 pub fn clean_message(s: &str) -> String {
     let lines: Vec<&str> = s.lines().map(str::trim_end).collect();
-    let start = lines.iter().position(|l| !l.is_empty()).unwrap_or(lines.len());
-    let end = lines.iter().rposition(|l| !l.is_empty()).map(|e| e + 1).unwrap_or(start);
+    let start = lines
+        .iter()
+        .position(|l| !l.is_empty())
+        .unwrap_or(lines.len());
+    let end = lines
+        .iter()
+        .rposition(|l| !l.is_empty())
+        .map(|e| e + 1)
+        .unwrap_or(start);
     let mut out = lines[start..end].join("\n");
     if !out.is_empty() {
         out.push('\n');
@@ -1271,7 +1374,10 @@ mod tests {
 
     #[test]
     fn clean_message_trims() {
-        assert_eq!(clean_message("\n\n  subject  \n\nbody \n\n"), "  subject\n\nbody\n");
+        assert_eq!(
+            clean_message("\n\n  subject  \n\nbody \n\n"),
+            "  subject\n\nbody\n"
+        );
         assert_eq!(clean_message("  \n "), "");
     }
 }

@@ -90,11 +90,11 @@ impl GraphBuilder {
         // Width large enough for any lane allocated in this row.
         let mut cells = vec![LaneCell::default(); self.lanes.len() + parents.len()];
         for (i, l) in self.lanes.iter().enumerate() {
-            if let Some((o, c)) = l {
-                if *o != oid {
-                    cells[i].bits |= UP | DOWN;
-                    cells[i].color = *c;
-                }
+            if let Some((o, c)) = l
+                && *o != oid
+            {
+                cells[i].bits |= UP | DOWN;
+                cells[i].color = *c;
             }
         }
         for &j in &incoming {
@@ -229,7 +229,11 @@ mod tests {
     #[test]
     fn linear_history() {
         let mut g = GraphBuilder::new();
-        let rows = vec![g.push(o(3), &[o(2)]), g.push(o(2), &[o(1)]), g.push(o(1), &[])];
+        let rows = vec![
+            g.push(o(3), &[o(2)]),
+            g.push(o(2), &[o(1)]),
+            g.push(o(1), &[]),
+        ];
         assert_eq!(render(&rows), vec!["*", "*", "*"]);
         assert!(rows.iter().all(|r| r.node == 0));
         assert_eq!(rows[0].cells[0].bits, DOWN);
@@ -248,10 +252,7 @@ mod tests {
             g.push(o(2), &[o(1)]),
             g.push(o(1), &[]),
         ];
-        assert_eq!(
-            render(&rows),
-            vec!["*─╮", "* │", "│ *", "*─╯", "*"]
-        );
+        assert_eq!(render(&rows), vec!["*─╮", "* │", "│ *", "*─╯", "*"]);
     }
 
     #[test]
@@ -287,7 +288,7 @@ mod tests {
     fn freed_lane_not_reused_in_same_row() {
         // Two branches converge on 2 which is itself a merge.
         let mut g = GraphBuilder::new();
-        let rows = vec![
+        let rows = [
             g.push(o(6), &[o(2)]),
             g.push(o(5), &[o(2)]),
             g.push(o(2), &[o(1), o(0x10)]),

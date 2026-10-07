@@ -135,7 +135,7 @@ fn terminal_commit_selection_preserves_color_families() {
         .position(|c| c.subject.as_ref() == "Initial greeting")
         .unwrap();
     app.hist.sel = Some(selected);
-    app.hist.highlight = Some([app.hist.commits[selected].oid.clone()].into());
+    app.hist.highlight = Some([app.hist.commits[selected].oid].into());
     let mut terminal = Terminal::new(TestBackend::new(120, 35)).unwrap();
 
     for colors in [ColorMode::Truecolor, ColorMode::C256, ColorMode::C16] {
@@ -206,8 +206,16 @@ fn terminal_commit_selection_preserves_color_families() {
                 .0;
             for x in unselected.x..unselected.right() {
                 assert_eq!(buffer[(x, unselected.y)].fg, baseline[(x, unselected.y)].fg);
-                assert!(!buffer[(x, unselected.y)].modifier.contains(Modifier::REVERSED));
-                assert!(!buffer[(x, unselected.y)].modifier.contains(Modifier::UNDERLINED));
+                assert!(
+                    !buffer[(x, unselected.y)]
+                        .modifier
+                        .contains(Modifier::REVERSED)
+                );
+                assert!(
+                    !buffer[(x, unselected.y)]
+                        .modifier
+                        .contains(Modifier::UNDERLINED)
+                );
             }
         }
     }
