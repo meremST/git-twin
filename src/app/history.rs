@@ -1,0 +1,1646 @@
+//! History view (gitk): commit list with graph, navigation, find, commit
+//! details and diff, file list, and the commit / branch context actions.
+
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use super::action::Action;
+use super::diffview::{BuildOpts, DKind, DLine, DiffView, Show, WordStyle};
+use super::dialog::Tone;
+use super::input::TextInput;
+use super::worker::{After, Cancel, Payload};
+use super::{App, Handoff, Pending, StatusTone};
+use crate::config::{Config, State, ViewKind};
+use crate::domain::commit::{Commit, CommitDetails};
+use crate::domain::diff::Diff;
+use crate::domain::graph::GraphRow;
+use crate::domain::oid::Oid;
+use crate::domain::refs::{Head, RefKind};
+use crate::domain::sanitize;
+use crate::domain::textmatch::{MatchKind, Matcher};
+use crate::git::log::{self, LocalRows, ViewSpec, null_staged, null_unstaged};
+use crate::git::ops;
+use crate::git::read::{self, Blob, DiffOpts, FindField, FindSpec, FindType, MergeDiff, Related, WordMode};
+use crate::git::runner::os;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HFocus {
+    List,
+    Sha,
+    Find,
+    Files,
+    Diff,
+    Search,
+}
+
+const NAV_LIMIT: usize = 200;
+const DETAIL_DEBOUNCE: Duration = Duration::from_millis(40);
+const FIND_DEBOUNCE: Duration = Duration::from_millis(400);
+
+pub struct HistoryState {
+    /// Index 0 is gitk's "All files" view.
+    pub views: Vec<ViewSpec>,
+    pub cur_view: usize,
+    pub commits: Vec<Commit>,
+    pub graph: Vec<GraphRow>,
+    pub index: HashMap<Oid, usize>,
+    pub sel: Option<usize>,
+    pub top: usize,
+    /// Visible rows of the commit list (updated when drawing).
+    pub height: usize,
+    pub back: Vec<Oid>,
+    pub forward: Vec<Oid>,
+    pub mark: Option<Oid>,
+    pub cancel: Cancel,
+    pub find_cancel: Cancel,
+    /// Commits matching the current find (bold in the list).
+    pub highlight: Option<HashSet<Oid>>,
+    pub local_rows: usize,
+    /// (unstaged, staged) pseudo rows present in the loaded list.
+    pub local_flags: (bool, bool),
+    pub loading: bool,
+    pub load_error: Option<String>,
+    pub pending_select: Option<Oid>,
+    pub focus: HFocus,
+    pub diff: DiffView,
+    pub sha: TextInput,
+    pub find: TextInput,
+    pub search: TextInput,
+    pub find_type: FindType,
+    pub find_match: MatchKind,
+    pub find_field: FindField,
+    pub find_running: bool,
+    pub find_dirty: bool,
+    pub find_changed_at: Option<Instant>,
+    pub find_pending_step: Option<bool>,
+    /// Patch mode file list (index 0 is "Comments").
+    pub files: Vec<Vec<u8>>,
+    pub tree: Vec<Vec<u8>>,
+    pub tree_mode: bool,
+    pub file_sel: usize,
+    pub file_top: usize,
+    pub file_height: usize,
+    pub show: Show,
+    pub context: u32,
+    pub ignore_space: bool,
+    pub word_mode: WordMode,
+    pub merge_diff: MergeDiff,
+    /// Explicit comparison (from, to) shown instead of the commit diff.
+    pub compare: Option<(Oid, Oid)>,
+    pub details: Option<CommitDetails>,
+    pub related: Option<Related>,
+    pub cur_diff: Option<Arc<Diff>>,
+    pub detail_oid: Option<Oid>,
+    pub sel_changed_at: Option<Instant>,
+    pub tab: usize,
+    pub total: usize,
+}
+
+impl HistoryState {
+    pub fn new(cfg: &Config, _state: &State) -> HistoryState {
+        HistoryState {
+            views: vec![ViewSpec::default_view()],
+            cur_view: 0,
+            commits: Vec::new(),
+            graph: Vec::new(),
+            index: HashMap::new(),
+            sel: None,
+            top: 0,
+            height: 10,
+            back: Vec::new(),
+            forward: Vec::new(),
+            mark: None,
+            cancel: Cancel::default(),
+            find_cancel: Cancel::default(),
+            highlight: None,
+            local_rows: 0,
+            local_flags: (false, false),
+            loading: false,
+            load_error: None,
+            pending_select: None,
+            focus: HFocus::List,
+            diff: DiffView::default(),
+            sha: TextInput::default(),
+            find: TextInput::default(),
+            search: TextInput::default(),
+            find_type: FindType::Containing,
+            find_match: MatchKind::Exact,
+            find_field: FindField::All,
+            find_running: false,
+            find_dirty: false,
+            find_changed_at: None,
+            find_pending_step: None,
+            files: Vec::new(),
+            tree: Vec::new(),
+            tree_mode: false,
+            file_sel: 0,
+            file_top: 0,
+            file_height: 5,
+            show: Show::Diff,
+            context: cfg.history_context,
+            ignore_space: false,
+            word_mode: WordMode::Line,
+            merge_diff: MergeDiff::Combined,
+            compare: None,
+            details: None,
+            related: None,
+            cur_diff: None,
+            detail_oid: None,
+            sel_changed_at: None,
+            tab: cfg.tab_width as usize,
+            total: 0,
+        }
+    }
+
+    pub fn view(&self) -> &ViewSpec {
+        &self.views[self.cur_view.min(self.views.len() - 1)]
+    }
+
+    pub fn selected_oid(&self) -> Option<Oid> {
+        self.sel.and_then(|i| self.commits.get(i)).map(|c| c.oid)
+    }
+
+    pub fn selected(&self) -> Option<&Commit> {
+        self.sel.and_then(|i| self.commits.get(i))
+    }
+
+    pub fn is_pseudo(oid: &Oid) -> bool {
+        *oid == null_unstaged() || *oid == null_staged()
+    }
+
+    pub fn cycle_focus(&mut self, dir: isize) {
+        const ORDER: [HFocus; 6] = [
+            HFocus::List,
+            HFocus::Sha,
+            HFocus::Find,
+            HFocus::Search,
+            HFocus::Diff,
+            HFocus::Files,
+        ];
+        let i = ORDER.iter().position(|f| *f == self.focus).unwrap_or(0) as isize;
+        self.focus = ORDER[(i + dir).rem_euclid(ORDER.len() as isize) as usize];
+    }
+
+    /// Rows of the file list pane.
+    pub fn file_rows(&self) -> usize {
+        if self.tree_mode {
+            self.tree.len()
+        } else {
+            self.files.len() + 1
+        }
+    }
+
+    /// Path behind a file list row (None for "Comments").
+    pub fn file_path(&self, i: usize) -> Option<Vec<u8>> {
+        if self.tree_mode {
+            self.tree.get(i).cloned()
+        } else if i == 0 {
+            None
+        } else {
+            self.files.get(i - 1).cloned()
+        }
+    }
+
+    pub fn ensure_visible(&mut self, i: usize) {
+        let h = self.height.max(1);
+        if i < self.top {
+            self.top = i;
+        } else if i >= self.top + h {
+            self.top = i + 1 - h;
+        }
+    }
+
+    pub fn scroll(&mut self, delta: isize) {
+        let max = self.commits.len().saturating_sub(self.height.max(1));
+        self.top = (self.top as isize + delta).clamp(0, max as isize) as usize;
+    }
+
+    pub fn scroll_files(&mut self, delta: isize) {
+        let max = self.file_rows().saturating_sub(self.file_height.max(1));
+        self.file_top = (self.file_top as isize + delta).clamp(0, max as isize) as usize;
+    }
+
+    pub fn children_of(&self, oid: &Oid) -> Vec<Oid> {
+        self.commits
+            .iter()
+            .filter(|c| c.parents.contains(oid))
+            .map(|c| c.oid)
+            .collect()
+    }
+
+    fn subject_of(&self, oid: &Oid) -> Option<&str> {
+        self.index.get(oid).map(|i| &*self.commits[*i].subject)
+    }
+
+    fn descendants(&self, from: &Oid) -> HashSet<Oid> {
+        let mut children: HashMap<Oid, Vec<Oid>> = HashMap::new();
+        for c in &self.commits {
+            for p in c.parents.iter() {
+                children.entry(*p).or_default().push(c.oid);
+            }
+        }
+        let mut seen = HashSet::new();
+        let mut q = VecDeque::from([*from]);
+        while let Some(o) = q.pop_front() {
+            if !seen.insert(o) {
+                continue;
+            }
+            if let Some(cs) = children.get(&o) {
+                q.extend(cs.iter().copied());
+            }
+        }
+        seen
+    }
+
+    fn diff_opts(&self) -> DiffOpts {
+        DiffOpts {
+            context: self.context,
+            ignore_space: self.ignore_space,
+            words: self.word_mode,
+        }
+    }
+
+    fn header_lines(&self) -> Vec<DLine> {
+        let mut v = Vec::new();
+        let short = |o: &Oid| o.short(10);
+        if let Some((a, b)) = self.compare {
+            v.push(DLine::plain(DKind::Header, "Comparison:".to_string()));
+            for (lbl, o) in [("From", a), ("To  ", b)] {
+                v.push(DLine::plain(
+                    DKind::Header,
+                    format!("  {lbl}: {} ({})", o.to_hex(), self.subject_of(&o).unwrap_or("")),
+                ));
+            }
+            v.push(DLine::plain(DKind::Header, String::new()));
+            return v;
+        }
+        let Some(c) = self.selected() else {
+            return v;
+        };
+        if Self::is_pseudo(&c.oid) {
+            v.push(DLine::plain(DKind::Header, c.subject.to_string()));
+            v.push(DLine::plain(DKind::Header, String::new()));
+            return v;
+        }
+        let Some(d) = &self.details else {
+            v.push(DLine::plain(DKind::Info, "Loading commit details..."));
+            return v;
+        };
+        v.push(DLine::plain(DKind::Header, format!("Author: {}  {}", d.author, d.author_date)));
+        v.push(DLine::plain(
+            DKind::Header,
+            format!("Committer: {}  {}", d.committer, d.committer_date),
+        ));
+        for p in &d.parents {
+            let subj = self.subject_of(p).unwrap_or("");
+            v.push(DLine::plain(DKind::Header, format!("Parent: {} ({subj})", p.to_hex())));
+        }
+        for ch in self.children_of(&c.oid) {
+            if Self::is_pseudo(&ch) {
+                continue;
+            }
+            let subj = self.subject_of(&ch).unwrap_or("");
+            v.push(DLine::plain(DKind::Header, format!("Child:  {} ({subj})", ch.to_hex())));
+        }
+        if let Some(r) = &self.related {
+            if !r.branches.is_empty() {
+                v.push(DLine::plain(DKind::Header, format!("Branches: {}", r.branches.join(", "))));
+            }
+            if let Some(t) = &r.follows {
+                v.push(DLine::plain(DKind::Header, format!("Follows: {t}")));
+            }
+            if let Some(t) = &r.precedes {
+                v.push(DLine::plain(DKind::Header, format!("Precedes: {t}")));
+            }
+        }
+        if d.parents.len() > 1 {
+            let mode = match self.merge_diff {
+                MergeDiff::Combined => "combined diff against all parents (--cc)".to_string(),
+                MergeDiff::Parent(n) => {
+                    let p = d.parents.get(n.saturating_sub(1)).map(short).unwrap_or_default();
+                    format!("diff against parent {n} ({p})")
+                }
+            };
+            v.push(DLine::plain(DKind::Info, format!("Merge: showing {mode}")));
+        }
+        v.push(DLine::plain(DKind::Header, String::new()));
+        for l in d.message.lines() {
+            v.push(DLine::plain(
+                DKind::Message,
+                format!("    {}", sanitize::expand_tabs(&sanitize::sanitize(l), self.tab)),
+            ));
+        }
+        v.push(DLine::plain(DKind::Message, String::new()));
+        let _ = short;
+        v
+    }
+
+    /// Rebuilds the diff pane from the cached details and diff.
+    pub fn rebuild_diff(&mut self) {
+        let prefix = self.header_lines();
+        let o = BuildOpts {
+            tab: self.tab,
+            show: self.show,
+            words: if self.word_mode == WordMode::Color {
+                WordStyle::Color
+            } else {
+                WordStyle::Markup
+            },
+            compact_headers: false,
+        };
+        let d = self.cur_diff.clone();
+        self.diff.set(prefix, d, &o);
+    }
+
+    fn push_nav(&mut self, oid: Oid) {
+        if self.back.last() != Some(&oid) {
+            self.back.push(oid);
+            if self.back.len() > NAV_LIMIT {
+                self.back.remove(0);
+            }
+        }
+        self.forward.clear();
+    }
+}
+
+fn bytes_list(paths: &[String]) -> Vec<Vec<u8>> {
+    paths.iter().map(|p| p.as_bytes().to_vec()).collect()
+}
+
+impl App {
+    // ------------------------------------------------------------------
+    // Loading
+
+    pub fn load_history(&mut self, keep: Option<Oid>) {
+        let h = &mut self.hist;
+        h.cancel.cancel();
+        h.cancel = Cancel::default();
+        let keep = keep.or_else(|| h.selected_oid());
+        h.commits.clear();
+        h.graph.clear();
+        h.index.clear();
+        h.sel = None;
+        h.local_rows = 0;
+        h.local_flags = (false, false);
+        h.loading = true;
+        h.load_error = None;
+        h.pending_select = keep;
+        h.total = 0;
+        let view = h.view().clone();
+        let cancel = h.cancel.clone();
+        let with_local = !self.repo.is_bare() && view.includes_head();
+        let r = self.runner.clone();
+        self.req.log = self.workers.stream(self.generation, move |sink| {
+            let local = if with_local {
+                read::status(&r).ok().map(|s| {
+                    let tracked = |e: &&crate::domain::status::StatusEntry| {
+                        !matches!(
+                            e.kind,
+                            crate::domain::status::EntryKind::Untracked | crate::domain::status::EntryKind::Ignored
+                        )
+                    };
+                    LocalRows {
+                        unstaged: s.entries.iter().filter(tracked).any(|e| e.has_unstaged()),
+                        staged: s.entries.iter().filter(tracked).any(|e| e.has_staged()),
+                        head: s.branch.oid,
+                    }
+                })
+            } else {
+                None
+            };
+            let res = log::stream_log(&r, &view, local, cancel.flag(), |b| {
+                sink.send(Payload::LogBatch {
+                    commits: b.commits,
+                    graph: b.graph,
+                })
+            });
+            sink.send(Payload::LogDone(res));
+        });
+    }
+
+    pub fn on_log_batch(&mut self, commits: Vec<Commit>, graph: Vec<GraphRow>) {
+        let h = &mut self.hist;
+        let first = h.commits.is_empty();
+        for c in commits {
+            if HistoryState::is_pseudo(&c.oid) {
+                h.local_rows += 1;
+                if c.oid == null_unstaged() {
+                    h.local_flags.0 = true;
+                } else {
+                    h.local_flags.1 = true;
+                }
+            }
+            h.index.insert(c.oid, h.commits.len());
+            h.commits.push(c);
+        }
+        h.graph.extend(graph);
+        h.total = h.commits.len();
+        if let Some(p) = h.pending_select {
+            if let Some(&i) = h.index.get(&p) {
+                h.pending_select = None;
+                let keep_top = h.top;
+                self.select_row_ex(i, false, false);
+                if !first {
+                    self.hist.top = keep_top;
+                    self.hist.ensure_visible(i);
+                } else {
+                    self.center_selection();
+                }
+                return;
+            }
+        }
+        if first && self.hist.sel.is_none() && !self.hist.commits.is_empty() {
+            // Provisional selection: HEAD's row (or the first row).
+            let head = self.head();
+            let i = head
+                .and_then(|o| self.hist.index.get(&o).copied())
+                .unwrap_or(0);
+            self.hist.top = 0;
+            self.select_row_ex(i, false, false);
+        }
+    }
+
+    pub fn on_log_done(&mut self, r: Result<usize, crate::git::GitError>) {
+        self.hist.loading = false;
+        match r {
+            Ok(_) => {
+                if let Some(p) = self.hist.pending_select.take() {
+                    if !HistoryState::is_pseudo(&p) {
+                        self.set_status(
+                            format!("Commit {} is not in the current view.", p.short(10)),
+                            StatusTone::Info,
+                        );
+                    }
+                }
+                if self.hist.commits.is_empty() {
+                    self.hist.diff.set_message(DKind::Info, "No commits in this view.");
+                    self.hist.files.clear();
+                }
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                self.hist.load_error = Some(msg.clone());
+                self.set_status(format!("History: {}", msg.lines().next().unwrap_or("")), StatusTone::Error);
+                if self.hist.commits.is_empty() {
+                    self.hist.diff.set_message(DKind::Error, &msg);
+                }
+            }
+        }
+    }
+
+    pub fn history_tick(&mut self, now: Instant) {
+        if let Some(t) = self.hist.sel_changed_at {
+            if now.duration_since(t) >= DETAIL_DEBOUNCE {
+                self.hist.sel_changed_at = None;
+                self.load_selected();
+            }
+        }
+        if self.hist.find_dirty {
+            if let Some(t) = self.hist.find_changed_at {
+                if now.duration_since(t) >= FIND_DEBOUNCE {
+                    self.run_find();
+                }
+            }
+        }
+    }
+
+    fn center_selection(&mut self) {
+        if let Some(i) = self.hist.sel {
+            let h = self.hist.height.max(1);
+            self.hist.top = i.saturating_sub(h / 2);
+            self.hist.scroll(0);
+        }
+    }
+
+    /// Requests details, diff (and tree) for the selected row.
+    fn load_selected(&mut self) {
+        let Some(c) = self.hist.selected().cloned() else {
+            return;
+        };
+        let h = &mut self.hist;
+        h.detail_oid = Some(c.oid);
+        h.details = None;
+        h.related = None;
+        h.cur_diff = None;
+        h.diff.reset_scroll();
+        h.rebuild_diff();
+        if !HistoryState::is_pseudo(&c.oid) && h.compare.is_none() {
+            let r = self.runner.clone();
+            let oid = c.oid;
+            self.req.details = self.workers.read(self.generation, move || Payload::Details {
+                oid,
+                details: read::commit_details(&r, &oid),
+                related: read::related(&r, &oid),
+            });
+        }
+        self.reload_diff();
+        if self.hist.tree_mode {
+            self.load_tree();
+        }
+    }
+
+    /// Re-requests only the diff (options changed).
+    fn reload_diff(&mut self) {
+        let Some(c) = self.hist.selected().cloned() else {
+            return;
+        };
+        let opts = self.hist.diff_opts();
+        let paths = self.hist.view().path_list();
+        let r = self.runner.clone();
+        let head = self.head();
+        let merge = self.hist.merge_diff;
+        let compare = self.hist.compare;
+        self.req.diff = self.workers.read(self.generation, move || {
+            let pb = bytes_list(&paths);
+            let pr: Vec<&[u8]> = pb.iter().map(|p| p.as_slice()).collect();
+            let d = if let Some((a, b)) = compare {
+                read::diff_commits(&r, &a, &b, &opts)
+            } else if c.oid == null_unstaged() {
+                read::worktree_diff(&r, false, None, &opts, &pr)
+            } else if c.oid == null_staged() {
+                read::worktree_diff(&r, true, head.as_ref(), &opts, &pr)
+            } else {
+                read::commit_diff(&r, &c.oid, &c.parents, merge, &opts, &paths)
+            };
+            Payload::CommitDiff(d)
+        });
+    }
+
+    fn load_tree(&mut self) {
+        let Some(mut oid) = self.hist.selected_oid() else {
+            return;
+        };
+        if HistoryState::is_pseudo(&oid) {
+            match self.head() {
+                Some(h) => oid = h,
+                None => return,
+            }
+        }
+        let r = self.runner.clone();
+        self.req.tree = self
+            .workers
+            .read(self.generation, move || Payload::Tree(read::tree_paths(&r, &oid)));
+    }
+
+    pub fn on_details(&mut self, oid: Oid, details: Result<CommitDetails, crate::git::GitError>, related: Related) {
+        if self.hist.detail_oid != Some(oid) {
+            return;
+        }
+        match details {
+            Ok(d) => {
+                self.hist.details = Some(d);
+                self.hist.related = Some(related);
+                self.hist.rebuild_diff();
+            }
+            Err(e) => self.set_status(format!("Commit details: {e}"), StatusTone::Error),
+        }
+    }
+
+    pub fn on_commit_diff(&mut self, r: Result<Diff, crate::git::GitError>) {
+        match r {
+            Ok(d) => {
+                self.hist.files = d.files.iter().map(|f| f.path().to_vec()).collect();
+                if !self.hist.tree_mode {
+                    self.hist.file_sel = self.hist.file_sel.min(self.hist.files.len());
+                }
+                self.hist.cur_diff = Some(Arc::new(d));
+                self.hist.rebuild_diff();
+            }
+            Err(e) => {
+                self.hist.cur_diff = None;
+                self.hist.files.clear();
+                self.hist.rebuild_diff();
+                self.hist.diff.lines.push(DLine::plain(DKind::Error, e.to_string()));
+            }
+        }
+    }
+
+    pub fn on_tree(&mut self, r: Result<Vec<Vec<u8>>, crate::git::GitError>) {
+        match r {
+            Ok(t) => {
+                self.hist.tree = t;
+                self.hist.file_sel = self.hist.file_sel.min(self.hist.tree.len().saturating_sub(1));
+            }
+            Err(e) => self.set_status(format!("Tree: {e}"), StatusTone::Error),
+        }
+    }
+
+    pub fn on_blob(&mut self, path: Vec<u8>, blob: Result<Blob, crate::git::GitError>) {
+        let d = &mut self.hist.diff;
+        d.clear();
+        d.lines.push(DLine::plain(DKind::FileTitle, sanitize::display_bytes(&path)));
+        match blob {
+            Ok(b) if b.is_binary() => d.lines.push(DLine::plain(DKind::Info, "Binary file, not shown.")),
+            Ok(b) => {
+                for l in b.data.split(|c| *c == b'\n') {
+                    d.lines.push(DLine::plain(DKind::Ctx, sanitize::display_bytes_tabs(l, self.hist.tab)));
+                }
+                if b.truncated {
+                    d.lines.push(DLine::plain(DKind::Error, "[file truncated: too large to display]"));
+                }
+            }
+            Err(e) => d.lines.push(DLine::plain(DKind::Error, e.to_string())),
+        }
+    }
+
+    pub fn on_find(&mut self, r: Result<HashSet<Oid>, crate::git::GitError>) {
+        self.hist.find_running = false;
+        match r {
+            Ok(s) => {
+                let n = s.len();
+                self.hist.highlight = Some(s);
+                self.set_status(format!("Find: {n} matching commit(s) in this view."), StatusTone::Info);
+                if let Some(fwd) = self.hist.find_pending_step.take() {
+                    self.find_step(fwd);
+                }
+            }
+            Err(e) => {
+                self.hist.find_pending_step = None;
+                self.set_status(format!("Find: {}", e.message.lines().next().unwrap_or("")), StatusTone::Error);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Selection and navigation
+
+    pub fn select_row(&mut self, i: usize) {
+        self.select_row_ex(i, true, true);
+    }
+
+    fn select_row_ex(&mut self, i: usize, push: bool, user: bool) {
+        let h = &mut self.hist;
+        if i >= h.commits.len() {
+            return;
+        }
+        if h.sel == Some(i) && h.compare.is_none() {
+            h.ensure_visible(i);
+            return;
+        }
+        if push {
+            if let Some(old) = h.selected_oid() {
+                h.push_nav(old);
+            }
+        }
+        if user {
+            h.pending_select = None;
+        }
+        h.sel = Some(i);
+        h.compare = None;
+        h.ensure_visible(i);
+        let oid = h.commits[i].oid;
+        h.sha.set(&if HistoryState::is_pseudo(&oid) { String::new() } else { oid.to_hex() });
+        h.sel_changed_at = Some(Instant::now());
+        h.file_sel = 0;
+        h.file_top = 0;
+    }
+
+    pub fn select_oid(&mut self, oid: Oid, push: bool) {
+        if self.view != ViewKind::History {
+            self.switch_view(ViewKind::History);
+        }
+        if let Some(&i) = self.hist.index.get(&oid) {
+            self.select_row_ex(i, push, true);
+            self.center_selection();
+        } else if self.hist.loading {
+            self.hist.pending_select = Some(oid);
+            self.set_status(
+                format!("Commit {} not loaded yet; it will be selected when it appears.", oid.short(10)),
+                StatusTone::Busy,
+            );
+        } else {
+            self.set_status(
+                format!("SHA1 id {} is not known in the current view.", oid.short(10)),
+                StatusTone::Error,
+            );
+        }
+    }
+
+    fn move_sel(&mut self, delta: isize) {
+        let n = self.hist.commits.len();
+        if n == 0 {
+            return;
+        }
+        let cur = self.hist.sel.map(|s| s as isize).unwrap_or(-1);
+        let i = (cur + delta).clamp(0, n as isize - 1) as usize;
+        self.select_row(i);
+    }
+
+    fn goto_sha(&mut self, text: String) {
+        let t = text.trim().to_string();
+        if t.is_empty() {
+            return;
+        }
+        let lower = t.to_ascii_lowercase();
+        if lower.len() >= 4 && lower.bytes().all(|b| b.is_ascii_hexdigit()) {
+            let hits: Vec<usize> = self
+                .hist
+                .commits
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.oid.starts_with_hex(&lower))
+                .map(|(i, _)| i)
+                .take(2)
+                .collect();
+            if hits.len() == 1 {
+                self.select_row(hits[0]);
+                self.center_selection();
+                self.hist.focus = HFocus::List;
+                return;
+            }
+            if hits.len() > 1 {
+                self.set_status(format!("Short SHA1 id {t} is ambiguous"), StatusTone::Error);
+                return;
+            }
+        }
+        let r = self.runner.clone();
+        self.req.goto = self
+            .workers
+            .read(self.generation, move || Payload::Goto(read::resolve_commit(&r, &t)));
+        self.hist.focus = HFocus::List;
+    }
+
+    // ------------------------------------------------------------------
+    // Find (whole view, through git)
+
+    pub fn find_changed(&mut self) {
+        self.hist.find_dirty = true;
+        self.hist.find_changed_at = Some(Instant::now());
+        if self.hist.find.text.trim().is_empty() {
+            self.hist.highlight = None;
+        }
+    }
+
+    fn run_find(&mut self) {
+        let h = &mut self.hist;
+        h.find_dirty = false;
+        h.find_changed_at = None;
+        h.find_cancel.cancel();
+        let pattern = h.find.text.trim().to_string();
+        if pattern.is_empty() {
+            h.highlight = None;
+            h.find_running = false;
+            h.find_pending_step = None;
+            return;
+        }
+        if h.find_match == MatchKind::Regexp && h.find_type == FindType::Containing {
+            if let Err(e) = Matcher::new(MatchKind::Regexp, &pattern) {
+                h.find_pending_step = None;
+                self.set_status(format!("Find: invalid regular expression: {e}"), StatusTone::Error);
+                return;
+            }
+        }
+        h.find_cancel = Cancel::default();
+        h.find_running = true;
+        let cancel = h.find_cancel.clone();
+        let spec = FindSpec {
+            kind: h.find_type,
+            pattern,
+            matching: h.find_match,
+            field: h.find_field,
+        };
+        let view = h.view().clone();
+        let r = self.runner.clone();
+        self.set_status("Searching...", StatusTone::Busy);
+        self.req.find = self.workers.stream(self.generation, move |sink| {
+            sink.send(Payload::Find(read::find(&r, &view, &spec, cancel.flag())));
+        });
+    }
+
+    /// Moves to the next match: `forward` = towards older commits (down).
+    fn find_step(&mut self, forward: bool) {
+        if self.hist.find_dirty || (self.hist.highlight.is_none() && !self.hist.find.text.trim().is_empty()) {
+            self.hist.find_pending_step = Some(forward);
+            self.run_find();
+            return;
+        }
+        if self.hist.find_running {
+            self.hist.find_pending_step = Some(forward);
+            return;
+        }
+        let Some(set) = &self.hist.highlight else {
+            self.hist.focus = HFocus::Find;
+            return;
+        };
+        let n = self.hist.commits.len();
+        let cur = self.hist.sel.map(|s| s as isize).unwrap_or(-1);
+        let found = if forward {
+            ((cur + 1).max(0) as usize..n).find(|i| set.contains(&self.hist.commits[*i].oid))
+        } else {
+            (0..cur.max(0) as usize).rev().find(|i| set.contains(&self.hist.commits[*i].oid))
+        };
+        match found {
+            Some(i) => {
+                self.select_row(i);
+                self.center_selection();
+            }
+            None => {
+                let msg = if forward && self.hist.loading {
+                    "No more matches in the loaded commits (still loading)."
+                } else if forward {
+                    "No more matches (reached the end of the view)."
+                } else {
+                    "No more matches (reached the top of the view)."
+                };
+                self.set_status(msg, StatusTone::Info);
+            }
+        }
+    }
+
+    pub fn search_changed(&mut self) {
+        let t = self.hist.search.text.clone();
+        if t.is_empty() {
+            self.hist.diff.set_search(None);
+            return;
+        }
+        match Matcher::new(MatchKind::IgnCase, &t) {
+            Ok(m) => {
+                self.hist.diff.set_search(Some(m));
+                let top = self.hist.diff.top;
+                if let Some(&hit) = self.hist.diff.search_hits.iter().find(|h| **h >= top) {
+                    self.hist.diff.cursor = hit;
+                    self.hist.diff.anchor = None;
+                    self.hist.diff.text_selection = None;
+                    self.hist.diff.ensure_visible(hit);
+                }
+            }
+            Err(e) => self.set_status(e, StatusTone::Error),
+        }
+    }
+
+    fn select_file_row(&mut self, i: usize) {
+        let n = self.hist.file_rows();
+        if n == 0 {
+            return;
+        }
+        let i = i.min(n - 1);
+        self.hist.file_sel = i;
+        let fh = self.hist.file_height.max(1);
+        if i < self.hist.file_top {
+            self.hist.file_top = i;
+        } else if i >= self.hist.file_top + fh {
+            self.hist.file_top = i + 1 - fh;
+        }
+        if self.hist.tree_mode {
+            let (Some(path), Some(mut oid)) = (self.hist.file_path(i), self.hist.selected_oid()) else {
+                return;
+            };
+            if HistoryState::is_pseudo(&oid) {
+                match self.head() {
+                    Some(h) => oid = h,
+                    None => return,
+                }
+            }
+            let r = self.runner.clone();
+            self.req.blob = self.workers.read(self.generation, move || Payload::Blob {
+                blob: read::blob(&r, &oid, &path),
+                path,
+            });
+        } else if i == 0 {
+            self.hist.diff.top = 0;
+            self.hist.diff.cursor = 0;
+        } else {
+            self.hist.diff.goto_file(i - 1);
+        }
+    }
+
+    fn set_tree_mode(&mut self, on: bool) {
+        if self.hist.tree_mode == on {
+            return;
+        }
+        self.hist.tree_mode = on;
+        self.hist.file_sel = 0;
+        self.hist.file_top = 0;
+        if on {
+            self.load_tree();
+        } else {
+            self.hist.rebuild_diff();
+        }
+    }
+
+    fn row_oid(&self, row: usize) -> Option<Oid> {
+        self.hist.commits.get(row).map(|c| c.oid).filter(|o| !HistoryState::is_pseudo(o))
+    }
+
+    fn compare_rows(&mut self, from: Oid, to: Oid) {
+        if from == to {
+            return;
+        }
+        let h = &mut self.hist;
+        h.compare = Some((from, to));
+        h.details = None;
+        h.diff.reset_scroll();
+        h.rebuild_diff();
+        self.reload_diff();
+    }
+
+    fn head_branch_short(&self) -> Option<String> {
+        match &self.refs.head {
+            Head::Branch { short, .. } => Some(short.clone()),
+            Head::Detached(_) => None,
+        }
+    }
+
+    fn reselect_after_view_change(&mut self) {
+        let keep = self.hist.selected_oid();
+        self.hist.highlight = None;
+        self.load_history(keep);
+    }
+
+    // ------------------------------------------------------------------
+    // Dispatch
+
+    pub fn dispatch_history(&mut self, a: &Action) -> bool {
+        use Action as A;
+        match a {
+            A::Update | A::Reload => {
+                self.refresh_all(None);
+                self.set_status("Reloading...", StatusTone::Busy);
+            }
+            A::RereadRefs => self.load_refs(),
+            A::ListRefs => self.open_list_refs(),
+            A::StartGitGui => self.switch_view(ViewKind::Worktree),
+            A::NewView => self.open_view_editor(None),
+            A::EditView => {
+                if self.hist.cur_view == 0 {
+                    self.set_status("The \"All files\" view cannot be edited.", StatusTone::Error);
+                } else {
+                    self.open_view_editor(Some(self.hist.cur_view));
+                }
+            }
+            A::DeleteView => {
+                if self.hist.cur_view > 0 {
+                    self.hist.views.remove(self.hist.cur_view);
+                    self.hist.cur_view = 0;
+                    self.save_state();
+                    self.reselect_after_view_change();
+                }
+            }
+            A::SelectView(i) => {
+                if *i < self.hist.views.len() && *i != self.hist.cur_view {
+                    self.hist.cur_view = *i;
+                    self.reselect_after_view_change();
+                }
+            }
+            A::AboutGitk => self.info("About Git Twin (gitt)", &about_text("gitk")),
+            A::KeyBindings => self.info("Key bindings", KEYS_HELP),
+            A::SelectRow(i) => {
+                self.select_row(*i);
+                self.hist.focus = HFocus::List;
+            }
+            A::MoveSel(d) => self.move_sel(*d),
+            A::SelPage(d) => {
+                let h = self.hist.height.max(2) as isize - 1;
+                self.move_sel(d * h);
+            }
+            A::SelFirst => self.move_sel(isize::MIN / 2),
+            A::SelLast => self.move_sel(isize::MAX / 2),
+            A::ScrollList(d) => self.hist.scroll(*d),
+            A::GoBack => {
+                if let Some(o) = self.hist.back.pop() {
+                    if let Some(cur) = self.hist.selected_oid() {
+                        self.hist.forward.push(cur);
+                    }
+                    self.select_oid(o, false);
+                }
+            }
+            A::GoForward => {
+                if let Some(o) = self.hist.forward.pop() {
+                    if let Some(cur) = self.hist.selected_oid() {
+                        self.hist.back.push(cur);
+                    }
+                    self.select_oid(o, false);
+                }
+            }
+            A::GotoParent(n) => {
+                if let Some(p) = self.hist.selected().and_then(|c| c.parents.get(n.saturating_sub(1)).copied()) {
+                    self.select_oid(p, true);
+                }
+            }
+            A::FocusSha => {
+                self.hist.focus = HFocus::Sha;
+                self.hist.sha.apply(super::input::Edit::End);
+            }
+            A::GotoSha(s) => self.goto_sha(s.clone()),
+            A::FindNext => self.find_step(true),
+            A::FindPrev => self.find_step(false),
+            A::FocusFind => self.hist.focus = HFocus::Find,
+            A::SetFindType(t) => {
+                self.hist.find_type = *t;
+                self.find_changed();
+            }
+            A::SetFindMatch(m) => {
+                self.hist.find_match = *m;
+                self.find_changed();
+            }
+            A::SetFindField(f) => {
+                self.hist.find_field = *f;
+                self.find_changed();
+            }
+            A::CycleFindType => {
+                let i = FindType::ALL.iter().position(|t| *t == self.hist.find_type).unwrap_or(0);
+                self.hist.find_type = FindType::ALL[(i + 1) % FindType::ALL.len()];
+                self.find_changed();
+            }
+            A::CycleFindMatch => {
+                let i = MatchKind::ALL.iter().position(|t| *t == self.hist.find_match).unwrap_or(0);
+                self.hist.find_match = MatchKind::ALL[(i + 1) % MatchKind::ALL.len()];
+                self.find_changed();
+            }
+            A::CycleFindField => {
+                let i = FindField::ALL.iter().position(|t| *t == self.hist.find_field).unwrap_or(0);
+                self.hist.find_field = FindField::ALL[(i + 1) % FindField::ALL.len()];
+                self.find_changed();
+            }
+            A::DiffScroll(d) => self.hist.diff.scroll(*d),
+            A::DiffPage(d) => {
+                let h = self.hist.diff.height.max(2) as isize - 1;
+                self.hist.diff.scroll(d * h);
+            }
+            A::DiffTop => self.hist.diff.top = 0,
+            A::DiffBottom => self.hist.diff.top = self.hist.diff.max_top(),
+            A::DiffNextFile => {
+                self.hist.diff.next_file();
+                self.sync_file_sel();
+            }
+            A::DiffPrevFile => {
+                self.hist.diff.prev_file();
+                self.sync_file_sel();
+            }
+            A::DiffSearchNext | A::DiffSearchPrev => {
+                let fwd = *a == A::DiffSearchNext;
+                if self.hist.search.text.is_empty() {
+                    self.hist.focus = HFocus::Search;
+                } else if !self.hist.diff.search_step(fwd) {
+                    self.set_status("Search: no match in the diff.", StatusTone::Info);
+                }
+            }
+            A::FocusDiffSearch => self.hist.focus = HFocus::Search,
+            A::SetShow(s) => {
+                self.hist.show = *s;
+                self.hist.rebuild_diff();
+            }
+            A::ContextMore | A::ContextLess => {
+                let c = self.hist.context as i64 + if *a == A::ContextMore { 1 } else { -1 };
+                self.hist.context = c.clamp(0, 10_000) as u32;
+                self.set_status(format!("Lines of context: {}", self.hist.context), StatusTone::Info);
+                self.reload_diff();
+            }
+            A::ToggleIgnoreSpace => {
+                self.hist.ignore_space = !self.hist.ignore_space;
+                self.reload_diff();
+            }
+            A::SetWordMode(m) => {
+                self.hist.word_mode = *m;
+                self.reload_diff();
+            }
+            A::CycleWordMode => {
+                self.hist.word_mode = match self.hist.word_mode {
+                    WordMode::Line => WordMode::Markup,
+                    WordMode::Markup => WordMode::Color,
+                    WordMode::Color => WordMode::Line,
+                };
+                self.reload_diff();
+            }
+            A::SetTreeMode(b) => self.set_tree_mode(*b),
+            A::SelectFileRow(i) | A::OpenFileRow(i) => {
+                self.hist.focus = HFocus::Files;
+                self.select_file_row(*i);
+            }
+            A::ParentDiffMode(n) => {
+                self.hist.merge_diff = if *n == 0 { MergeDiff::Combined } else { MergeDiff::Parent(*n) };
+                self.hist.rebuild_diff();
+                self.reload_diff();
+            }
+            A::DiffThisSelected(row) | A::DiffSelectedThis(row) => {
+                let (Some(this), Some(sel)) = (self.row_oid(*row), self.hist.selected_oid()) else {
+                    return true;
+                };
+                if HistoryState::is_pseudo(&sel) {
+                    return true;
+                }
+                if matches!(a, A::DiffThisSelected(_)) {
+                    self.compare_rows(this, sel);
+                } else {
+                    self.compare_rows(sel, this);
+                }
+            }
+            A::MakePatch(row) => {
+                if let Some(this) = self.row_oid(*row) {
+                    let sel = self.hist.selected_oid().filter(|o| !HistoryState::is_pseudo(o));
+                    let (from, to) = match sel {
+                        Some(s) if s != this => (this, s),
+                        _ => {
+                            let p = self.hist.commits[*row].parents.first().copied();
+                            match p {
+                                Some(p) => (p, this),
+                                None => {
+                                    self.set_status("Root commit: no parent to diff against.", StatusTone::Error);
+                                    return true;
+                                }
+                            }
+                        }
+                    };
+                    self.open_make_patch(from, to);
+                }
+            }
+            A::CreateTag(row) => {
+                if let Some(o) = self.row_oid(*row) {
+                    self.open_create_tag(o);
+                }
+            }
+            A::CopyCommitRef(row) => {
+                if let Some(c) = self.hist.commits.get(*row) {
+                    let date: String = c.date.chars().take(10).collect();
+                    let s = format!("{} (\"{}\", {date})", c.oid.short(7), c.subject);
+                    self.copy_text(s);
+                }
+            }
+            A::CopyCommitId(row) => {
+                if let Some(o) = self.row_oid(*row) {
+                    self.copy_text(o.to_hex());
+                }
+            }
+            A::WriteCommit(row) => {
+                if let Some(o) = self.row_oid(*row) {
+                    self.open_write_commit(o);
+                }
+            }
+            A::CreateBranchAt(row) => {
+                if let Some(o) = self.row_oid(*row) {
+                    self.open_create_branch_at(o);
+                }
+            }
+            A::CherryPick(row) => self.cherry_pick_row(*row),
+            A::ResetHere(row) => {
+                if let Some(o) = self.row_oid(*row) {
+                    if self.head_branch_short().is_none() {
+                        self.set_status("Detached head: can't reset", StatusTone::Error);
+                    } else if self.guard_write() {
+                        self.open_reset(o);
+                    }
+                }
+            }
+            A::ResetTo(oid, mode) => {
+                let (oid, mode) = (*oid, *mode);
+                let head = self.head();
+                self.run_op(
+                    "Reset",
+                    Box::new(move |r| ops::reset(r, mode, &oid)),
+                    After::Refresh,
+                    Some(head),
+                );
+            }
+            A::MarkCommit(row) => {
+                if let Some(o) = self.row_oid(*row) {
+                    self.hist.mark = Some(o);
+                    self.set_status(format!("Marked commit {}", o.short(10)), StatusTone::Info);
+                }
+            }
+            A::ReturnToMark => match self.hist.mark {
+                Some(m) => self.select_oid(m, true),
+                None => self.set_status("No marked commit.", StatusTone::Error),
+            },
+            A::FindDescendant(row) => self.find_descendant(*row),
+            A::CompareWithMarked(row) => {
+                if let (Some(this), Some(m)) = (self.row_oid(*row), self.hist.mark) {
+                    let r = self.runner.clone();
+                    self.workers.read(self.generation, move || {
+                        let res = r
+                            .read(&[
+                                os("range-diff"),
+                                os("--no-color"),
+                                os(format!("{}^!", m.to_hex())),
+                                os(format!("{}^!", this.to_hex())),
+                            ])
+                            .map(|o| sanitize::display_bytes(&o));
+                        Payload::Text {
+                            title: "Compare with marked commit".into(),
+                            result: res,
+                        }
+                    });
+                }
+            }
+            A::DiffMarked(row, this_to_marked) => {
+                if let (Some(this), Some(m)) = (self.row_oid(*row), self.hist.mark) {
+                    if *this_to_marked {
+                        self.compare_rows(this, m);
+                    } else {
+                        self.compare_rows(m, this);
+                    }
+                }
+            }
+            A::RevertCommit(row) => self.revert_row(*row),
+            A::CheckoutCommit(row) => {
+                if let Some(o) = self.row_oid(*row) {
+                    if !self.guard_write() {
+                        return true;
+                    }
+                    let head = self.head();
+                    self.confirm(
+                        "Check out commit",
+                        &[
+                            (&format!("Check out commit {} (detached HEAD)?", o.short(10)), Tone::Normal),
+                            ("Local changes are kept; Git refuses if they conflict.", Tone::Normal),
+                        ],
+                        "Check out",
+                        Pending::Op {
+                            label: "Checkout".into(),
+                            f: Box::new(move |r| ops::checkout_detach(r, &o)),
+                            after: After::Refresh,
+                            expect_head: Some(head),
+                        },
+                    );
+                }
+            }
+            A::CheckoutRef(full) => self.checkout_ref(full.clone()),
+            A::RenameBranch(full) => {
+                if self.guard_write() {
+                    self.open_rename_branch(full.clone());
+                }
+            }
+            A::RemoveBranch(full) => self.remove_branch(full.clone()),
+            A::CopyRefName(full) => {
+                if let Some(r) = self.refs.find_full(full) {
+                    let s = r.short.clone();
+                    self.copy_text(s);
+                }
+            }
+            A::HighlightPath(path, only) => {
+                let p = sanitize::display_bytes(path);
+                let quoted = if p.contains(char::is_whitespace) {
+                    format!("\"{p}\"")
+                } else {
+                    p
+                };
+                if *only || self.hist.find_type != FindType::TouchingPaths {
+                    self.hist.find.set(&quoted);
+                } else {
+                    let t = format!("{} {quoted}", self.hist.find.text.trim());
+                    self.hist.find.set(t.trim());
+                }
+                self.hist.find_type = FindType::TouchingPaths;
+                self.run_find();
+            }
+            A::ClearHighlight => {
+                self.hist.find.clear();
+                self.hist.highlight = None;
+            }
+            A::ExternalDiff(path) => self.external_diff(path.clone()),
+            A::BlameParent(path) => self.blame_parent(path.clone()),
+            A::CopyPath(p) => self.copy_text(sanitize::display_bytes(p)),
+            A::LineOrigin(idx) => self.line_origin(*idx),
+            _ => return false,
+        }
+        true
+    }
+
+    fn sync_file_sel(&mut self) {
+        if !self.hist.tree_mode {
+            let top = self.hist.diff.top;
+            self.hist.file_sel = self.hist.diff.file_at(top).map(|f| f + 1).unwrap_or(0);
+        }
+    }
+
+    fn cherry_pick_row(&mut self, row: usize) {
+        let Some(oid) = self.row_oid(row) else { return };
+        if !self.guard_write() {
+            return;
+        }
+        let parents = self.hist.commits[row].parents.len();
+        if parents > 1 {
+            self.open_cherry_pick_merge(oid, parents);
+            return;
+        }
+        let head = self.head();
+        let branch = self.head_branch_short().unwrap_or_else(|| "HEAD".into());
+        let p = Pending::Op {
+            label: "Cherry-pick".into(),
+            f: Box::new(move |r| ops::cherry_pick(r, &oid, None)),
+            after: After::Refresh,
+            expect_head: Some(head),
+        };
+        if head.is_some_and(|h| read::is_ancestor(&self.runner, &oid, &h)) {
+            self.confirm(
+                "Confirm cherry-pick",
+                &[(
+                    &format!("Commit {} is already included in branch {branch} -- really re-apply it?", oid.short(10)),
+                    Tone::Warn,
+                )],
+                "Cherry-pick",
+                p,
+            );
+        } else {
+            self.confirm(
+                "Cherry-pick",
+                &[(&format!("Cherry-pick commit {} onto {branch}?", oid.short(10)), Tone::Normal)],
+                "Cherry-pick",
+                p,
+            );
+        }
+    }
+
+    fn revert_row(&mut self, row: usize) {
+        let Some(oid) = self.row_oid(row) else { return };
+        if !self.guard_write() {
+            return;
+        }
+        let head = self.head();
+        let branch = self.head_branch_short().unwrap_or_else(|| "HEAD".into());
+        let merge = self.hist.commits[row].parents.len() > 1;
+        let mainline = merge.then_some(1);
+        let mut body = vec![];
+        let contained = head.is_some_and(|h| read::is_ancestor(&self.runner, &oid, &h));
+        let q = if contained {
+            format!("Revert commit {} on {branch}?", oid.short(10))
+        } else {
+            format!("Commit {} is not included in branch {branch} -- really revert it?", oid.short(10))
+        };
+        body.push((q.as_str(), if contained { Tone::Normal } else { Tone::Warn }));
+        if merge {
+            body.push(("Merge commit: reverted against its first parent (-m 1).", Tone::Warn));
+        }
+        self.confirm(
+            "Revert commit",
+            &body,
+            "Revert",
+            Pending::Op {
+                label: "Revert".into(),
+                f: Box::new(move |r| ops::revert_commit(r, &oid, mainline)),
+                after: After::Refresh,
+                expect_head: Some(head),
+            },
+        );
+    }
+
+    fn find_descendant(&mut self, row: usize) {
+        let (Some(this), Some(m)) = (self.row_oid(row), self.hist.mark) else {
+            self.set_status("Mark a commit first.", StatusTone::Error);
+            return;
+        };
+        let a = self.hist.descendants(&this);
+        let b = self.hist.descendants(&m);
+        let best = a
+            .intersection(&b)
+            .filter_map(|o| self.hist.index.get(o).copied())
+            .filter(|i| !HistoryState::is_pseudo(&self.hist.commits[*i].oid))
+            .max();
+        match best {
+            Some(i) => {
+                self.select_row(i);
+                self.center_selection();
+            }
+            None => self.set_status("No common descendant in the loaded commits.", StatusTone::Info),
+        }
+    }
+
+    fn checkout_ref(&mut self, full: Vec<u8>) {
+        if !self.guard_write() {
+            return;
+        }
+        let Some(r) = self.refs.find_full(&full).cloned() else { return };
+        if self.refs.is_head_ref(&r) {
+            self.set_status("Already on this branch.", StatusTone::Info);
+            return;
+        }
+        let head = self.head();
+        let shown = r.short.clone();
+        let (label, f): (String, super::OpFn) = match r.kind {
+            RefKind::LocalBranch => {
+                let name = String::from_utf8_lossy(r.short_bytes()).into_owned();
+                (
+                    format!("Check out branch {shown}"),
+                    Box::new(move |rr| ops::checkout_branch(rr, &name)),
+                )
+            }
+            RefKind::RemoteBranch => {
+                let remote_short = String::from_utf8_lossy(r.short_bytes()).into_owned();
+                let local = remote_short.split_once('/').map(|(_, b)| b.to_string()).unwrap_or_default();
+                let exists = self
+                    .refs
+                    .local_branches()
+                    .any(|b| b.short_bytes() == local.as_bytes());
+                if local.is_empty() || local == "HEAD" {
+                    return;
+                }
+                if exists {
+                    (
+                        format!("Check out branch {local}"),
+                        Box::new(move |rr| ops::checkout_branch(rr, &local)),
+                    )
+                } else {
+                    (
+                        format!("Create local branch {local} tracking {shown}"),
+                        Box::new(move |rr| ops::create_branch(rr, &local, &remote_short, false, true)),
+                    )
+                }
+            }
+            _ => {
+                let t = r.target;
+                (
+                    format!("Check out {shown} (detached HEAD)"),
+                    Box::new(move |rr| ops::checkout_detach(rr, &t)),
+                )
+            }
+        };
+        self.confirm(
+            "Check out",
+            &[(&format!("{label}?"), Tone::Normal)],
+            "Check out",
+            Pending::Op {
+                label,
+                f,
+                after: After::Refresh,
+                expect_head: Some(head),
+            },
+        );
+    }
+
+    fn remove_branch(&mut self, full: Vec<u8>) {
+        if !self.guard_write() {
+            return;
+        }
+        let Some(r) = self.refs.find_full(&full).cloned() else { return };
+        if r.kind != RefKind::LocalBranch {
+            self.set_status("Only local branches can be removed here.", StatusTone::Error);
+            return;
+        }
+        if self.refs.is_head_ref(&r) {
+            self.set_status("Cannot delete the currently checked out branch.", StatusTone::Error);
+            return;
+        }
+        let name = r.short_bytes().to_vec();
+        let n2 = name.clone();
+        self.confirm(
+            "Remove branch",
+            &[(&format!("Remove branch {}?", r.short), Tone::Warn)],
+            "Remove",
+            Pending::Op {
+                label: format!("Remove branch {}", r.short),
+                f: Box::new(move |rr| ops::delete_branch(rr, &n2, false)),
+                after: After::OfferForceDelete(name),
+                expect_head: None,
+            },
+        );
+    }
+
+    fn external_diff(&mut self, path: Vec<u8>) {
+        if self.hist.tree_mode {
+            self.set_status("External diff is not available in Tree mode.", StatusTone::Error);
+            return;
+        }
+        let Some(c) = self.hist.selected().cloned() else { return };
+        let mut args = vec![os("difftool"), os("--no-prompt")];
+        if let Some((a, b)) = self.hist.compare {
+            args.push(os(a.to_hex()));
+            args.push(os(b.to_hex()));
+        } else if c.oid == null_unstaged() {
+        } else if c.oid == null_staged() {
+            args.push(os("--cached"));
+        } else {
+            match c.parents.first() {
+                Some(p) => args.push(os(p.to_hex())),
+                None => args.push(os(read::empty_tree(&self.runner).unwrap_or_default())),
+            }
+            args.push(os(c.oid.to_hex()));
+        }
+        args.push(os("--"));
+        args.push(std::os::unix::ffi::OsStringExt::from_vec(path));
+        self.request_handoff(Handoff::Git {
+            args,
+            label: "External diff (git difftool)".into(),
+        });
+    }
+
+    fn blame_parent(&mut self, path: Vec<u8>) {
+        let Some(c) = self.hist.selected().cloned() else { return };
+        let rev = if HistoryState::is_pseudo(&c.oid) {
+            self.head()
+        } else {
+            c.parents.first().copied()
+        };
+        let Some(rev) = rev else {
+            self.set_status("No parent commit to blame.", StatusTone::Error);
+            return;
+        };
+        let r = self.runner.clone();
+        let title = format!("Blame {} at {}", sanitize::display_bytes(&path), rev.short(10));
+        self.workers.read(self.generation, move || {
+            let res = r
+                .read_opts(
+                    &[
+                        os("blame"),
+                        os("--date=short"),
+                        os(rev.to_hex()),
+                        os("--"),
+                        std::os::unix::ffi::OsStringExt::from_vec(path),
+                    ],
+                    crate::git::Opts {
+                        literal_paths: true,
+                        limit: Some(2 * 1024 * 1024),
+                        ..Default::default()
+                    },
+                    &[0],
+                )
+                .map(|o| sanitize::display_bytes_tabs(&o.stdout, 8).replace("^M", ""));
+            Payload::Text { title, result: res }
+        });
+    }
+
+    fn line_origin(&mut self, idx: usize) {
+        let Some(c) = self.hist.selected().cloned() else { return };
+        let d = &self.hist.diff;
+        let Some(fi) = d.lines.get(idx).and_then(|l| l.file) else {
+            return;
+        };
+        let Some(path) = self.hist.files.get(fi).cloned() else { return };
+        let (rev, line) = if let Some((_, n)) = d.new_line_number(idx) {
+            let rev = if HistoryState::is_pseudo(&c.oid) {
+                None
+            } else {
+                Some(self.hist.compare.map(|x| x.1).unwrap_or(c.oid))
+            };
+            (rev, n)
+        } else if let Some((_, n)) = d.old_line_number(idx) {
+            let rev = if let Some((a, _)) = self.hist.compare {
+                Some(a)
+            } else if HistoryState::is_pseudo(&c.oid) {
+                self.head()
+            } else {
+                c.parents.first().copied()
+            };
+            (rev, n)
+        } else {
+            return;
+        };
+        let Some(rev) = rev else {
+            self.set_status("Origin of uncommitted lines: not committed yet.", StatusTone::Info);
+            return;
+        };
+        let r = self.runner.clone();
+        self.req.origin = self
+            .workers
+            .read(self.generation, move || Payload::Origin(read::blame_line(&r, &rev, &path, line)));
+    }
+}
+
+pub fn about_text(which: &str) -> String {
+    format!(
+        "{} {}\n\n\
+         A terminal interface inspired by {which}; not the original application.\n\
+         Launch with: {}\n\
+         F6 switches between history and working tree.\n\n\
+         Repository operations use the Git command line.\n\
+         License: Apache-2.0",
+        if which == "git gui" { "Git TUI" } else { "Git Twin" },
+        env!("CARGO_PKG_VERSION"),
+        if which == "git gui" { "git tui (executable: git-tui)" } else { "gitt" }
+    )
+}
+
+pub const KEYS_HELP: &str = "\
+Global
+  F10 / Alt+letter   open menus        Tab / Shift-Tab   next / previous pane
+  Ctrl-Q             quit              F11               maximize focused pane
+  Ctrl-1 .. 9        (history) n-th parent   Alt-1..4 (worktree) focus pane
+  F6 / Ctrl-Tab      switch History / Worktree view
+
+History (gitk)
+  Up/p/k  Down/n/j   previous / next commit
+  PageUp / PageDown  page in commit list    Home / End   first / last commit
+  Ctrl-Up/Down/PgUp/PgDn  scroll the list without changing selection
+  Left/z/h  Right/x/l     back / forward in selection history
+  Shift-Up / Shift-Down   find previous / next match
+  / or Ctrl-F  find box   Enter / Ctrl-G  next match   ?  previous match
+  g  SHA1 entry           f  next file in the diff
+  Space / d  diff down    Backspace / Delete / b / u  diff up
+  Ctrl-S / Ctrl-R         next / previous diff search hit
+  Ctrl-+ / Ctrl--         more / less context
+  F5 update   Shift-F5 reload   F2 list references   F4 / Shift-F4 edit / new view
+  Shift-F10 or right click   context menu of the selected row / file / line
+  c (diff pane)           copy selection
+  Drag / Shift-Left/Right select exact text (copy only)
+  Shift-Up/Down in diff  select whole lines
+
+Worktree (git gui)
+  Ctrl-T / Ctrl-U   stage / unstage selected files (toggle in the lists)
+  Ctrl-I  stage changed files      Ctrl-J  revert selected changes
+  Ctrl-E  amend last commit        Ctrl-S  sign off
+  Ctrl-Enter or Alt-Enter  commit  F5 / Ctrl-R  rescan
+  Ctrl-N / Ctrl-O / Ctrl-M / Ctrl-P  create branch / checkout / merge / push
+  Ctrl-- / Ctrl-+  less / more context
+  Space or click on the status icon   stage / unstage the file
+  In the diff: Up/Down move, Shift+Up/Down select lines,
+               s  stage (or unstage) hunk / selected lines,  r  revert them,
+               Ctrl-C copy selection; drag or Shift-Left/Right selects text
+               (text selection is copy-only; use Shift-Up/Down for patches)
+  Message: Ctrl-Z / Ctrl-Y undo / redo, Ctrl-X/C/V cut/copy/paste,
+           Ctrl-A select all, Ctrl-X Ctrl-E (or F4) external editor
+
+Compact screens
+  Below 120x35: click pane tabs or use Tab; F11 toggles single-pane zoom
+  Form scrolling: wheel or Alt-PageUp/PageDown; Alt-Home/End jumps to ends
+  Quit with a message: confirmation (unless disabled in Preferences)
+  Launch History: gitt     Launch Worktree: git tui (executable git-tui)
+";

@@ -1,0 +1,39 @@
+[package]
+name = "git-twin"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.93"
+description = "Terminal Git client reproducing the gitk (history) and git gui (worktree) layouts"
+license = "Apache-2.0"
+readme = "README.md"
+publish = false
+autobins = false
+default-run = "gitt"
+
+[[bin]]
+name = "gitt"
+path = "src/main.rs"
+
+[[bin]]
+name = "git-tui"
+path = "src/bin/git-tui.rs"
+
+[dependencies]
+clap = { version = "4.6", features = ["derive"] }
+crossterm = "0.29"
+libc = "0.2"
+ratatui = "0.30"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+tempfile = "3"
+unicode-segmentation = "1"
+unicode-width = "0.2"
+
+[dev-dependencies]
+portable-pty = "0.9"
+vt100 = "0.16"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
