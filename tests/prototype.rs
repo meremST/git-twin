@@ -116,6 +116,104 @@ fn render(app: &mut App, width: u16, height: u16) -> String {
 }
 
 #[test]
+fn terminal_commit_selection_preserves_color_families() {
+    use git_twin::{
+        app::history::HFocus,
+        config::{ColorMode, ThemeName},
+        ui::theme::Theme,
+    };
+    use ratatui::style::{Color, Modifier};
+
+    let dir = fixture();
+    let mut app = app(dir.path(), true);
+    app.start();
+    settle(&mut app);
+    let selected = app
+        .hist
+        .commits
+        .iter()
+        .position(|c| c.subject.as_ref() == "Initial greeting")
+        .unwrap();
+    app.hist.sel = Some(selected);
+    app.hist.highlight = Some([app.hist.commits[selected].oid.clone()].into());
+    let mut terminal = Terminal::new(TestBackend::new(120, 35)).unwrap();
+
+    for colors in [ColorMode::Truecolor, ColorMode::C256, ColorMode::C16] {
+        app.theme = Theme::new(&Config {
+            theme: ThemeName::Terminal,
+            colors,
+            icons: IconMode::Ascii,
+            ..Config::default()
+        });
+        for focus in [HFocus::List, HFocus::Diff] {
+            app.hist.focus = focus;
+            app.hist.sel = None;
+            terminal.draw(|f| ui::draw(f, &mut app)).unwrap();
+            let baseline = terminal.backend().buffer().clone();
+            app.hist.sel = Some(selected);
+            terminal.draw(|f| ui::draw(f, &mut app)).unwrap();
+            let buffer = terminal.backend().buffer();
+            let row = app
+                .hits
+                .zones
+                .iter()
+                .find(|(_, hit)| *hit == Hit::CommitRow(selected))
+                .unwrap()
+                .0;
+            let content: String = (row.x..row.right())
+                .map(|x| buffer[(x, row.y)].symbol())
+                .collect();
+            for expected in ["*", "[main]", "Initial greeting", "Demo"] {
+                assert!(content.contains(expected), "{content}");
+            }
+            for x in row.x..row.right() {
+                let cell = &buffer[(x, row.y)];
+                assert_eq!(cell.fg, Color::Reset, "inverted background at {x}");
+                let original = baseline[(x, row.y)].fg;
+                let rgb = match original {
+                    Color::Blue => Some((0, 0, 175)),
+                    Color::Green => Some((0, 95, 0)),
+                    Color::Yellow => Some((95, 95, 0)),
+                    Color::DarkGray => Some((95, 95, 95)),
+                    _ => None,
+                };
+                let expected = match (colors, rgb) {
+                    (ColorMode::Truecolor, Some((r, g, b))) => Color::Rgb(r, g, b),
+                    (ColorMode::C256, Some((r, g, b))) => {
+                        Color::Indexed(ui::theme::to_256(r, g, b))
+                    }
+                    _ => original,
+                };
+                assert_eq!(cell.bg, expected, "inverted text at {x}");
+                assert!(!cell.modifier.contains(Modifier::UNDERLINED), "cell at {x}");
+                assert!(cell.modifier.contains(Modifier::REVERSED), "cell at {x}");
+                if focus == HFocus::List {
+                    assert!(cell.modifier.contains(Modifier::BOLD), "cell at {x}");
+                } else {
+                    assert_eq!(
+                        cell.modifier.contains(Modifier::BOLD),
+                        baseline[(x, row.y)].modifier.contains(Modifier::BOLD),
+                        "bold at {x}"
+                    );
+                }
+            }
+            let unselected = app
+                .hits
+                .zones
+                .iter()
+                .find(|(_, hit)| matches!(hit, Hit::CommitRow(i) if *i != selected))
+                .unwrap()
+                .0;
+            for x in unselected.x..unselected.right() {
+                assert_eq!(buffer[(x, unselected.y)].fg, baseline[(x, unselected.y)].fg);
+                assert!(!buffer[(x, unselected.y)].modifier.contains(Modifier::REVERSED));
+                assert!(!buffer[(x, unselected.y)].modifier.contains(Modifier::UNDERLINED));
+            }
+        }
+    }
+}
+
+#[test]
 fn real_repository_renders_both_views_and_resizes() {
     let dir = fixture();
     let mut app = app(dir.path(), true);

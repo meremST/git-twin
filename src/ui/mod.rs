@@ -415,15 +415,13 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         let style = if selected {
             app.theme
                 .base()
-                .patch(app.theme.selected(app.hist.focus == HFocus::List))
+                .patch(app.theme.selected_commit(app.hist.focus == HFocus::List))
         } else {
             app.theme.base()
         };
         f.render_widget(Block::default().style(style), rr);
         app.hits.push(rr, Hit::CommitRow(i));
-        // Reverse-video selection would turn colored glyphs into colored blocks.
-        let plain = style.add_modifier.contains(Modifier::REVERSED);
-        let tint = |c: ratatui::style::Color| if plain { style } else { style.fg(c) };
+        let tint = |c| app.theme.commit_tint(style, c);
         let mut x = inner.x;
         if let Some(g) = app.hist.graph.get(i) {
             for (lane, cell) in g.cells.iter().enumerate() {

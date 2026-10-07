@@ -78,12 +78,17 @@ git tui --repo /chemin/vers/depot --theme terminal
 
 `--all` affiche l'historique de toutes les refs (branches, tags, remotes),
 comme `gitk --all`, au lieu de se limiter a HEAD. Le theme `terminal`
-n'utilise que les couleurs par defaut et ANSI du terminal (pas de RGB fixe) :
-l'interface suit alors la palette configuree par l'utilisateur dans son
+utilise les couleurs par defaut et ANSI du terminal :
+l'interface suit la palette configuree par l'utilisateur dans son
 emulateur, plutot que d'imposer `dark`/`light`.
 Il conserve le fond du terminal, avec un accent jaune ANSI pour le focus et
-des boutons sans aplats. La selection active est inversee de facon uniforme ;
-une selection dans un panneau inactif est soulignee et conserve ses couleurs.
+des boutons sans aplats. Le commit selectionne inverse le fond et la couleur
+de base du texte sur toute la ligne, avec du gras lorsque le panneau a le focus.
+Sur cette ligne, les textes colores utilisent des variantes sombres de la meme
+famille (vert fonce, bleu fonce, etc.), adaptees a un fond inverse clair.
+Cette palette dediee utilise du RGB ou 256 couleurs selon `--colors` ; en mode
+16 couleurs, les couleurs ANSI d'origine sont conservees. Les autres selections
+conservent leurs couleurs sur un fond bleu (actif) ou gris (inactif).
 
 `--help`, `--version` et `doctor` fonctionnent sans depot ni terminal interactif.
 `doctor` n'effectue aucun appel reseau.

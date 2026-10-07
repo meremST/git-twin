@@ -254,7 +254,7 @@ impl Icons {
 
 #[derive(Clone, Debug)]
 pub struct Theme {
-    depth_true: bool,
+    depth: Depth,
     terminal_palette: bool,
     pub bg: Color,
     pub bg_alt: Color,
@@ -307,7 +307,7 @@ impl Theme {
         // In 16-colour mode keep the terminal's own background.
         let bgc = |v: u32| if low { Color::Reset } else { c(v) };
         Theme {
-            depth_true: depth == Depth::True,
+            depth,
             terminal_palette: false,
             bg: bgc(p.bg),
             bg_alt: bgc(p.bg_alt),
@@ -341,11 +341,10 @@ impl Theme {
         }
     }
 
-    /// Uses only the terminal's own default and ANSI colours (no fixed RGB),
-    /// so the UI inherits whatever palette the user configured there.
+    /// Inherits the terminal palette except for coloured text in selected commits.
     fn terminal(cfg: &Config) -> Theme {
         Theme {
-            depth_true: false,
+            depth: detect_depth(cfg.colors),
             terminal_palette: true,
             bg: Color::Reset,
             bg_alt: Color::Reset,
@@ -386,7 +385,7 @@ impl Theme {
     }
 
     pub fn truecolor(&self) -> bool {
-        self.depth_true
+        !self.terminal_palette && self.depth == Depth::True
     }
 
     pub fn base(&self) -> Style {
@@ -421,6 +420,55 @@ impl Theme {
         } else {
             self.sel_dim_bg
         })
+    }
+
+    pub fn selected_commit(&self, focused: bool) -> Style {
+        if !self.terminal_palette {
+            return self.selected(focused);
+        }
+        let style = self.base().add_modifier(Modifier::REVERSED);
+        if focused {
+            style.add_modifier(Modifier::BOLD)
+        } else {
+            style
+        }
+    }
+
+    pub(super) fn commit_tint(&self, style: Style, color: Color) -> Style {
+        if style.add_modifier.contains(Modifier::REVERSED) {
+            if self.terminal_palette {
+                // Reverse video displays the background colour as text, while
+                // the default foreground supplies a uniform selection background.
+                style.bg(self.selected_commit_color(color))
+            } else {
+                style
+            }
+        } else {
+            style.fg(color)
+        }
+    }
+
+    fn selected_commit_color(&self, color: Color) -> Color {
+        if self.depth == Depth::C16 {
+            return color;
+        }
+        // Dark variants for the light inverted background. These RGB values
+        // also exist exactly in the xterm-256 palette.
+        let (r, g, b) = match color {
+            Color::Red | Color::LightRed => (135, 0, 0),
+            Color::Green | Color::LightGreen => (0, 95, 0),
+            Color::Yellow | Color::LightYellow => (95, 95, 0),
+            Color::Blue | Color::LightBlue => (0, 0, 175),
+            Color::Magenta | Color::LightMagenta => (135, 0, 135),
+            Color::Cyan | Color::LightCyan => (0, 95, 95),
+            Color::Gray | Color::DarkGray | Color::White => (95, 95, 95),
+            _ => return color,
+        };
+        match self.depth {
+            Depth::True => Color::Rgb(r, g, b),
+            Depth::C256 => Color::Indexed(to_256(r, g, b)),
+            Depth::C16 => unreachable!(),
+        }
     }
 
     pub fn bar(&self) -> Style {
@@ -561,6 +609,78 @@ mod tests {
     }
 
     #[test]
+    fn terminal_commit_selection_preserves_color_families() {
+        for colors in [
+            ColorMode::Auto,
+            ColorMode::Truecolor,
+            ColorMode::C256,
+            ColorMode::C16,
+        ] {
+            let t = Theme::new(&Config {
+                theme: ThemeName::Terminal,
+                colors,
+                ..Config::default()
+            });
+            for focused in [true, false] {
+                for fg in [t.fg, t.branch, t.head, t.dim, t.warn, t.graph_color(0)] {
+                    let style = t.commit_tint(t.selected_commit(focused), fg);
+                    assert_eq!(style.fg, Some(Color::Reset));
+                    assert_eq!(style.bg, Some(t.selected_commit_color(fg)));
+                    assert!(!style.add_modifier.contains(Modifier::UNDERLINED));
+                    assert!(style.add_modifier.contains(Modifier::REVERSED));
+                    assert_eq!(style.add_modifier.contains(Modifier::BOLD), focused);
+                }
+                assert_eq!(t.commit_tint(t.base(), t.branch), t.base().fg(t.branch));
+            }
+        }
+    }
+
+    #[test]
+    fn selected_commit_colors_contrast_with_light_backgrounds() {
+        let luminance = |rgb: (u8, u8, u8)| {
+            let linear = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                if v <= 0.04045 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * linear(rgb.0) + 0.7152 * linear(rgb.1) + 0.0722 * linear(rgb.2)
+        };
+        for (color, rgb) in [
+            (Color::Red, (135, 0, 0)),
+            (Color::Green, (0, 95, 0)),
+            (Color::Yellow, (95, 95, 0)),
+            (Color::Blue, (0, 0, 175)),
+            (Color::Magenta, (135, 0, 135)),
+            (Color::Cyan, (0, 95, 95)),
+            (Color::DarkGray, (95, 95, 95)),
+            (Color::LightYellow, (95, 95, 0)),
+            (Color::LightCyan, (0, 95, 95)),
+        ] {
+            for colors in [ColorMode::Truecolor, ColorMode::C256, ColorMode::C16] {
+                let t = Theme::new(&Config {
+                    theme: ThemeName::Terminal,
+                    colors,
+                    ..Config::default()
+                });
+                let expected = match colors {
+                    ColorMode::Truecolor => Color::Rgb(rgb.0, rgb.1, rgb.2),
+                    ColorMode::C256 => Color::Indexed(to_256(rgb.0, rgb.1, rgb.2)),
+                    _ => color,
+                };
+                assert_eq!(t.selected_commit_color(color), expected);
+                assert_eq!(t.selected_commit_color(Color::Reset), Color::Reset);
+            }
+            for background in [(229, 229, 229), (255, 255, 255)] {
+                let contrast = (luminance(background) + 0.05) / (luminance(rgb) + 0.05);
+                assert!(contrast >= 4.5, "{color:?}: contrast {contrast}");
+            }
+        }
+    }
+
+    #[test]
     fn fixed_palette_selection_and_buttons_are_unchanged() {
         for theme in [ThemeName::Dark, ThemeName::Light] {
             for colors in [ColorMode::Truecolor, ColorMode::C256, ColorMode::C16] {
@@ -576,6 +696,15 @@ mod tests {
                         Style::default().bg(if focused { t.sel_bg } else { t.sel_dim_bg })
                     };
                     assert_eq!(t.selected(focused), expected);
+                    assert_eq!(t.selected_commit(focused), expected);
+                    assert_eq!(
+                        t.commit_tint(expected, t.branch),
+                        if colors == ColorMode::C16 {
+                            expected
+                        } else {
+                            expected.fg(t.branch)
+                        }
+                    );
                 }
                 for enabled in [true, false] {
                     let mut expected =

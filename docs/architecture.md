@@ -91,7 +91,9 @@ jamais l'etat, elle le lit et pousse des zones de hit-test.
   par `--colors`), et `Terminal` (n'utilise que `Color::Reset` et les couleurs
   ANSI nommees — Red, Green, Blue... — pour que l'interface suive la palette
   que l'utilisateur a configuree dans son emulateur de terminal, sans imposer
-  de RGB).
+  de RGB, sauf pour les variantes sombres du texte colore dans le commit
+  selectionne : RGB ou 256 couleurs sur fond inverse clair, couleurs ANSI
+  d'origine en mode 16 couleurs).
 - `hit.rs` : `Hit`, `PaneId`, `SplitId`, `HitMap` (hit-testing souris).
 - `overlays.rs` : menus, dialogues, formulaires.
 
