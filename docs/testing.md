@@ -13,8 +13,8 @@ python3 tests/test_uninstall.py
 ```
 
 Au 7 octobre 2026 : **71 tests unitaires** (bibliotheque, repartis
-dans `src/`) et **14 tests d'integration** (`tests/prototype.rs`), tous
-passants localement. Les tests d'integration prennent environ 4 s (ils creent de vrais
+dans `src/`) et **15 tests d'integration** (`tests/prototype.rs`), tous
+passants localement. Les tests d'integration prennent environ 8 s (ils creent de vrais
 depots temporaires et lancent des pseudo-terminaux).
 
 ## Tests unitaires (`src/**/*.rs`, modules `#[cfg(test)]`)
@@ -65,13 +65,14 @@ Les scenarios ne demandent aucun acces reseau :
 - `cli_commands_do_not_need_a_repository` : `--help`, `--version`, `doctor`
   fonctionnent hors depot et hors terminal interactif.
 - `terminal_launch_switch_view_and_clean_exit` /
+  `terminal_launch_at_79_columns_switches_view_and_exits` /
   `check_terminal_launcher` /
   `both_launchers_and_about_texts_use_the_new_names` : lancement reel en
   pseudo-terminal (portable-pty + vt100) des deux binaires `gitt` et
   `git-tui`, bascule de vue (`F6`), sortie propre, vue par defaut de chaque
-  point d'entree, textes "A propos" a jour.
+  point d'entree, tailles 120 x 35, 79 x 24 et 79 x 26, textes "A propos" a jour.
 - `compact_panes_keep_controls_accessible_and_return_to_full_layout` : mode
-  compact en dessous de 120 x 35, onglets, retour au layout complet.
+  compact en 79 x 24, 79 x 26 et 80 x 24, onglets, retour au layout complet.
 - `commit_guide_tracks_display_columns_without_overwriting_text` : guide de
   largeur de message, colonnes d'affichage Unicode.
 - `long_dialog_manual_scroll_stays_put_and_buttons_remain_clickable` :

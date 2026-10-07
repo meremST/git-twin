@@ -42,8 +42,8 @@ unique ou une succession d'ecrans plein format.
   du pointeur dependent du terminal. Documenter chaque adaptation.
 
 Objectif de disposition : panneaux de reference visibles a partir de 120 x 35
-cellules. Entre 80 x 24 et ce seuil, autoriser le masquage explicite d'un panneau
-ou son agrandissement temporaire. En dessous de 80 x 24, afficher une indication
+cellules. Entre 79 x 24 et ce seuil, autoriser le masquage explicite d'un panneau
+ou son agrandissement temporaire. En dessous de 79 x 24, afficher une indication
 de taille insuffisante sans executer d'action cachee. Ces seuils devront etre
 confirmes sur le prototype et tout changement consigne.
 

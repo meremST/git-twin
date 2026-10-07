@@ -243,7 +243,7 @@ fn real_repository_renders_both_views_and_resizes() {
     ] {
         assert!(screen.contains(expected), "missing {expected}: {screen}");
     }
-    render(&mut app, 80, 24);
+    render(&mut app, 79, 24);
     for (r, hit) in &app.hits.zones {
         if matches!(hit, Hit::MenuTitle(_) | Hit::ViewTab(_)) {
             assert_eq!(
@@ -253,12 +253,33 @@ fn real_repository_renders_both_views_and_resizes() {
             );
         }
     }
-    for (w, h) in [(80, 24), (120, 35), (200, 60), (79, 23), (1, 1), (0, 0)] {
+    for (w, h) in [
+        (79, 24),
+        (79, 26),
+        (80, 24),
+        (120, 35),
+        (200, 60),
+        (78, 26),
+        (79, 23),
+        (1, 1),
+        (0, 0),
+    ] {
         for ratio in [0, 100, 500, 900, u16::MAX] {
             app.state.splits.worktree_left = ratio;
             app.state.splits.worktree_diff = ratio;
             app.state.splits.worktree_files = ratio;
-            render(&mut app, w, h);
+            let screen = render(&mut app, w, h);
+            if w > 0 && h > 0 {
+                assert_eq!(
+                    screen.contains("Compact:"),
+                    w >= 79 && h >= 24 && (w < 120 || h < 35),
+                    "{w} x {h}: {screen}"
+                );
+            }
+            if (w, h) == (78, 26) || (w, h) == (79, 23) {
+                assert!(screen.contains("resize to at least 79 x 24"), "{screen}");
+                assert!(app.hits.zones.is_empty());
+            }
             app.switch_view(ViewKind::History);
             app.state.splits.history_top = ratio;
             app.state.splits.history_bottom_left = ratio;
@@ -414,16 +435,49 @@ fn terminal_launch_switch_view_and_clean_exit() {
         "Initial greeting",
         "Commit Message",
         "worktree",
+        120,
+        35,
     );
     check_terminal_launcher(
         env!("CARGO_BIN_EXE_git-tui"),
         "Commit Message",
         "Initial greeting",
         "history",
+        120,
+        35,
     );
 }
 
-fn check_terminal_launcher(binary: &str, first: &str, second: &str, previous_view: &str) {
+#[test]
+fn terminal_launch_at_79_columns_switches_view_and_exits() {
+    for height in [24, 26] {
+        check_terminal_launcher(
+            env!("CARGO_BIN_EXE_gitt"),
+            "Initial greeting",
+            "Unstaged Changes",
+            "worktree",
+            79,
+            height,
+        );
+        check_terminal_launcher(
+            env!("CARGO_BIN_EXE_git-tui"),
+            "Unstaged Changes",
+            "Initial greeting",
+            "history",
+            79,
+            height,
+        );
+    }
+}
+
+fn check_terminal_launcher(
+    binary: &str,
+    first: &str,
+    second: &str,
+    previous_view: &str,
+    width: u16,
+    height: u16,
+) {
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
     use std::{
         io::{Read, Write},
@@ -439,8 +493,8 @@ fn check_terminal_launcher(binary: &str, first: &str, second: &str, previous_vie
     .unwrap();
     let pty = native_pty_system()
         .openpty(PtySize {
-            rows: 35,
-            cols: 120,
+            rows: height,
+            cols: width,
             pixel_width: 0,
             pixel_height: 0,
         })
@@ -471,7 +525,7 @@ fn check_terminal_launcher(binary: &str, first: &str, second: &str, previous_vie
             }
         }
     });
-    let mut parser = vt100::Parser::new(35, 120, 0);
+    let mut parser = vt100::Parser::new(height, width, 0);
     let wait_for = |parser: &mut vt100::Parser, needle: &str| -> bool {
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
@@ -524,13 +578,19 @@ fn check_terminal_launcher(binary: &str, first: &str, second: &str, previous_vie
 
 #[test]
 fn compact_panes_keep_controls_accessible_and_return_to_full_layout() {
+    for (width, height) in [(79, 24), (79, 26), (80, 24)] {
+        check_compact_panes(width, height);
+    }
+}
+
+fn check_compact_panes(width: u16, height: u16) {
     use git_twin::ui::hit::PaneId;
     let dir = fixture();
     let mut app = app(dir.path(), false);
     app.start();
     settle(&mut app);
     app.switch_view(ViewKind::Worktree);
-    let screen = render(&mut app, 80, 24);
+    let screen = render(&mut app, width, height);
     assert!(screen.contains("Compact:"), "{screen}");
     for label in [
         "[Unstaged]",
@@ -561,7 +621,7 @@ fn compact_panes_keep_controls_accessible_and_return_to_full_layout() {
             row: r.y,
             modifiers: KeyModifiers::NONE,
         });
-        let screen = render(&mut app, 80, 24);
+        let screen = render(&mut app, width, height);
         assert_eq!(app.focused_pane(), id);
         assert!(app.hits.zones.iter().any(|(_, h)| *h == Hit::Pane(id)));
         if id == PaneId::WMessage {
@@ -575,9 +635,9 @@ fn compact_panes_keep_controls_accessible_and_return_to_full_layout() {
     }
     app.switch_view(ViewKind::History);
     app.hist.focus = git_twin::app::history::HFocus::Sha;
-    assert!(render(&mut app, 80, 24).contains("SHA1:"));
+    assert!(render(&mut app, width, height).contains("SHA1:"));
     app.hist.focus = git_twin::app::history::HFocus::Search;
-    let screen = render(&mut app, 80, 24);
+    let screen = render(&mut app, width, height);
     for label in [
         "Search:",
         "[  Old version]",

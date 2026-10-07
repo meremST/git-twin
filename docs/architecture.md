@@ -98,7 +98,7 @@ jamais l'etat, elle le lit et pousse des zones de hit-test.
 - `overlays.rs` : menus, dialogues, formulaires.
 
 Les separateurs sont des ratios en pour-mille stockes dans `state.splits`.
-En dessous de 80 x 24, un message "trop petit" est affiche a la place de
+En dessous de 79 x 24, un message "trop petit" est affiche a la place de
 l'interface.
 
 ## Points d'entree

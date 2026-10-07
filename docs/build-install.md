@@ -15,7 +15,7 @@ Prerequis d'execution :
   bibliotheques requises, mais n'est pas dans cette matrice.
 - Git dans `PATH`. Le programme refuse Git < 2.25 ; ce minimum n'a pas encore
   ete valide sur une installation reelle. Les essais locaux utilisent Git 2.43.
-- Un terminal interactif UTF-8, au moins 80 x 24 cellules (120 x 35 conseille).
+- Un terminal interactif UTF-8, au moins 79 x 24 cellules (120 x 35 conseille).
   Aucune Nerd Font n'est necessaire avec les icones Unicode par defaut.
 
 Ces binaires ne sont **pas statiques** : Alpine Linux (musl), les systemes

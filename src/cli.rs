@@ -236,7 +236,7 @@ fn event_loop(app: &mut App, warning: Option<String>) -> io::Result<()> {
             continue;
         }
         let event = event::read()?;
-        if app.size.0 < 80 || app.size.1 < 24 {
+        if app.size.0 < 79 || app.size.1 < 24 {
             if let Event::Key(k) = event
                 && k.code == KeyCode::Char('q')
                 && k.modifiers.contains(KeyModifiers::CONTROL)
@@ -244,7 +244,7 @@ fn event_loop(app: &mut App, warning: Option<String>) -> io::Result<()> {
             {
                 if app.cfg.confirm_quit && !app.wt.message.text().trim().is_empty() {
                     app.set_status(
-                        "Resize to 80 x 24 to confirm quitting with a draft.",
+                        "Resize to 79 x 24 to confirm quitting with a draft.",
                         StatusTone::Error,
                     );
                 } else {

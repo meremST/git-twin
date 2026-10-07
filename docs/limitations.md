@@ -4,7 +4,7 @@
   Cela ne constitue pas encore une validation de toutes les lignes de
   `parity.md`. Les operations avancees (conflits, amend, rebase, outils externes,
   transport distant, signature) doivent recevoir leurs scenarios d'integration.
-- Le rendu multipanneau est vise a 120 x 35. En dessous, jusqu'a 80 x 24,
+- Le rendu multipanneau est vise a 120 x 35. En dessous, jusqu'a 79 x 24,
   le mode compact montre un panneau a la fois. Cliquer les onglets ou utiliser
   Tab pour acceder aux autres panneaux ; les actions Worktree restent visibles.
   Les longs contenus (chemins, sujets) peuvent etre tronques, pas les commandes

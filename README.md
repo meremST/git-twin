@@ -70,7 +70,7 @@ de depot si le chemin fourni n'en contient pas. Git Twin utilise votre Git,
 votre configuration, vos hooks et vos outils externes : n'ouvrez que des
 depots de confiance. Le mode lecture seule n'est pas un bac a sable.
 
-Taille conseillee : **120 x 35** cellules. Taille minimale : **80 x 24**.
+Taille conseillee : **120 x 35** cellules. Taille minimale : **79 x 24**.
 Entre ces tailles, le mode compact affiche un panneau a la fois, avec des onglets
 cliquables et navigation par Tab. `F11` agrandit/restaure le panneau actif.
 En dessous de la taille minimale, les actions sont bloquees : agrandir le

@@ -265,7 +265,7 @@ Design:
   - Left column: Unstaged over Staged. Right column: diff.
   - Bottom band: buttons (Rescan, Stage Changed, Sign Off, Push, Commit) plus the message area
     (New Commit/Amend radios, width guide).
-- Splits are per-mille ratios stored in `state.splits`. Below 80x24, show a "too small" message.
+- Splits are per-mille ratios stored in `state.splits`. Below 79x24, show a "too small" message.
 - Draw directly into the buffer and push hit zones while rendering.
 - `App` fields the UI uses: `hits`, `size`, `maximized`, `menu`, `dialogs`, `status`.
 

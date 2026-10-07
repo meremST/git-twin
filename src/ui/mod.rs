@@ -55,12 +55,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     app.size = (area.width, area.height);
     app.hits.clear();
     f.render_widget(Block::default().style(app.theme.base()), area);
-    if area.width < 80 || area.height < 24 {
+    if area.width < 79 || area.height < 24 {
         text(
             f,
             area,
             format!(
-                "Terminal too small: resize to at least 80 x 24. Ctrl-Q: quit.\n{}",
+                "Terminal too small: resize to at least 79 x 24. Ctrl-Q: quit.\n{}",
                 sanitize(&app.status.0)
             ),
             app.theme.base(),
