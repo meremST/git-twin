@@ -123,6 +123,7 @@ pub fn commit_details(r: &Runner, oid: &Oid) -> Result<CommitDetails, GitError> 
 #[derive(Clone, Debug, Default)]
 pub struct Related {
     pub branches: Vec<String>,
+    pub tags: Vec<String>,
     pub follows: Option<String>,
     pub precedes: Option<String>,
 }
@@ -138,6 +139,18 @@ pub fn related(r: &Runner, oid: &Oid) -> Related {
         os("refs/remotes"),
     ]) {
         rel.branches = String::from_utf8_lossy(&o)
+            .lines()
+            .take(50)
+            .map(sanitize::sanitize)
+            .collect();
+    }
+    if let Ok(o) = r.read(&[
+        os("for-each-ref"),
+        os("--format=%(refname:short)"),
+        os(format!("--contains={hex}")),
+        os("refs/tags"),
+    ]) {
+        rel.tags = String::from_utf8_lossy(&o)
             .lines()
             .take(50)
             .map(sanitize::sanitize)

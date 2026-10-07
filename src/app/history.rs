@@ -362,6 +362,12 @@ impl HistoryState {
                     format!("Branches: {}", r.branches.join(", ")),
                 ));
             }
+            if !r.tags.is_empty() {
+                v.push(DLine::plain(
+                    DKind::Header,
+                    format!("Tags: {}", r.tags.join(", ")),
+                ));
+            }
             if let Some(t) = &r.follows {
                 v.push(DLine::plain(DKind::Header, format!("Follows: {t}")));
             }
