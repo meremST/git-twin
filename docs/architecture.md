@@ -109,7 +109,9 @@ l'interface.
 - `src/cli.rs` : logique partagee (clap, terminal, boucle d'evenements,
   hand-off, `doctor`). `--view` remplace la vue par defaut de chaque point
   d'entree ; `--all` (comme `gitk --all`) fait porter la vue par defaut sur
-  toutes les refs plutot que sur HEAD seul.
+  toutes les refs plutot que sur HEAD seul ; des chemins positionnels (comme
+  `gitk chemin...`) sont convertis par `repo::workdir_pathspec` en chemins
+  relatifs a la racine et limitent la vue par defaut ("Command line").
 
 ## Flux d'un evenement
 

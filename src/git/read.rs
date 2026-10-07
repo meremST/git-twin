@@ -449,7 +449,12 @@ pub fn blob(r: &Runner, oid: &Oid, path: &[u8]) -> Result<Blob, GitError> {
 }
 
 pub fn status(r: &Runner) -> Result<RepoStatus, GitError> {
-    let out = r.read(&[
+    status_in(r, &[])
+}
+
+/// Like [`status`], limited to `paths` (all files when empty).
+pub fn status_in(r: &Runner, paths: &[String]) -> Result<RepoStatus, GitError> {
+    let mut args = vec![
         os("status"),
         os("--porcelain=v2"),
         os("-z"),
@@ -457,7 +462,12 @@ pub fn status(r: &Runner) -> Result<RepoStatus, GitError> {
         os("--untracked-files=all"),
         os("--no-renames"),
         os("--ignore-submodules=none"),
-    ])?;
+    ];
+    if !paths.is_empty() {
+        args.push(os("--"));
+        args.extend(paths.iter().map(os));
+    }
+    let out = r.read(&args)?;
     parse_porcelain_v2(&out).map_err(|e| GitError::new("git status", e.0))
 }
 

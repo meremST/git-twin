@@ -178,3 +178,100 @@ pub fn git_version() -> Option<(u32, u32, u32, String)> {
 }
 
 pub const MIN_GIT: (u32, u32) = (2, 25);
+
+/// Resolves a command-line path (relative to `cwd`, like gitk) into a
+/// pathspec relative to the working tree root, which is where Git runs.
+pub fn workdir_pathspec(info: &RepoInfo, cwd: &Path, path: &Path) -> Result<String, String> {
+    let shown = || crate::domain::sanitize::display_bytes(path.as_os_str().as_bytes());
+    let rel = match &info.workdir {
+        None if path.is_absolute() => {
+            return Err(format!(
+                "absolute path not supported in a bare repository: {}",
+                shown()
+            ));
+        }
+        None => normalize(path),
+        Some(top) => {
+            let abs = normalize(&cwd.join(path));
+            abs.strip_prefix(top)
+                .map(Path::to_path_buf)
+                .ok()
+                .or_else(|| {
+                    let top = top.canonicalize().ok()?;
+                    let abs = canonicalize_existing(&abs)?;
+                    abs.strip_prefix(&top).map(Path::to_path_buf).ok()
+                })
+                .ok_or_else(|| format!("path is outside the repository: {}", shown()))?
+        }
+    };
+    let s = rel
+        .to_str()
+        .ok_or_else(|| format!("path is not valid UTF-8: {}", shown()))?;
+    if s.contains('\n') {
+        return Err(format!("path contains a newline: {}", shown()));
+    }
+    Ok(if s.is_empty() { ".".into() } else { s.into() })
+}
+
+/// Lexically removes `.` and `..` components (the file may not exist,
+/// e.g. it was deleted in a later commit).
+fn normalize(p: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !out.pop() && !p.is_absolute() {
+                    out.push("..");
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Canonicalizes the longest existing ancestor and appends the rest.
+fn canonicalize_existing(p: &Path) -> Option<PathBuf> {
+    let mut base = p;
+    let mut rest = Vec::new();
+    loop {
+        if let Ok(c) = base.canonicalize() {
+            return Some(rest.iter().rev().fold(c, |acc, r| acc.join(r)));
+        }
+        rest.push(base.file_name()?);
+        base = base.parent()?;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(top: Option<&str>) -> RepoInfo {
+        RepoInfo {
+            workdir: top.map(PathBuf::from),
+            git_dir: PathBuf::from("/r/.git"),
+            common_dir: PathBuf::from("/r/.git"),
+        }
+    }
+
+    #[test]
+    fn pathspec_resolution() {
+        let r = info(Some("/nonexistent-gitt/repo"));
+        let cwd = Path::new("/nonexistent-gitt/repo/src/ui");
+        let f = |p: &str| workdir_pathspec(&r, cwd, Path::new(p));
+        assert_eq!(f("main.c").unwrap(), "src/ui/main.c");
+        assert_eq!(f("../lib/./x.c").unwrap(), "src/lib/x.c");
+        assert_eq!(f("../..").unwrap(), ".");
+        assert_eq!(f("/nonexistent-gitt/repo/README").unwrap(), "README");
+        assert!(f("../../../other").is_err());
+        let bare = info(None);
+        assert_eq!(
+            workdir_pathspec(&bare, cwd, Path::new("a/./b")).unwrap(),
+            "a/b"
+        );
+        assert!(workdir_pathspec(&bare, cwd, Path::new("/a")).is_err());
+    }
+}

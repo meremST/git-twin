@@ -53,6 +53,11 @@ struct Cli {
     colors: Option<ColorMode>,
     #[command(subcommand)]
     command: Option<Commands>,
+    /// Limit history to commits touching these paths, like `gitk PATH...`
+    /// (relative to the current directory; use `--` before a path named
+    /// like a subcommand).
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -133,10 +138,14 @@ fn run(default_view: ViewKind, name: &'static str) -> Result<(), String> {
             repo::MIN_GIT.1
         ));
     }
-    let path = cli
-        .repo
-        .unwrap_or(std::env::current_dir().map_err(|e| e.to_string())?);
+    let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+    let path = cli.repo.unwrap_or_else(|| cwd.clone());
     let repo = repo::discover(&path).map_err(|e| e.to_string())?;
+    let paths = cli
+        .paths
+        .iter()
+        .map(|p| repo::workdir_pathspec(&repo, &cwd, p))
+        .collect::<Result<Vec<_>, _>>()?;
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Err(
             "An interactive terminal is required. Use --help or doctor for non-interactive output."
@@ -171,6 +180,7 @@ fn run(default_view: ViewKind, name: &'static str) -> Result<(), String> {
             read_only: cli.read_only,
             mouse: cli.no_mouse.then_some(false),
             all_refs: cli.all,
+            paths,
         },
     );
     let old_hook = std::panic::take_hook();

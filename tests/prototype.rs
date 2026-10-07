@@ -69,6 +69,7 @@ fn app(dir: &std::path::Path, read_only: bool) -> App {
             read_only,
             mouse: Some(true),
             all_refs: false,
+            paths: Vec::new(),
         },
     )
 }

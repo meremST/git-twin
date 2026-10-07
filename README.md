@@ -116,12 +116,17 @@ git tui -h
 gitt doctor
 gitt --repo /chemin/vers/depot --no-mouse --icons ascii
 gitt --repo /chemin/vers/depot --all
+gitt chemin/fichier.c
+gitt --all -- src/ docs/
 git tui --repo /chemin/vers/depot --theme light --colors 256
 git tui --repo /chemin/vers/depot --theme terminal
 ```
 
 `--all` affiche l'historique de toutes les refs (branches, tags, remotes),
-comme `gitk --all`, au lieu de se limiter a HEAD. Le theme `terminal`
+comme `gitk --all`, au lieu de se limiter a HEAD. Comme `gitk chemin...`,
+des chemins en argument (relatifs au repertoire courant, eventuellement apres
+`--`) limitent l'historique aux commits qui les modifient ; les diffs et les
+lignes de modifications locales sont filtres de la meme facon. Le theme `terminal`
 utilise les couleurs par defaut et ANSI du terminal :
 l'interface suit la palette configuree par l'utilisateur dans son
 emulateur, plutot que d'imposer `dark`/`light`.

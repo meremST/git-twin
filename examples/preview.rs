@@ -38,6 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             read_only: true,
             mouse: Some(false),
             all_refs: false,
+            paths: Vec::new(),
         },
     );
     app.start();

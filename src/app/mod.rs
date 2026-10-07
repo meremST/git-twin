@@ -136,6 +136,9 @@ pub struct Options {
     pub mouse: Option<bool>,
     /// Like `gitk --all`: the default view shows every ref, not just HEAD.
     pub all_refs: bool,
+    /// Like `gitk PATH...`: the default view only shows commits touching
+    /// these paths (relative to the working tree root).
+    pub paths: Vec<String>,
 }
 
 impl App {
@@ -149,10 +152,12 @@ impl App {
         };
         let theme = Theme::new(&cfg);
         let mut hist = HistoryState::new(&cfg, &state);
-        if opts.all_refs
-            && let Some(default_view) = hist.views.first_mut()
-        {
-            default_view.all_refs = true;
+        if let Some(default_view) = hist.views.first_mut() {
+            default_view.all_refs |= opts.all_refs;
+            if !opts.paths.is_empty() {
+                default_view.name = "Command line".into();
+                default_view.paths = opts.paths.join("\n");
+            }
         }
         hist.views.extend(state.views.iter().cloned());
         let mut wt = WorktreeState::new(&cfg);

@@ -485,7 +485,7 @@ impl App {
         let r = self.runner.clone();
         self.req.log = self.workers.stream(self.generation, move |sink| {
             let local = if with_local {
-                read::status(&r).ok().map(|s| {
+                read::status_in(&r, &view.path_list()).ok().map(|s| {
                     let tracked = |e: &&crate::domain::status::StatusEntry| {
                         !matches!(
                             e.kind,

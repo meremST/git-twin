@@ -9,7 +9,8 @@ inspire de gitk et git gui.
 
 - Deux points d'entree : `gitt` pour History, `git tui` / `git-tui` pour
   Worktree ; bascule entre les deux vues avec F6.
-- Historique avec graphe, branches, tags, recherche, diffs et option `--all`.
+- Historique avec graphe, branches, tags, recherche, diffs, option `--all`
+  et filtrage par chemins (`gitt chemin/fichier.c`, comme gitk).
 - Indexation/desindexation par fichier, bloc ou lignes, edition du message de
   commit et sauvegarde des brouillons.
 - Clavier, souris, menus, panneaux redimensionnables, mode compact,
