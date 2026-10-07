@@ -55,6 +55,10 @@ PTYs and terminals that do not answer terminal queries.
   `tag_details` read and an async worker payload.
 - `LICENSE` file added (Apache-2.0, matching `Cargo.toml`).
 - New docs: `docs/architecture.md`, `docs/build-install.md`, `docs/testing.md`.
+- History graph: each commit's lane bullet is now underlined when it has a
+  parent in the same lane, giving a continuous visual "spine" between
+  consecutive commits (gitk-style), instead of looking like disconnected
+  dots in a one-row-per-commit layout.
 
 ## Latest completed work (previous session)
 

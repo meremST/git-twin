@@ -427,22 +427,20 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                 if x + 2 >= author_x {
                     break;
                 }
-                let ch = if lane == usize::from(g.node) {
+                let is_node = lane == usize::from(g.node);
+                let ch = if is_node {
                     if app.theme.icons.ascii { '*' } else { '●' }
                 } else {
                     graph::glyph(cell.bits, app.theme.icons.ascii)
                 };
-                let color = if lane == usize::from(g.node) {
-                    g.node_color
-                } else {
-                    cell.color
-                };
-                text(
-                    f,
-                    Rect::new(x, rr.y, 1, 1),
-                    ch.to_string(),
-                    style.fg(app.theme.graph_color(color)),
-                );
+                let color = if is_node { g.node_color } else { cell.color };
+                let mut cell_style = style.fg(app.theme.graph_color(color));
+                if is_node && cell.bits & graph::DOWN != 0 {
+                    // Underline the bullet so it visually ties into the
+                    // next (older) row of the same lane, gitk-style.
+                    cell_style = cell_style.add_modifier(Modifier::UNDERLINED);
+                }
+                text(f, Rect::new(x, rr.y, 1, 1), ch.to_string(), cell_style);
                 let h = if cell.bits & graph::RIGHT != 0 {
                     if app.theme.icons.ascii { "-" } else { "─" }
                 } else {
