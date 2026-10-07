@@ -78,6 +78,11 @@ terminal pour traiter une confirmation ou une erreur avant de quitter.
 
 ## Utilisation
 
+Dans le panneau **Details**, la ligne **Tags** affiche uniquement les tags
+(legers ou annotes) qui pointent sur le commit selectionne. Elle est masquee
+si ce commit ne porte aucun tag. **Follows** et **Precedes** indiquent
+separement les tags voisins dans l'historique.
+
 | Commande | Effet |
 | --- | --- |
 | `F6` | Basculer entre History et Worktree |

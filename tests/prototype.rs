@@ -116,6 +116,69 @@ fn render(app: &mut App, width: u16, height: u16) -> String {
 }
 
 #[test]
+fn details_tags_only_show_tags_on_selected_commit() {
+    let dir = fixture();
+    for subject in [
+        "Release one",
+        "Between releases",
+        "Release two",
+        "After releases",
+    ] {
+        git(dir.path(), &["commit", "--allow-empty", "-qm", subject]);
+        match subject {
+            "Release one" => {
+                git(dir.path(), &["tag", "v1-light"]);
+                git(
+                    dir.path(),
+                    &["tag", "-a", "v1-annotated", "-m", "Release one"],
+                );
+            }
+            "Release two" => {
+                git(dir.path(), &["tag", "v2"]);
+            }
+            _ => {}
+        }
+    }
+    let mut app = app(dir.path(), true);
+    app.start();
+    settle(&mut app);
+
+    for (subject, expected) in [
+        ("Release one", vec!["v1-annotated", "v1-light"]),
+        ("Initial greeting", vec![]),
+        ("Release two", vec!["v2"]),
+        ("Between releases", vec![]),
+        ("After releases", vec![]),
+    ] {
+        let row = app
+            .hist
+            .commits
+            .iter()
+            .position(|c| c.subject.as_ref() == subject)
+            .unwrap();
+        app.select_row(row);
+        settle(&mut app);
+
+        let related = app.hist.related.as_ref().unwrap();
+        assert_eq!(related.tags, expected, "{subject}");
+        assert!(related.branches.iter().any(|b| b == "main"), "{subject}");
+        let tag_lines: Vec<_> = app
+            .hist
+            .diff
+            .lines
+            .iter()
+            .filter(|line| line.text.starts_with("Tags: "))
+            .map(|line| line.text.as_str())
+            .collect();
+        if expected.is_empty() {
+            assert!(tag_lines.is_empty(), "{subject}: {tag_lines:?}");
+        } else {
+            assert_eq!(tag_lines, vec![format!("Tags: {}", expected.join(", "))]);
+        }
+    }
+}
+
+#[test]
 fn terminal_commit_selection_preserves_color_families() {
     use git_twin::{
         app::history::HFocus,

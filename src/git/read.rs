@@ -118,7 +118,7 @@ pub fn commit_details(r: &Runner, oid: &Oid) -> Result<CommitDetails, GitError> 
     })
 }
 
-/// Branches containing a commit, nearest preceding and following tags
+/// Branches containing a commit, tags pointing at it, and nearest preceding/following tags
 /// (approximation of gitk's Branches / Follows / Precedes lines).
 #[derive(Clone, Debug, Default)]
 pub struct Related {
@@ -147,7 +147,7 @@ pub fn related(r: &Runner, oid: &Oid) -> Related {
     if let Ok(o) = r.read(&[
         os("for-each-ref"),
         os("--format=%(refname:short)"),
-        os(format!("--contains={hex}")),
+        os(format!("--points-at={hex}")),
         os("refs/tags"),
     ]) {
         rel.tags = String::from_utf8_lossy(&o)
