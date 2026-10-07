@@ -407,12 +407,11 @@ impl Theme {
 
     pub fn selected(&self, focused: bool) -> Style {
         if self.terminal_palette {
-            return if focused {
-                // Reset semantic foregrounds before reversing to avoid coloured blocks.
-                self.base().add_modifier(Modifier::REVERSED)
-            } else {
-                Style::default().add_modifier(Modifier::UNDERLINED)
-            };
+            // A plain colour background (instead of reversing each span) keeps
+            // the row's own semantic colours (add/del/branch/...) readable and
+            // avoids a stripe of differently-reversed colours on one line.
+            let s = Style::default().bg(if focused { self.sel_bg } else { self.sel_dim_bg });
+            return if focused { s.add_modifier(Modifier::BOLD) } else { s };
         }
         if self.low_color {
             return Style::default().add_modifier(Modifier::REVERSED);
@@ -535,13 +534,16 @@ mod tests {
         for fg in [t.fg, t.add, t.del, t.meta] {
             let base = t.base().fg(fg);
             let active = base.patch(t.selected(true));
-            assert_eq!(active.fg, Some(Color::Reset));
-            assert_eq!(active.bg, Some(Color::Reset));
-            assert!(active.add_modifier.contains(Modifier::REVERSED));
+            // The row's own semantic colour (add/del/meta/...) stays visible;
+            // only a coloured background and bold are added.
+            assert_eq!(active.fg, Some(fg));
+            assert_eq!(active.bg, Some(t.sel_bg));
+            assert!(active.add_modifier.contains(Modifier::BOLD));
+            assert!(!active.add_modifier.contains(Modifier::REVERSED));
             let inactive = base.patch(t.selected(false));
             assert_eq!(inactive.fg, Some(fg));
-            assert_eq!(inactive.bg, Some(Color::Reset));
-            assert!(inactive.add_modifier.contains(Modifier::UNDERLINED));
+            assert_eq!(inactive.bg, Some(t.sel_dim_bg));
+            assert!(!inactive.add_modifier.contains(Modifier::BOLD));
             assert!(!inactive.add_modifier.contains(Modifier::REVERSED));
         }
         for enabled in [true, false] {
@@ -552,8 +554,10 @@ mod tests {
             assert!(!button.add_modifier.contains(Modifier::REVERSED));
         }
         let focused_button = t.button(true).patch(t.selected(true));
-        assert_eq!(focused_button.fg, Some(Color::Reset));
-        assert!(focused_button.add_modifier.contains(Modifier::REVERSED));
+        assert_eq!(focused_button.fg, Some(t.accent));
+        assert_eq!(focused_button.bg, Some(t.sel_bg));
+        assert!(focused_button.add_modifier.contains(Modifier::BOLD));
+        assert!(!focused_button.add_modifier.contains(Modifier::REVERSED));
     }
 
     #[test]

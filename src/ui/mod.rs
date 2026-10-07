@@ -1061,10 +1061,10 @@ mod tests {
         app::diffview::DLine,
         config::{Config, ThemeName},
     };
-    use ratatui::{Terminal, backend::TestBackend, style::Color};
+    use ratatui::{Terminal, backend::TestBackend};
 
     #[test]
-    fn terminal_diff_selection_keeps_uniform_active_and_colored_inactive_styles() {
+    fn terminal_diff_selection_keeps_colors_with_highlighted_background() {
         let t = Theme::new(&Config {
             theme: ThemeName::Terminal,
             ..Config::default()
@@ -1108,10 +1108,11 @@ mod tests {
                 (11, 2, t.fg),
             ] {
                 let cell = &buffer[(x, y)];
-                assert_eq!(cell.fg, if focused { Color::Reset } else { fg });
-                assert_eq!(cell.bg, Color::Reset);
-                assert_eq!(cell.modifier.contains(Modifier::REVERSED), focused);
-                assert_eq!(cell.modifier.contains(Modifier::UNDERLINED), !focused);
+                assert_eq!(cell.fg, fg, "semantic colour must stay visible when selected");
+                assert_eq!(cell.bg, if focused { t.sel_bg } else { t.sel_dim_bg });
+                assert_eq!(cell.modifier.contains(Modifier::BOLD), focused);
+                assert!(!cell.modifier.contains(Modifier::REVERSED));
+                assert!(!cell.modifier.contains(Modifier::UNDERLINED));
             }
         }
     }
