@@ -1,5 +1,32 @@
 # Notes de version
 
+## 0.2.0 — 2026-10-08
+
+Mise a jour depuis le tag `v0.1.0` : themes, panneau de preferences, gestion
+des stash et interface Worktree affinee.
+
+### Nouveautes
+
+- Themes Gruvbox ajoutes, avec un menu deroulant dans les preferences ;
+  contraste de la selection et de l'onglet actif ameliore.
+- Liste de references accessible avec F2 ; aide des raccourcis clavier
+  revue.
+- Historique limite aux chemins passes en ligne de commande (`gitt chemin`).
+- Graphe : noeud de commit unifie et lignes de connexion optionnelles ; sur
+  les gros historiques, lisibilite amelioree.
+- Worktree : controles de commit revus, icones et libelles de dialogues
+  clarifies.
+- Stash ajoute ; processus de checkout simplifie.
+
+### Distribution
+
+- Versions `Cargo.toml`, `Cargo.lock` et documentation portees a 0.2.0.
+- Archive attendue : `git-twin-0.2.0-x86_64-unknown-linux-gnu.tar.gz`.
+
+### Limites connues
+
+Identiques a la 0.1.0 : voir [docs/limitations.md](docs/limitations.md).
+
 ## 0.1.0 — premiere release en preparation
 
 Premiere distribution Linux x86_64 de Git Twin, client Git pour terminal

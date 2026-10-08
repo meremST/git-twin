@@ -1,4 +1,4 @@
-# Limites connues de la version 0.1.0
+# Limites connues de la version 0.2.0
 
 - Les deux vues, menus, dialogues et interactions de base sont raccordes.
   Cela ne constitue pas encore une validation de toutes les lignes de

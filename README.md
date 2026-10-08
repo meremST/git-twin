@@ -6,7 +6,7 @@ gitk et une vue **Worktree** inspiree de git gui.
 Worktree, via l'executable **`git-tui`**. Les deux commandes donnent acces aux
 deux vues ; `--view` remplace leur vue initiale.
 
-La premiere version **0.1.0** propose l'historique avec graphe, branches et tags,
+La version **0.2.0** propose l'historique avec graphe, branches et tags,
 les diffs, l'indexation par fichier/bloc/lignes et l'edition des commits dans
 une interface clavier et souris. La parite complete avec gitk/git gui n'est pas
 revendiquee : consulter les [limites connues](docs/limitations.md), notamment
@@ -15,7 +15,7 @@ pour les operations avancees.
 ## Installation Linux
 
 **Sans Rust** : une fois la release publiee, telecharger l'archive
-`git-twin-0.1.0-x86_64-unknown-linux-gnu.tar.gz` et son fichier `.sha256`
+`git-twin-0.2.0-x86_64-unknown-linux-gnu.tar.gz` et son fichier `.sha256`
 depuis la page Releases du depot. Le binaire cible Linux **x86_64 avec glibc
 2.35 ou plus recente** (Ubuntu 22.04/24.04, Debian 12, par exemple).
 Il ne convient pas a Alpine/musl ni a ARM.

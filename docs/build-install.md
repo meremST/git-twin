@@ -29,8 +29,8 @@ Une fois la version publiee, ouvrir la page **Releases du depot officiel** et
 telecharger les deux fichiers dans un meme repertoire :
 
 ```text
-git-twin-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-git-twin-0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+git-twin-0.2.0-x86_64-unknown-linux-gnu.tar.gz
+git-twin-0.2.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
 Aucune URL publique n'est encore configuree dans ce depot local. Ne pas
@@ -39,9 +39,9 @@ utiliser une URL de telechargement devinee ou un paquet homonyme.
 Depuis le repertoire de telechargement :
 
 ```sh
-sha256sum --check git-twin-0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
-tar -xzf git-twin-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-cd git-twin-0.1.0-x86_64-unknown-linux-gnu
+sha256sum --check git-twin-0.2.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf git-twin-0.2.0-x86_64-unknown-linux-gnu.tar.gz
+cd git-twin-0.2.0-x86_64-unknown-linux-gnu
 install -d "$HOME/bin"
 install -m 0755 gitt git-tui "$HOME/bin/"
 export PATH="$HOME/bin:$PATH"
@@ -96,7 +96,7 @@ sh rustup-init.sh
 . "$HOME/.cargo/env"
 ```
 
-Recuperer les sources du tag `v0.1.0` depuis la release officielle (archive
+Recuperer les sources du tag `v0.2.0` depuis la release officielle (archive
 source GitHub ou clone du depot), puis ouvrir le repertoire contenant
 `Cargo.toml`. Ne pas copier uniquement `src/` : conserver `Cargo.lock` et
 `rust-toolchain.toml`. Depuis ce repertoire :
@@ -198,14 +198,14 @@ Avant de creer un tag :
 2. Executer les controles ci-dessous, revoir les licences et essayer
    l'interface installee sur un depot jetable.
 3. Apres configuration du depot GitHub officiel et validation de la CI,
-   pousser le commit puis un tag annote `v0.1.0` correspondant exactement a la
+   pousser le commit puis un tag annote `v0.2.0` correspondant exactement a la
    version Cargo. Ne jamais deplacer un tag deja publie.
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
-python3 scripts/package-release.py --tag v0.1.0
+python3 scripts/package-release.py --tag v0.2.0
 ```
 
 La fabrication de l'archive demande Python >= 3.8 (bibliotheque standard
