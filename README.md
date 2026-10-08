@@ -184,7 +184,8 @@ Le clic droit sur un fichier propose « Open in editor » (panneau patch de
 History et Worktree). La commande est lancee sans terminal avec le chemin du
 fichier ajoute ; elle se regle par `editor` dans la configuration ou dans
 Preferences (`code` par defaut, vide = desactive). Les editeurs terminaux
-(nvim, vim) ne sont pas adaptes a cette action.
+(vi, vim, nvim, nano, hx, micro, kak, joe, emacs -nw) prennent le terminal le
+temps de l'edition, comme les outils de la fenetre Tools.
 
 ## Developpement
 

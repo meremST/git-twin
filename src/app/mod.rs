@@ -13,6 +13,7 @@ pub mod worker;
 pub mod worktree;
 
 use std::ffi::OsString;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::config::{Config, State, ViewKind};
@@ -52,6 +53,12 @@ pub enum Handoff {
     },
     /// Edit the commit message with $GIT_EDITOR.
     Editor,
+    /// Open a file in a terminal editor (no shell, works in read-only mode).
+    OpenFile {
+        program: String,
+        args: Vec<String>,
+        file: PathBuf,
+    },
 }
 
 /// Operation waiting for a confirmation.
@@ -376,8 +383,24 @@ impl App {
             );
             return;
         }
+        let args: Vec<String> = words.map(str::to_string).collect();
+        if is_terminal_editor(program, &args) {
+            if self.workers.writing() {
+                self.set_status(
+                    "Busy: wait for the running operation to finish.",
+                    StatusTone::Error,
+                );
+                return;
+            }
+            self.handoff = Some(Handoff::OpenFile {
+                program: program.to_string(),
+                args,
+                file,
+            });
+            return;
+        }
         let spawned = std::process::Command::new(program)
-            .args(words)
+            .args(&args)
             .arg(&file)
             .current_dir(self.repo.cwd())
             .stdin(std::process::Stdio::null())
@@ -390,7 +413,8 @@ impl App {
                 std::thread::spawn(move || {
                     let _ = child.wait();
                 });
-                self.set_status(format!("Opened in {program}."), StatusTone::Info);
+                // Info messages never expire, so leave the bar on "Ready." instead.
+                self.set_status("Ready.", StatusTone::Info);
             }
             Err(e) => self.error("Open in editor", format!("{program}: {e}")),
         }
@@ -940,6 +964,19 @@ pub fn base64(data: &[u8]) -> String {
         });
     }
     out
+}
+
+/// Terminal editors need the TUI suspended; GUI editors are launched detached.
+fn is_terminal_editor(program: &str, args: &[String]) -> bool {
+    const TERMINAL: &[&str] = &[
+        "vi", "vim", "nvim", "nano", "hx", "helix", "micro", "kak", "joe",
+    ];
+    let name = std::path::Path::new(program)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(program);
+    TERMINAL.contains(&name)
+        || (name == "emacs" && args.iter().any(|a| a == "-nw" || a == "--no-window-system"))
 }
 
 #[cfg(test)]

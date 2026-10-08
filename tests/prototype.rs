@@ -7,7 +7,7 @@ use std::{
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use git_twin::{
     app::{
-        App, Options,
+        App, Handoff, Options,
         action::{Action, FileList},
         dialog::{Dialog, Field, FormKind, Kind},
     },
@@ -1635,6 +1635,7 @@ fn open_in_editor_runs_configured_editor_on_the_working_copy_file() {
         args.trim(),
         format!("--reuse-window {}", dir.path().join("hello.txt").display())
     );
+    assert_eq!(app.status.0, "Ready.");
 
     app.dispatch(Action::OpenInEditor(b"missing.txt".to_vec()));
     assert!(
@@ -1662,4 +1663,27 @@ fn editor_setting_defaults_to_code_and_is_editable_in_preferences() {
     app.open_preferences();
     let d = app.dialogs.last().unwrap();
     assert_eq!(d.text(16), "code");
+}
+
+#[test]
+fn open_in_editor_hands_terminal_editors_to_the_tui_suspend() {
+    let dir = fixture();
+    let mut app = app(dir.path(), true);
+    app.start();
+    settle(&mut app);
+    app.cfg.editor = "nvim +10".into();
+
+    app.dispatch(Action::OpenInEditor(b"hello.txt".to_vec()));
+    match &app.handoff {
+        Some(Handoff::OpenFile {
+            program,
+            args,
+            file,
+        }) => {
+            assert_eq!(program, "nvim");
+            assert_eq!(args, &["+10".to_string()]);
+            assert_eq!(file, &dir.path().join("hello.txt"));
+        }
+        other => panic!("expected OpenFile handoff, got {other:?}"),
+    }
 }

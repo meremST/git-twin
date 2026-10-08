@@ -300,6 +300,17 @@ fn run_handoff(app: &mut App, h: &Handoff) -> Result<bool, String> {
         .map(|_| true)
         .map_err(|e| e.to_string()),
         Handoff::Editor => edit_message(app),
+        Handoff::OpenFile {
+            program,
+            args,
+            file,
+        } => std::process::Command::new(program)
+            .args(args)
+            .arg(file)
+            .current_dir(&app.runner.cwd)
+            .status()
+            .map(|st| st.success())
+            .map_err(|e| format!("{program}: {e}")),
     }
 }
 
