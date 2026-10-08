@@ -281,7 +281,7 @@ impl App {
                 MenuItem::Sep,
                 en("Start git gui", "F6", Action::StartGitGui, !self.is_bare()),
                 MenuItem::Sep,
-                e("Quit", "Ctrl-Q", Action::Quit),
+                e("Quit", "Ctrl-Q / Ctrl-W", Action::Quit),
             ],
             1 => vec![
                 e("Preferences", "", Action::Preferences),
@@ -400,7 +400,7 @@ impl App {
                 e("Compress Database", "", Action::DbCompress),
                 e("Verify Database", "", Action::DbVerify),
                 MenuItem::Sep,
-                e("Quit", "Ctrl-Q", Action::Quit),
+                e("Quit", "Ctrl-Q / Ctrl-W", Action::Quit),
             ],
             1 => vec![
                 en("Undo", "Ctrl-Z", Action::Undo, self.wt.message.can_undo()),

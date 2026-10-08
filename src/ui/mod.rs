@@ -60,7 +60,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             f,
             area,
             format!(
-                "Terminal too small: resize to at least 79 x 24. Ctrl-Q: quit.\n{}",
+                "Terminal too small: resize to at least 79 x 24. Ctrl-Q / Ctrl-W: quit.\n{}",
                 sanitize(&app.status.0)
             ),
             app.theme.base(),

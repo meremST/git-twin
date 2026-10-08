@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::action::Action;
-use super::dialog::Tone;
+use super::dialog::{Dialog, Kind, Tone};
 use super::diffview::{BuildOpts, DKind, DLine, DiffView, Show, WordStyle};
 use super::input::TextInput;
 use super::worker::{After, Cancel, Payload};
@@ -1176,7 +1176,7 @@ impl App {
                 }
             }
             A::AboutGitk => self.info("About Git Twin (gitt)", &about_text("gitk")),
-            A::KeyBindings => self.info("Key bindings", KEYS_HELP),
+            A::KeyBindings => self.dialogs.push(keybindings_dialog()),
             A::SelectRow(i) => {
                 self.select_row(*i);
                 self.hist.focus = HFocus::List;
@@ -1882,48 +1882,101 @@ pub fn about_text(which: &str) -> String {
     )
 }
 
-pub const KEYS_HELP: &str = "\
-Global
-  F10 / Alt+letter   open menus        Tab / Shift-Tab   next / previous pane
-  Ctrl-Q             quit              F11               maximize focused pane
-  Ctrl-1 .. 9        (history) n-th parent   Alt-1..4 (worktree) focus pane
-  F6 / Ctrl-Tab      switch History / Worktree view
+fn keybindings_dialog() -> Dialog {
+    const KEY_WIDTH: usize = 27;
+    let sections: &[(&str, &[(&str, &str)])] = &[
+        (
+            "GLOBAL",
+            &[
+                ("F10 / Alt+letter", "Open menus"),
+                ("Tab / Shift-Tab", "Move to next / previous pane"),
+                ("Ctrl-Q / Ctrl-W", "Quit"),
+                ("F11", "Maximize / restore focused pane"),
+                ("Ctrl-1 .. 9", "Select n-th parent (History)"),
+                ("Alt-1 .. 4", "Focus pane (Worktree)"),
+                ("F6 / Ctrl-Tab", "Switch History / Worktree view"),
+                (
+                    "Shift-F10 / right click",
+                    "Context menu for row / file / line",
+                ),
+            ],
+        ),
+        (
+            "HISTORY",
+            &[
+                ("Up / p / k", "Previous commit"),
+                ("Down / n / j", "Next commit"),
+                ("PageUp / PageDown", "Move by page"),
+                ("Home / End", "First / last commit"),
+                (
+                    "Ctrl-Up/Down/PgUp/PgDn",
+                    "Scroll list without changing selection",
+                ),
+                ("Left / z / h", "Back in selection history"),
+                ("Right / x / l", "Forward in selection history"),
+                ("Shift-Up / Shift-Down", "Find previous / next match"),
+                ("/ or Ctrl-F", "Open find box"),
+                ("Enter / Ctrl-G", "Next match"),
+                ("?", "Previous match"),
+                ("g / f", "Focus SHA entry / next file in diff"),
+                ("Space / d", "Scroll diff down"),
+                ("Backspace / Delete / b / u", "Scroll diff up"),
+                ("Ctrl-S / Ctrl-R", "Next / previous diff search hit"),
+                ("Ctrl-+ / Ctrl--", "More / less context"),
+                ("F5 / Shift-F5", "Update / reload"),
+                ("F2", "List references"),
+                ("F4 / Shift-F4", "Edit / create view"),
+                ("c (diff pane)", "Copy selection"),
+                ("Drag / Shift-Left/Right", "Select text (copy only)"),
+                ("Shift-Up/Down (diff)", "Select whole lines"),
+            ],
+        ),
+        (
+            "WORKTREE",
+            &[
+                ("Ctrl-T / Ctrl-U", "Stage / unstage selected files"),
+                ("Ctrl-I", "Stage changed files"),
+                ("Ctrl-J", "Revert selected changes"),
+                ("Ctrl-E / Ctrl-S", "Amend last commit / sign off"),
+                ("Ctrl-Enter / Alt-Enter", "Commit"),
+                ("F5 / Ctrl-R", "Rescan"),
+                ("Ctrl-N / Ctrl-O", "Create branch / checkout"),
+                ("Ctrl-M / Ctrl-P", "Merge / push"),
+                ("Ctrl-- / Ctrl-+", "Less / more context"),
+                ("Space / status click", "Stage / unstage file"),
+                ("Up / Down (diff)", "Move between lines"),
+                ("Shift-Up/Down (diff)", "Select lines"),
+                ("s / r (diff)", "Stage / revert hunk or selected lines"),
+                ("Ctrl-C / drag", "Copy selection / select text"),
+                ("Ctrl-Z / Ctrl-Y", "Undo / redo message"),
+                ("Ctrl-X / Ctrl-C / Ctrl-V", "Cut / copy / paste message"),
+                ("Ctrl-A", "Select all message text"),
+                ("Ctrl-X Ctrl-E / F4", "Open external editor"),
+            ],
+        ),
+        (
+            "COMPACT SCREENS & FORMS",
+            &[
+                ("Below 120x35", "Click pane tabs or use Tab; F11 zooms pane"),
+                ("Form scrolling", "Wheel or Alt-PageUp/PageDown"),
+                ("Alt-Home / Alt-End", "Jump to form start / end"),
+            ],
+        ),
+    ];
 
-History (gitk)
-  Up/p/k  Down/n/j   previous / next commit
-  PageUp / PageDown  page in commit list    Home / End   first / last commit
-  Ctrl-Up/Down/PgUp/PgDn  scroll the list without changing selection
-  Left/z/h  Right/x/l     back / forward in selection history
-  Shift-Up / Shift-Down   find previous / next match
-  / or Ctrl-F  find box   Enter / Ctrl-G  next match   ?  previous match
-  g  SHA1 entry           f  next file in the diff
-  Space / d  diff down    Backspace / Delete / b / u  diff up
-  Ctrl-S / Ctrl-R         next / previous diff search hit
-  Ctrl-+ / Ctrl--         more / less context
-  F5 update   Shift-F5 reload   F2 list references   F4 / Shift-F4 edit / new view
-  Shift-F10 or right click   context menu of the selected row / file / line
-  c (diff pane)           copy selection
-  Drag / Shift-Left/Right select exact text (copy only)
-  Shift-Up/Down in diff  select whole lines
-
-Worktree (git gui)
-  Ctrl-T / Ctrl-U   stage / unstage selected files (toggle in the lists)
-  Ctrl-I  stage changed files      Ctrl-J  revert selected changes
-  Ctrl-E  amend last commit        Ctrl-S  sign off
-  Ctrl-Enter or Alt-Enter  commit  F5 / Ctrl-R  rescan
-  Ctrl-N / Ctrl-O / Ctrl-M / Ctrl-P  create branch / checkout / merge / push
-  Ctrl-- / Ctrl-+  less / more context
-  Space or click on the status icon   stage / unstage the file
-  In the diff: Up/Down move, Shift+Up/Down select lines,
-               s  stage (or unstage) hunk / selected lines,  r  revert them,
-               Ctrl-C copy selection; drag or Shift-Left/Right selects text
-               (text selection is copy-only; use Shift-Up/Down for patches)
-  Message: Ctrl-Z / Ctrl-Y undo / redo, Ctrl-X/C/V cut/copy/paste,
-           Ctrl-A select all, Ctrl-X Ctrl-E (or F4) external editor
-
-Compact screens
-  Below 120x35: click pane tabs or use Tab; F11 toggles single-pane zoom
-  Form scrolling: wheel or Alt-PageUp/PageDown; Alt-Home/End jumps to ends
-  Quit with a message: confirmation (unless disabled in Preferences)
-  Launch History: gitt     Launch Worktree: git tui (executable git-tui)
-";
+    let mut dialog = Dialog::new("Key bindings", Kind::Info);
+    dialog.width = 78;
+    dialog.buttons = vec!["Close".into()];
+    for (section, bindings) in sections {
+        if !dialog.body.is_empty() {
+            dialog.body.push((String::new(), Tone::Normal));
+        }
+        dialog.body.push((section.to_string(), Tone::Strong));
+        for (key, description) in *bindings {
+            dialog
+                .body
+                .push((format!("  {key:<KEY_WIDTH$}  {description}"), Tone::Code));
+        }
+    }
+    dialog
+}

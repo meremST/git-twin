@@ -91,7 +91,7 @@ separement les tags voisins dans l'historique.
 | `Shift-F10` / clic droit | Menu contextuel |
 | `F1` | Aide clavier |
 | `F11` | Agrandir / restaurer le panneau actif |
-| `Ctrl-Q` | Confirmer si le message est non vide, sauvegarder le brouillon et quitter |
+| `Ctrl-Q` / `Ctrl-W` | Confirmer si le message est non vide, sauvegarder le brouillon et quitter |
 | Glisser dans un diff / `Shift-Gauche/Droite` | Selectionner du texte precis pour la copie |
 | `Shift-Haut/Bas` dans un diff | Selectionner des lignes entieres pour l'indexation |
 | Molette / `Alt-PageUp/PageDown` dans un formulaire | Faire defiler sans changer le champ actif |
