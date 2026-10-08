@@ -164,7 +164,8 @@ Le coloris Gruvbox conserve les fonds chauds de
 fonds de diff inspires de [Gruvbox Material](https://github.com/sainnhe/gruvbox-material).
 Le focus et HEAD sont dores, les branches vert sauge, les remotes bleu-vert
 et les tags mauves ; les accents clairs sont assombris pour rester lisibles
-sur les selections. Le rendu le plus fidele utilise `--colors truecolor`.
+sur les selections. L'onglet actif et le menu ouvert sont surlignes en dore
+plein. Le rendu le plus fidele utilise `--colors truecolor`.
 Le presse-papiers OSC 52 est optionnel et desactive par defaut.
 
 ## Developpement

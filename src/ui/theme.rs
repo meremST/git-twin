@@ -188,7 +188,7 @@ const GRUVBOX_DARK: Palette = Palette {
     dim: 0xa89984,
     border: 0x504945,
     accent: 0xd8a657,
-    sel_bg: 0x3c3836,
+    sel_bg: 0x45403d,
     sel_dim_bg: 0x32302f,
     bar_bg: 0x1d2021,
     add: 0xa9b665,
@@ -216,7 +216,7 @@ const GRUVBOX_LIGHT: Palette = Palette {
     dim: 0x6f6258,
     border: 0xbdae93,
     accent: 0x8f5e10,
-    sel_bg: 0xe5d5ad,
+    sel_bg: 0xddccab,
     sel_dim_bg: 0xf2e5bc,
     bar_bg: 0xebdbb2,
     add: 0x626b25,
@@ -347,6 +347,8 @@ pub struct Theme {
     pub tag: Color,
     pub graph: [Color; 8],
     pub icons: Icons,
+    /// Fill the active view tab / open menu title with the accent colour.
+    accent_tabs: bool,
     /// With 16 colours, backgrounds are not reliable: use reverse video.
     pub low_color: bool,
 }
@@ -395,7 +397,12 @@ impl Theme {
             dim: c(p.dim),
             border: c(p.border),
             accent: c(p.accent),
-            sel_bg: if low { Color::Blue } else { c(p.sel_bg) },
+            sel_bg: match (cfg.color_scheme, cfg.theme, depth) {
+                _ if low => Color::Blue,
+                // Grey 238 would drop red accents below 3:1.
+                (ColorScheme::Gruvbox, ThemeName::Dark, Depth::C256) => Color::Indexed(237),
+                _ => c(p.sel_bg),
+            },
             sel_dim_bg: if low {
                 Color::DarkGray
             } else {
@@ -417,6 +424,7 @@ impl Theme {
             tag: c(p.tag),
             graph: p.graph.map(c),
             icons: Icons::new(cfg.icons),
+            accent_tabs: cfg.color_scheme == ColorScheme::Gruvbox && !low,
             low_color: low,
         }
     }
@@ -459,6 +467,7 @@ impl Theme {
                 Color::LightCyan,
             ],
             icons: Icons::new(cfg.icons),
+            accent_tabs: false,
             // No reliable background colours to pair with reversed selection.
             low_color: true,
         }
@@ -561,6 +570,17 @@ impl Theme {
 
     pub fn bar(&self) -> Style {
         Style::default().fg(self.fg).bg(self.bar_bg)
+    }
+
+    /// Active view tab or open menu title in the top bar.
+    pub fn bar_active(&self) -> Style {
+        if self.accent_tabs {
+            return Style::default()
+                .fg(self.bg)
+                .bg(self.accent)
+                .add_modifier(Modifier::BOLD);
+        }
+        self.bar().patch(self.selected(true))
     }
 
     pub fn graph_color(&self, i: u8) -> Color {
@@ -739,6 +759,10 @@ mod tests {
                 }
                 assert_ne!(t.add_bg, t.del_bg);
                 assert_ne!(t.sel_bg, t.sel_dim_bg);
+                let tab = t.bar_active();
+                assert_eq!((tab.fg, tab.bg), (Some(t.bg), Some(t.accent)));
+                contrast(t.bg, t.accent, 4.5);
+                contrast(t.sel_bg, t.bg, 1.3);
                 assert_eq!(t.head, t.accent);
                 assert_ne!(t.branch, t.remote);
                 assert_ne!(t.remote, t.tag);

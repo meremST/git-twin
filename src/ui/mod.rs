@@ -171,7 +171,7 @@ fn menu_bar(f: &mut Frame, app: &mut App, r: Rect) {
     {
         let zone = Rect::new(r.x + x, r.y, w.min(r.width.saturating_sub(x)), 1);
         let style = if app.menu.as_ref().and_then(|m| m.bar) == Some(i) {
-            app.theme.bar().patch(app.theme.selected(true))
+            app.theme.bar_active()
         } else {
             app.theme.bar()
         };
@@ -190,7 +190,7 @@ fn menu_bar(f: &mut Frame, app: &mut App, r: Rect) {
             zone,
             label,
             if app.view == view {
-                app.theme.bar().patch(app.theme.selected(true))
+                app.theme.bar_active()
             } else {
                 app.theme.bar()
             },
