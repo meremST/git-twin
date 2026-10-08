@@ -1145,7 +1145,7 @@ impl App {
         match a {
             A::Update | A::Reload => {
                 self.refresh_all(None);
-                self.set_status("Reloading...", StatusTone::Busy);
+                self.set_busy_status("Reloading...");
             }
             A::RereadRefs => self.load_refs(),
             A::ListRefs => self.open_list_refs(),

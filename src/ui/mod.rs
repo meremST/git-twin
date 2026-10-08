@@ -83,7 +83,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         StatusTone::Error => app.theme.error,
     };
     let flags = if app.read_only { "READ ONLY | " } else { "" };
-    let busy = if app.busy() { "Working | " } else { "" };
+    let busy = if app.busy() || app.pending_busy_status.is_some() {
+        "Working | "
+    } else {
+        ""
+    };
     text(
         f,
         row(area, area.height - 1),

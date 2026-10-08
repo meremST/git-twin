@@ -997,7 +997,7 @@ impl App {
                 self.generation += 1;
                 self.load_refs();
                 self.rescan();
-                self.set_status("Rescanning...", StatusTone::Busy);
+                self.set_busy_status("Rescanning...");
             }
             A::StageSelected | A::UnstageSelected => {
                 if !self.guard_write() {
@@ -1213,7 +1213,7 @@ impl App {
             }
             A::DbVerify => {
                 let r = self.runner.clone();
-                self.set_status("Verifying the object database...", StatusTone::Busy);
+                self.set_busy_status("Verifying the object database...");
                 self.workers.read(self.generation, move || Payload::Text {
                     title: "Verify Database".into(),
                     result: r

@@ -104,6 +104,12 @@ pub struct App {
     pub menu: Option<MenuState>,
     pub dialogs: Vec<Dialog>,
     pub status: (String, StatusTone),
+    /// Set by [`App::set_busy_status`] to the time a transient busy message
+    /// (e.g. "Reloading...", "Rescanning...") was shown and that exact text,
+    /// so `tick` can restore the status bar to "Ready." once the triggered
+    /// background work completes and at least a minimal duration has passed
+    /// (avoids a flicker on fast refreshes).
+    pub pending_busy_status: Option<(Instant, &'static str)>,
     pub workers: Workers,
     pub generation: u64,
     pub req: Requests,
@@ -183,6 +189,7 @@ impl App {
                 .into_iter()
                 .collect(),
             status: (String::from("Ready."), StatusTone::Info),
+            pending_busy_status: None,
             workers: Workers::new(4),
             generation: 1,
             req: Requests::default(),
@@ -226,6 +233,15 @@ impl App {
 
     pub fn set_status(&mut self, s: impl Into<String>, tone: StatusTone) {
         self.status = (s.into(), tone);
+    }
+
+    /// Shows a transient busy message (e.g. "Reloading...", "Rescanning...")
+    /// that `tick` automatically clears back to "Ready." once the triggered
+    /// background work finishes, holding it for at least 1s so fast
+    /// refreshes don't just flicker.
+    pub fn set_busy_status(&mut self, s: &'static str) {
+        self.set_status(s, StatusTone::Busy);
+        self.pending_busy_status = Some((Instant::now(), s));
     }
 
     pub fn error(&mut self, title: &str, e: impl std::fmt::Display) {
@@ -439,6 +455,15 @@ impl App {
         self.history_tick(now);
         if now.duration_since(self.last_draft_save) > Duration::from_secs(2) {
             self.save_draft();
+        }
+        if let Some((started, text)) = self.pending_busy_status
+            && !self.busy()
+            && now.duration_since(started) >= Duration::from_millis(500)
+        {
+            self.pending_busy_status = None;
+            if self.status == (String::from(text), StatusTone::Busy) {
+                self.set_status("Ready.", StatusTone::Info);
+            }
         }
     }
 
