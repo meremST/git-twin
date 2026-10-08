@@ -353,6 +353,49 @@ impl App {
         }
     }
 
+    /// Starts the configured editor on a file of the working copy. The editor
+    /// runs detached, so the terminal stays in the TUI (GUI editors such as VS Code).
+    pub fn open_in_editor(&mut self, path: &[u8]) {
+        use std::os::unix::ffi::OsStrExt;
+        let mut words = self.cfg.editor.split_whitespace();
+        let Some(program) = words.next() else {
+            self.set_status(
+                "No editor set: choose one in Preferences (External editor).",
+                StatusTone::Error,
+            );
+            return;
+        };
+        let file = self.repo.cwd().join(std::ffi::OsStr::from_bytes(path));
+        if !file.exists() {
+            self.set_status(
+                format!(
+                    "{} is not in the working copy.",
+                    crate::domain::sanitize::display_bytes(path)
+                ),
+                StatusTone::Error,
+            );
+            return;
+        }
+        let spawned = std::process::Command::new(program)
+            .args(words)
+            .arg(&file)
+            .current_dir(self.repo.cwd())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        match spawned {
+            Ok(mut child) => {
+                // Reap the launcher in the background so no zombie is left behind.
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+                self.set_status(format!("Opened in {program}."), StatusTone::Info);
+            }
+            Err(e) => self.error("Open in editor", format!("{program}: {e}")),
+        }
+    }
+
     pub fn request_handoff(&mut self, h: Handoff) {
         if !matches!(h, Handoff::Editor) && !self.guard_write() {
             return;
@@ -773,6 +816,7 @@ impl App {
                 self.menu = None;
             }
             Action::Preferences | Action::WtOptions => self.open_preferences(),
+            Action::OpenInEditor(p) => self.open_in_editor(&p),
             Action::Copy => self.copy_focused(),
             _ => {}
         }

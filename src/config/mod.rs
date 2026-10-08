@@ -135,6 +135,9 @@ pub struct Config {
     pub double_click_ms: u64,
     /// Ask before quitting while the commit message is not empty.
     pub confirm_quit: bool,
+    /// Command used by "Open in editor" on files, run without a shell, with
+    /// the file path appended. Empty disables the action.
+    pub editor: String,
 }
 
 impl Default for Config {
@@ -158,6 +161,7 @@ impl Default for Config {
             allow_textconv: false,
             double_click_ms: 400,
             confirm_quit: true,
+            editor: "code".into(),
         }
     }
 }
@@ -193,6 +197,7 @@ impl Config {
         self.double_click_ms = self.double_click_ms.clamp(100, 2000);
         self.graph_max_lanes = self.graph_max_lanes.min(500);
         self.graph_cut_after = self.graph_cut_after.min(1_000_000);
+        self.editor = self.editor.trim().to_string();
         self
     }
 

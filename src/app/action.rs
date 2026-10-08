@@ -118,6 +118,7 @@ pub enum Action {
     ExternalDiff(Vec<u8>),
     BlameParent(Vec<u8>),
     CopyPath(Vec<u8>),
+    OpenInEditor(Vec<u8>),
     LineOrigin(usize),
 
     // ---- git gui

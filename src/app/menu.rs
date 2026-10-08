@@ -529,6 +529,20 @@ impl App {
         }
     }
 
+    fn open_in_editor_item(&self, path: Vec<u8>) -> MenuItem {
+        let ed = self.cfg.editor.as_str();
+        if ed.is_empty() {
+            en(
+                "Open in editor (none set in Preferences)",
+                "",
+                Action::OpenInEditor(path),
+                false,
+            )
+        } else {
+            e(&format!("Open in {ed}"), "", Action::OpenInEditor(path))
+        }
+    }
+
     fn context_items(&self, c: &Ctx) -> (Option<String>, Vec<MenuItem>) {
         match c {
             Ctx::Commit(row) => {
@@ -680,6 +694,7 @@ impl App {
                             !self.hist.tree_mode && !self.read_only,
                         ),
                         e("Blame parent commit", "", Action::BlameParent(p.clone())),
+                        self.open_in_editor_item(p.clone()),
                         e("Copy path", "", Action::CopyPath(p)),
                     ],
                 )
@@ -758,6 +773,7 @@ impl App {
                     ));
                 }
                 v.push(MenuItem::Sep);
+                v.push(self.open_in_editor_item(f.path.clone()));
                 v.push(e("Copy path", "", Action::CopyPath(f.path.clone())));
                 (Some(f.display.clone()), v)
             }

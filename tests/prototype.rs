@@ -1607,3 +1607,59 @@ fn cut_graph_lines_end_in_arrows_that_lead_to_each_other() {
         assert_eq!(app.hist.sel, Some(row));
     }
 }
+
+#[test]
+fn open_in_editor_runs_configured_editor_on_the_working_copy_file() {
+    let dir = fixture();
+    let tools = tempfile::tempdir().unwrap();
+    let script = tools.path().join("fake-editor");
+    let record = tools.path().join("args.txt");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\necho \"$@\" > '{}'\n", record.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.cfg.editor = format!("{} --reuse-window", script.display());
+
+    app.dispatch(Action::OpenInEditor(b"hello.txt".to_vec()));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !record.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let args = fs::read_to_string(&record).expect("editor was not started");
+    assert_eq!(
+        args.trim(),
+        format!("--reuse-window {}", dir.path().join("hello.txt").display())
+    );
+
+    app.dispatch(Action::OpenInEditor(b"missing.txt".to_vec()));
+    assert!(
+        app.status.0.contains("not in the working copy"),
+        "{}",
+        app.status.0
+    );
+
+    app.cfg.editor = String::new();
+    app.dispatch(Action::OpenInEditor(b"hello.txt".to_vec()));
+    assert!(app.status.0.contains("No editor set"), "{}", app.status.0);
+
+    app.cfg.editor = "/nonexistent/editor-xyz".into();
+    app.dispatch(Action::OpenInEditor(b"hello.txt".to_vec()));
+    assert!(app.status.0.contains("Open in editor"), "{}", app.status.0);
+}
+
+#[test]
+fn editor_setting_defaults_to_code_and_is_editable_in_preferences() {
+    assert_eq!(Config::default().editor, "code");
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.open_preferences();
+    let d = app.dialogs.last().unwrap();
+    assert_eq!(d.text(16), "code");
+}

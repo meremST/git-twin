@@ -7,6 +7,10 @@ des stash et interface Worktree affinee.
 
 ### Nouveautes
 
+- Clic droit sur un fichier (panneau patch de History et Worktree) : « Open
+  in editor ». L'editeur se choisit dans les preferences (`editor` dans la
+  configuration, `code` par defaut). Les editeurs terminaux ne sont pas
+  geres par cette action.
 - Themes Gruvbox ajoutes, avec un menu deroulant dans les preferences ;
   contraste de la selection et de l'onglet actif ameliore.
 - Liste de references accessible avec F2 ; aide des raccourcis clavier

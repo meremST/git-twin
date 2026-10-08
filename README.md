@@ -180,6 +180,12 @@ libere la colonne (`v` / `^` en ASCII). Un clic sur le pointille de fin mene
 au commit parent ; un clic sur celui de reprise remonte a la coupure (clics
 repetes : coupure suivante quand plusieurs lignes menent au meme parent).
 
+Le clic droit sur un fichier propose « Open in editor » (panneau patch de
+History et Worktree). La commande est lancee sans terminal avec le chemin du
+fichier ajoute ; elle se regle par `editor` dans la configuration ou dans
+Preferences (`code` par defaut, vide = desactive). Les editeurs terminaux
+(nvim, vim) ne sont pas adaptes a cette action.
+
 ## Developpement
 
 ```sh
