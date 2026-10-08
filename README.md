@@ -119,6 +119,7 @@ gitt --repo /chemin/vers/depot --all
 gitt chemin/fichier.c
 gitt --all -- src/ docs/
 git tui --repo /chemin/vers/depot --theme light --colors 256
+git tui --repo /chemin/vers/depot --theme dark --color-scheme gruvbox
 git tui --repo /chemin/vers/depot --theme terminal
 ```
 
@@ -146,6 +147,24 @@ Pour l'aide via Git, utiliser `git tui -h` ou `git-tui --help` :
 
 Les preferences sont stockees sous `$XDG_CONFIG_HOME/git-twin`, l'etat et les
 brouillons sous `$XDG_STATE_HOME/git-twin`, avec les replis XDG habituels.
+Dans **Edit > Preferences**, `Theme` choisit le mode `dark`, `light` ou
+`terminal`. Pour `dark` et `light`, le menu deroulant `Color scheme` propose
+`default` (les couleurs existantes) et `gruvbox` : Gruvbox Dark en mode sombre,
+Gruvbox Light en mode clair. Ouvrir le menu avec Entree, Espace ou un clic,
+choisir avec les fleches puis Entree, ou cliquer sur un coloris ; Echap ferme
+le menu sans changer la selection. Le bouton `OK` applique et enregistre les
+preferences ; `Cancel` abandonne les modifications.
+Le mode `terminal` masque ce menu et conserve le coloris pour le retour a
+`dark` ou `light`. Dans `config.toml`, ces choix correspondent a
+`theme = "dark"` et `color_scheme = "gruvbox"` ; sans `color_scheme`,
+le coloris `default` est conserve. `--color-scheme default|gruvbox` permet
+aussi de choisir le coloris au lancement, sans effet en mode `terminal`.
+Le coloris Gruvbox conserve les fonds chauds de
+[Gruvbox](https://github.com/morhetz/gruvbox), avec des accents adoucis et des
+fonds de diff inspires de [Gruvbox Material](https://github.com/sainnhe/gruvbox-material).
+Le focus et HEAD sont dores, les branches vert sauge, les remotes bleu-vert
+et les tags mauves ; les accents clairs sont assombris pour rester lisibles
+sur les selections. Le rendu le plus fidele utilise `--colors truecolor`.
 Le presse-papiers OSC 52 est optionnel et desactive par defaut.
 
 ## Developpement

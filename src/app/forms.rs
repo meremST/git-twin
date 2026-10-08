@@ -7,7 +7,7 @@ use super::action::Action;
 use super::dialog::{Dialog, DialogResult, Field, FormKind, Kind, Tone};
 use super::worker::{After, Payload};
 use super::{App, Handoff, Pending, StatusTone};
-use crate::config::{Handoff as HandoffCfg, IconMode, StageUntracked, ThemeName};
+use crate::config::{ColorScheme, Handoff as HandoffCfg, IconMode, StageUntracked, ThemeName};
 use crate::domain::oid::Oid;
 use crate::domain::refs::RefKind;
 use crate::domain::sanitize;
@@ -72,6 +72,14 @@ impl App {
                     ThemeName::Dark => 0,
                     ThemeName::Light => 1,
                     ThemeName::Terminal => 2,
+                },
+            ),
+            Field::dropdown(
+                "Color scheme",
+                &["default", "gruvbox"],
+                match c.color_scheme {
+                    ColorScheme::Default => 0,
+                    ColorScheme::Gruvbox => 1,
                 },
             ),
             Field::choice(
@@ -972,33 +980,37 @@ impl App {
             2 => ThemeName::Terminal,
             _ => ThemeName::Dark,
         };
-        c.icons = match d.chosen(1) {
+        c.color_scheme = match d.chosen(1) {
+            1 => ColorScheme::Gruvbox,
+            _ => ColorScheme::Default,
+        };
+        c.icons = match d.chosen(2) {
             1 => IconMode::Nerd,
             2 => IconMode::Ascii,
             _ => IconMode::Unicode,
         };
-        c.mouse = d.checked(2);
-        c.graph_connectors = d.checked(3);
-        c.osc52 = d.checked(4);
-        let (Some(hc), Some(wc), Some(tw), Some(cw)) = (num(5), num(6), num(7), num(8)) else {
+        c.mouse = d.checked(3);
+        c.graph_connectors = d.checked(4);
+        c.osc52 = d.checked(5);
+        let (Some(hc), Some(wc), Some(tw), Some(cw)) = (num(6), num(7), num(8), num(9)) else {
             return self.reject(d, "Numeric fields must contain positive integers.");
         };
         c.history_context = hc as u32;
         c.worktree_context = wc as u32;
         c.tab_width = tw.min(16) as u8;
         c.commit_width = cw.min(400) as u16;
-        c.stage_untracked = match d.chosen(9) {
+        c.stage_untracked = match d.chosen(10) {
             1 => StageUntracked::Yes,
             2 => StageUntracked::No,
             _ => StageUntracked::Ask,
         };
-        c.commit_handoff = match d.chosen(10) {
+        c.commit_handoff = match d.chosen(11) {
             1 => HandoffCfg::Always,
             2 => HandoffCfg::Never,
             _ => HandoffCfg::Auto,
         };
-        c.allow_textconv = d.checked(11);
-        c.confirm_quit = d.checked(12);
+        c.allow_textconv = d.checked(12);
+        c.confirm_quit = d.checked(13);
         let c = c.clamped();
         let ctx_changed = c.history_context != self.cfg.history_context;
         let wctx_changed = c.worktree_context != self.cfg.worktree_context;

@@ -49,6 +49,14 @@ pub enum ThemeName {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
+pub enum ColorScheme {
+    #[default]
+    Default,
+    Gruvbox,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
 pub enum IconMode {
     /// Unicode box drawing and symbols (no Nerd Font needed).
     #[default]
@@ -97,6 +105,7 @@ pub enum Handoff {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub theme: ThemeName,
+    pub color_scheme: ColorScheme,
     pub icons: IconMode,
     pub colors: ColorMode,
     pub mouse: bool,
@@ -126,6 +135,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             theme: ThemeName::Dark,
+            color_scheme: ColorScheme::Default,
             icons: IconMode::Unicode,
             colors: ColorMode::Auto,
             mouse: true,
@@ -329,10 +339,30 @@ mod tests {
         assert!(toml::from_str::<Config>("bogus = 1").is_err());
         let partial: Config = toml::from_str("theme = \"light\"\nicons = \"ascii\"").unwrap();
         assert_eq!(partial.theme, ThemeName::Light);
+        assert_eq!(partial.color_scheme, ColorScheme::Default);
         assert_eq!(partial.icons, IconMode::Ascii);
         assert!(partial.mouse);
         let colors: Config = toml::from_str("colors = \"256\"").unwrap();
         assert_eq!(colors.colors, ColorMode::C256);
+    }
+
+    #[test]
+    fn color_scheme_config_is_backward_compatible_and_persistent() {
+        for theme in ["dark", "light", "terminal"] {
+            let old: Config = toml::from_str(&format!("theme = \"{theme}\"")).unwrap();
+            assert_eq!(old.color_scheme, ColorScheme::Default);
+            for scheme in [ColorScheme::Default, ColorScheme::Gruvbox] {
+                let config = Config {
+                    color_scheme: scheme,
+                    ..old.clone()
+                };
+                let dir = tempfile::tempdir().unwrap();
+                let path = dir.path().join("config.toml");
+                atomic_write(&path, toml::to_string_pretty(&config).unwrap().as_bytes()).unwrap();
+                assert_eq!(Config::load_from(&path).unwrap(), config);
+            }
+        }
+        assert!(toml::from_str::<Config>("color_scheme = \"unknown\"").is_err());
     }
 
     #[test]

@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     app::{App, Handoff, Options, StatusTone, base64},
-    config::{self, ColorMode, Config, IconMode, State, ThemeName, ViewKind},
+    config::{self, ColorMode, ColorScheme, Config, IconMode, State, ThemeName, ViewKind},
     domain::sanitize::sanitize,
     git::{
         ops, repo,
@@ -49,6 +49,9 @@ struct Cli {
     icons: Option<IconMode>,
     #[arg(long, value_enum)]
     theme: Option<ThemeName>,
+    /// Color scheme for dark/light mode (ignored in terminal mode).
+    #[arg(long, value_enum)]
+    color_scheme: Option<ColorScheme>,
     #[arg(long, value_enum)]
     colors: Option<ColorMode>,
     #[command(subcommand)]
@@ -155,6 +158,9 @@ fn run(default_view: ViewKind, name: &'static str) -> Result<(), String> {
     let (mut cfg, warning) = Config::load();
     if let Some(v) = cli.theme {
         cfg.theme = v;
+    }
+    if let Some(v) = cli.color_scheme {
+        cfg.color_scheme = v;
     }
     if let Some(v) = cli.icons {
         cfg.icons = v;

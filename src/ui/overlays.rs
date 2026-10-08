@@ -139,8 +139,13 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
         );
     }
     let mut ranges = Vec::new();
+    let visible: Vec<bool> = (0..d.fields.len()).map(|i| d.field_visible(i)).collect();
     for (i, field) in d.fields.iter_mut().enumerate() {
         let start = rows.len();
+        if !visible[i] {
+            ranges.push((start, start));
+            continue;
+        }
         let focused = d.focus == i;
         let style = if focused {
             app.theme.base().patch(app.theme.selected(true))
@@ -221,16 +226,36 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 label,
                 options,
                 sel,
+                dropdown,
             } => {
-                let s = format!(
-                    "{label}: < {} >",
-                    options.get(*sel).map(String::as_str).unwrap_or("")
-                );
+                let value = options.get(*sel).map(String::as_str).unwrap_or("");
+                let s = if *dropdown {
+                    format!("{label}: [ {value} v ]")
+                } else {
+                    format!("{label}: < {value} >")
+                };
                 rows.extend(
                     wrap(&s, width)
                         .into_iter()
                         .map(|s| FormRow::Label(s, style, Some(Hit::DlgField(i)))),
                 );
+                if let Some((field, highlighted)) = d.open_choice
+                    && field == i
+                {
+                    for (option, label) in options.iter().enumerate() {
+                        let style = if option == highlighted {
+                            app.theme.base().patch(app.theme.selected(true))
+                        } else {
+                            app.theme.base().bg(app.theme.bg_alt)
+                        };
+                        let marker = if option == *sel { "*" } else { " " };
+                        rows.extend(
+                            wrap(&format!("  {marker} {label}"), width)
+                                .into_iter()
+                                .map(|s| FormRow::Label(s, style, Some(Hit::DlgChoice(i, option)))),
+                        );
+                    }
+                }
             }
             Field::Label(s, t) => {
                 rows.extend(

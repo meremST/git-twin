@@ -86,7 +86,8 @@ jamais l'etat, elle le lit et pousse des zones de hit-test.
 
 - `mod.rs` : `draw(frame, &mut App)` ; dispositions History et Worktree,
   bascule vers un mode compact par onglets en dessous de 120 x 35.
-- `theme.rs` : `Theme::new(&cfg)`. Trois palettes : `Dark`, `Light` (couleurs
+- `theme.rs` : `Theme::new(&cfg)`. Modes `Dark` et `Light`, avec un coloris
+  `Default` ou `Gruvbox` (`cfg.color_scheme`) adapte au mode (couleurs
   RGB fixes, degradees en 256/16 couleurs selon le terminal detecte ou force
   par `--colors`), et `Terminal` (n'utilise que `Color::Reset` et les couleurs
   ANSI nommees — Red, Green, Blue... — pour que l'interface suive la palette

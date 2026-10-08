@@ -123,6 +123,12 @@ impl App {
             return;
         };
         let col = usize::from(x.saturating_sub(r.x));
+        if let Some(d) = self.dialogs.last_mut()
+            && let Some((field, _)) = d.open_choice
+            && !matches!(hit, Hit::DlgField(i) | Hit::DlgChoice(i, _) if i == field)
+        {
+            d.open_choice = None;
+        }
         match hit {
             Hit::MenuTitle(i) => {
                 if self.menu.as_ref().and_then(|m| m.bar) == Some(i) {
@@ -228,10 +234,7 @@ impl App {
             }
             Hit::DlgChoice(i, opt) => {
                 if let Some(d) = self.dialogs.last_mut() {
-                    d.focus = i;
-                    if let Some(Field::Choice { sel, .. }) = d.fields.get_mut(i) {
-                        *sel = opt;
-                    }
+                    d.select_choice(i, opt);
                 }
             }
             Hit::DlgListRow(i, row) => {
@@ -258,11 +261,16 @@ impl App {
         let Some(d) = self.dialogs.last_mut() else {
             return;
         };
+        if !d.field_visible(i) {
+            return;
+        }
         d.focus = i;
+        d.reveal_focus = true;
         match d.fields.get_mut(i) {
             Some(Field::Text { input, .. }) => input.click(col),
             Some(Field::Area { area, .. }) => area.click(row, col, shift),
             Some(Field::Check { value, .. }) => *value = !*value,
+            Some(Field::Choice { dropdown: true, .. }) => d.toggle_dropdown(i),
             Some(Field::Choice { options, sel, .. }) => *sel = (*sel + 1) % options.len().max(1),
             _ => {}
         }

@@ -31,6 +31,7 @@ pub enum Field {
         label: String,
         options: Vec<String>,
         sel: usize,
+        dropdown: bool,
     },
     List {
         label: String,
@@ -142,7 +143,15 @@ impl Field {
             label: label.into(),
             options: options.iter().map(|s| s.to_string()).collect(),
             sel,
+            dropdown: false,
         }
+    }
+    pub fn dropdown(label: &str, options: &[&str], sel: usize) -> Field {
+        let mut field = Self::choice(label, options, sel);
+        if let Field::Choice { dropdown, .. } = &mut field {
+            *dropdown = true;
+        }
+        field
     }
     pub fn list(
         label: &str,
@@ -263,6 +272,8 @@ pub struct Dialog {
     pub content_height: usize,
     pub last_focus: Option<usize>,
     pub reveal_focus: bool,
+    /// Field index and highlighted option; selection is committed on acceptance.
+    pub open_choice: Option<(usize, usize)>,
 }
 
 pub enum DialogResult {
@@ -287,6 +298,7 @@ impl Dialog {
             content_height: 0,
             last_focus: None,
             reveal_focus: true,
+            open_choice: None,
         }
     }
 
@@ -334,7 +346,41 @@ impl Dialog {
         self.fields.len() + self.buttons.len()
     }
 
+    pub fn field_visible(&self, i: usize) -> bool {
+        !(matches!(self.kind, Kind::Form(FormKind::Preferences)) && i == 1 && self.chosen(0) == 2)
+    }
+
+    pub fn toggle_dropdown(&mut self, i: usize) {
+        if self.open_choice.is_some_and(|(field, _)| field == i) {
+            self.open_choice = None;
+        } else if self.field_visible(i)
+            && let Some(Field::Choice {
+                sel,
+                dropdown: true,
+                ..
+            }) = self.fields.get(i)
+        {
+            self.open_choice = Some((i, *sel));
+        }
+        self.reveal_focus = true;
+    }
+
+    pub fn select_choice(&mut self, i: usize, option: usize) {
+        if !self.field_visible(i) {
+            return;
+        }
+        if let Some(Field::Choice { options, sel, .. }) = self.fields.get_mut(i)
+            && option < options.len()
+        {
+            *sel = option;
+            self.focus = i;
+            self.open_choice = None;
+            self.reveal_focus = true;
+        }
+    }
+
     pub fn focus_next(&mut self, dir: isize) {
+        self.open_choice = None;
         let n = self.n_focus() as isize;
         if n == 0 {
             return;
@@ -343,7 +389,8 @@ impl Dialog {
         for _ in 0..n {
             f = (f + dir).rem_euclid(n);
             let idx = f as usize;
-            if idx >= self.fields.len() || self.fields[idx].focusable() {
+            if idx >= self.fields.len() || (self.field_visible(idx) && self.fields[idx].focusable())
+            {
                 self.focus = idx;
                 return;
             }
@@ -413,6 +460,28 @@ impl Dialog {
             return DialogResult::None;
         }
         self.reveal_focus = true;
+        if let Some((i, highlighted)) = self.open_choice {
+            let n = match &self.fields[i] {
+                Field::Choice { options, .. } => options.len(),
+                _ => 0,
+            };
+            match k.code {
+                C::Esc => self.open_choice = None,
+                C::Enter | C::Char(' ') => self.select_choice(i, highlighted),
+                C::Up | C::Left => {
+                    self.open_choice = Some((i, highlighted.saturating_sub(1)));
+                }
+                C::Down | C::Right => {
+                    self.open_choice = Some((i, (highlighted + 1).min(n.saturating_sub(1))));
+                }
+                C::Home => self.open_choice = Some((i, 0)),
+                C::End => self.open_choice = Some((i, n.saturating_sub(1))),
+                C::Tab => self.focus_next(1),
+                C::BackTab => self.focus_next(-1),
+                _ => {}
+            }
+            return DialogResult::None;
+        }
         if k.code == C::Esc
             && let Some(Field::List {
                 items,
@@ -490,6 +559,11 @@ impl Dialog {
                 C::Enter => return DialogResult::Button(0),
                 C::Up | C::Left => self.focus_next(-1),
                 C::Down | C::Right => self.focus_next(1),
+                _ => {}
+            },
+            Field::Choice { dropdown: true, .. } => match k.code {
+                C::Enter | C::Char(' ') | C::Down => self.toggle_dropdown(self.focus),
+                C::Up => self.focus_next(-1),
                 _ => {}
             },
             Field::Choice { options, sel, .. } => match k.code {
@@ -639,5 +713,38 @@ mod tests {
         };
         assert_eq!(items.len(), 4);
         assert!(!search.as_ref().unwrap().active);
+    }
+
+    #[test]
+    fn dropdown_accept_cancel_and_focus_navigation() {
+        let mut d = Dialog::new("Colors", Kind::Info).with_fields(vec![
+            Field::dropdown("Color scheme", &["default", "gruvbox"], 0),
+            Field::check("Other option", false),
+        ]);
+        let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
+        assert!(matches!(d.on_key(key(KeyCode::Enter)), DialogResult::None));
+        assert_eq!(d.open_choice, Some((0, 0)));
+        d.on_key(key(KeyCode::Down));
+        assert_eq!(d.chosen(0), 0);
+        assert_eq!(d.open_choice, Some((0, 1)));
+        assert!(matches!(d.on_key(key(KeyCode::Esc)), DialogResult::None));
+        assert_eq!(d.chosen(0), 0);
+        assert_eq!(d.open_choice, None);
+        d.on_key(key(KeyCode::Char(' ')));
+        d.on_key(key(KeyCode::End));
+        assert!(matches!(d.on_key(key(KeyCode::Enter)), DialogResult::None));
+        assert_eq!(d.chosen(0), 1);
+        assert_eq!(d.open_choice, None);
+        d.on_key(key(KeyCode::Enter));
+        d.on_key(key(KeyCode::Home));
+        d.on_key(key(KeyCode::Tab));
+        assert_eq!(d.focus, 1);
+        assert_eq!(d.chosen(0), 1);
+        assert_eq!(d.open_choice, None);
+        d.on_key(key(KeyCode::BackTab));
+        d.on_key(key(KeyCode::Down));
+        d.on_key(key(KeyCode::Up));
+        d.on_key(key(KeyCode::Enter));
+        assert_eq!(d.chosen(0), 0);
     }
 }

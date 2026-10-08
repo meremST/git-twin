@@ -470,9 +470,182 @@ fn menus_and_dialogs_have_topmost_click_targets() {
 }
 
 #[test]
+fn preferences_color_scheme_dropdown_and_persistence() {
+    use git_twin::{
+        app::dialog::DialogResult,
+        config::{self, ColorMode, ColorScheme, Handoff, StageUntracked, ThemeName},
+    };
+    use ratatui::style::Color;
+
+    // Keep preference writes away from the user's real XDG directories.
+    if std::env::var_os("GITT_THEME_TEST").is_none() {
+        let state = tempfile::tempdir().unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "preferences_color_scheme_dropdown_and_persistence",
+                "--nocapture",
+            ])
+            .env("GITT_THEME_TEST", "1")
+            .env("XDG_STATE_HOME", state.path().join("state"))
+            .env("XDG_CONFIG_HOME", state.path().join("config"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.cfg = Config {
+        colors: ColorMode::Truecolor,
+        icons: IconMode::Ascii,
+        graph_connectors: true,
+        osc52: true,
+        history_context: 7,
+        worktree_context: 9,
+        tab_width: 4,
+        commit_width: 90,
+        stage_untracked: StageUntracked::No,
+        commit_handoff: Handoff::Never,
+        allow_textconv: true,
+        confirm_quit: false,
+        ..Config::default()
+    };
+    let mut expected = app.cfg.clone();
+    let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
+    let click = |app: &mut App, hit: Hit| {
+        let r = app.hits.zones.iter().find(|(_, h)| *h == hit).unwrap().0;
+        assert_eq!(app.hits.at(r.x, r.y).unwrap().1, &hit);
+        app.on_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: r.x,
+            row: r.y,
+            modifiers: KeyModifiers::NONE,
+        });
+    };
+    app.open_preferences();
+    assert!(render(&mut app, 120, 40).contains("Color scheme: [ default v ]"));
+    click(&mut app, Hit::DlgField(1));
+    for (w, h) in [(120, 40), (80, 24), (79, 24)] {
+        let screen = render(&mut app, w, h);
+        assert!(
+            screen.contains("default") && screen.contains("gruvbox"),
+            "{screen}"
+        );
+        assert!(
+            app.hits
+                .zones
+                .iter()
+                .any(|(_, h)| *h == Hit::DlgChoice(1, 1))
+        );
+    }
+    click(&mut app, Hit::DlgChoice(1, 1));
+    assert_eq!(app.dialogs.last().unwrap().chosen(1), 1);
+    assert_eq!(app.dialogs.last().unwrap().open_choice, None);
+    assert_eq!(
+        app.cfg.color_scheme,
+        ColorScheme::Default,
+        "apply only on OK"
+    );
+
+    render(&mut app, 120, 40);
+    click(&mut app, Hit::DlgField(0)); // dark -> light
+    click(&mut app, Hit::DlgField(0)); // light -> terminal
+    let screen = render(&mut app, 120, 40);
+    assert!(screen.contains("Theme: < terminal >"));
+    assert!(!screen.contains("Color scheme"));
+    assert!(!app.hits.zones.iter().any(|(_, h)| *h == Hit::DlgField(1)));
+    app.on_key(key(KeyCode::Tab));
+    assert_eq!(
+        app.dialogs.last().unwrap().focus,
+        2,
+        "skip hidden color scheme"
+    );
+    app.on_key(key(KeyCode::BackTab));
+    assert_eq!(app.dialogs.last().unwrap().focus, 0);
+    app.on_key(key(KeyCode::Left)); // terminal -> light
+    assert!(render(&mut app, 120, 40).contains("Color scheme: [ gruvbox v ]"));
+    app.on_key(key(KeyCode::Left)); // light -> dark
+
+    for (mode, mode_index, bg) in [
+        (ThemeName::Dark, 0, Color::Rgb(0x28, 0x28, 0x28)),
+        (ThemeName::Light, 1, Color::Rgb(0xfb, 0xf1, 0xc7)),
+        (ThemeName::Terminal, 2, Color::Reset),
+    ] {
+        app.dialogs.last_mut().unwrap().select_choice(0, mode_index);
+        render(&mut app, 120, 40);
+        click(&mut app, Hit::DlgButton(0));
+        assert!(app.dialogs.is_empty());
+        expected.theme = mode;
+        expected.color_scheme = ColorScheme::Gruvbox;
+        assert_eq!(
+            app.cfg, expected,
+            "unrelated preferences must stay unchanged"
+        );
+        assert_eq!(app.theme.bg, bg);
+        assert_eq!(
+            Config::load_from(&config::config_file().unwrap()).unwrap(),
+            expected
+        );
+        app.open_preferences();
+        assert_eq!(app.dialogs.last().unwrap().chosen(0), mode_index);
+        assert_eq!(app.dialogs.last().unwrap().chosen(1), 1);
+    }
+
+    // Returning from terminal mode restores the saved color scheme.
+    app.on_key(key(KeyCode::Left));
+    app.on_key(key(KeyCode::Tab));
+    app.on_key(key(KeyCode::Enter));
+    app.on_key(key(KeyCode::Home));
+    app.on_key(key(KeyCode::Enter));
+    assert_eq!(app.dialogs.last().unwrap().chosen(1), 0);
+    assert_eq!(
+        app.dialogs.len(),
+        1,
+        "choosing a color must not submit the form"
+    );
+    app.on_dialog_result(DialogResult::Button(1));
+    assert_eq!(
+        app.cfg, expected,
+        "Cancel must leave the active theme unchanged"
+    );
+    assert_eq!(
+        Config::load_from(&config::config_file().unwrap()).unwrap(),
+        expected
+    );
+
+    app.open_preferences();
+    app.on_key(key(KeyCode::Left));
+    app.on_key(key(KeyCode::Tab));
+    app.on_key(key(KeyCode::Char(' ')));
+    app.on_key(key(KeyCode::Home));
+    app.on_key(key(KeyCode::Enter));
+    app.on_dialog_result(DialogResult::Button(0));
+    assert_eq!(app.cfg.color_scheme, ColorScheme::Default);
+    assert_eq!(app.theme.bg, Color::Rgb(0xe1, 0xe2, 0xe7));
+    assert_eq!(
+        Config::load_from(&config::config_file().unwrap()).unwrap(),
+        app.cfg
+    );
+}
+
+#[test]
 fn cli_commands_do_not_need_a_repository() {
     let dir = tempfile::tempdir().unwrap();
-    for args in [&["--help"][..], &["--version"], &["doctor"]] {
+    for args in [
+        &["--help"][..],
+        &["--version"],
+        &["doctor"],
+        &["--theme", "dark", "--color-scheme", "gruvbox", "doctor"],
+        &["--theme", "light", "--color-scheme", "gruvbox", "doctor"],
+        &["--theme", "terminal", "--color-scheme", "default", "doctor"],
+    ] {
         let output = Command::new(env!("CARGO_BIN_EXE_gitt"))
             .args(args)
             .current_dir(dir.path())

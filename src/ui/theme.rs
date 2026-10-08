@@ -3,7 +3,7 @@
 
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::config::{ColorMode, Config, IconMode, ThemeName};
+use crate::config::{ColorMode, ColorScheme, Config, IconMode, ThemeName};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Depth {
@@ -178,6 +178,65 @@ const LIGHT: Palette = Palette {
     ],
 };
 
+// Warm Gruvbox bases with softer Gruvbox Material accents and diff backgrounds.
+// Light accents are darkened where needed to stay legible on tinted selections.
+// https://github.com/sainnhe/gruvbox-material/blob/master/autoload/gruvbox_material.vim
+const GRUVBOX_DARK: Palette = Palette {
+    bg: 0x282828,
+    bg_alt: 0x32302f,
+    fg: 0xddc7a1,
+    dim: 0xa89984,
+    border: 0x504945,
+    accent: 0xd8a657,
+    sel_bg: 0x3c3836,
+    sel_dim_bg: 0x32302f,
+    bar_bg: 0x1d2021,
+    add: 0xa9b665,
+    del: 0xea6962,
+    add_bg: 0x34381b,
+    del_bg: 0x402120,
+    hunk: 0x7daea3,
+    meta: 0xd3869b,
+    warn: 0xd8a657,
+    error: 0xea6962,
+    ok: 0xa9b665,
+    head: 0xd8a657,
+    branch: 0x89b482,
+    remote: 0x7daea3,
+    tag: 0xd3869b,
+    graph: [
+        0x7daea3, 0xa9b665, 0xea6962, 0xd8a657, 0xd3869b, 0x89b482, 0xe78a4e, 0xddc7a1,
+    ],
+};
+
+const GRUVBOX_LIGHT: Palette = Palette {
+    bg: 0xfbf1c7,
+    bg_alt: 0xf4e8be,
+    fg: 0x514036,
+    dim: 0x6f6258,
+    border: 0xbdae93,
+    accent: 0x8f5e10,
+    sel_bg: 0xe5d5ad,
+    sel_dim_bg: 0xf2e5bc,
+    bar_bg: 0xebdbb2,
+    add: 0x626b25,
+    del: 0xaf2528,
+    add_bg: 0xe6eabc,
+    del_bg: 0xf9e0bb,
+    hunk: 0x266b79,
+    meta: 0x8f3f71,
+    warn: 0x8f5e10,
+    error: 0xaf2528,
+    ok: 0x626b25,
+    head: 0x8f5e10,
+    branch: 0x386b49,
+    remote: 0x266b79,
+    tag: 0x8f3f71,
+    graph: [
+        0x266b79, 0x626b25, 0xaf2528, 0x8f5e10, 0x8f3f71, 0x386b49, 0xaf3a03, 0x514036,
+    ],
+};
+
 /// Glyphs used by the renderer.
 #[derive(Clone, Debug)]
 pub struct Icons {
@@ -298,10 +357,12 @@ impl Theme {
             return Theme::terminal(cfg);
         }
         let depth = detect_depth(cfg.colors);
-        let p = match cfg.theme {
-            ThemeName::Dark => DARK,
-            ThemeName::Light => LIGHT,
-            ThemeName::Terminal => unreachable!(),
+        let p = match (cfg.theme, cfg.color_scheme) {
+            (ThemeName::Dark, ColorScheme::Default) => DARK,
+            (ThemeName::Light, ColorScheme::Default) => LIGHT,
+            (ThemeName::Dark, ColorScheme::Gruvbox) => GRUVBOX_DARK,
+            (ThemeName::Light, ColorScheme::Gruvbox) => GRUVBOX_LIGHT,
+            (ThemeName::Terminal, _) => unreachable!(),
         };
         let c = |v: u32| -> Color {
             let (r, g, b) = ((v >> 16) as u8, (v >> 8) as u8, v as u8);
@@ -314,6 +375,17 @@ impl Theme {
         let low = depth == Depth::C16;
         // In 16-colour mode keep the terminal's own background.
         let bgc = |v: u32| if low { Color::Reset } else { c(v) };
+        // Nearest-RGB conversion collapses the subtle diff tints into the same
+        // grey/beige in 256 colors. Keep additions green and deletions red.
+        let (add_bg, del_bg) = match (cfg.color_scheme, cfg.theme, depth) {
+            (ColorScheme::Gruvbox, ThemeName::Dark, Depth::C256) => {
+                (Color::Indexed(22), Color::Indexed(52))
+            }
+            (ColorScheme::Gruvbox, ThemeName::Light, Depth::C256) => {
+                (Color::Indexed(194), Color::Indexed(224))
+            }
+            _ => (bgc(p.add_bg), bgc(p.del_bg)),
+        };
         Theme {
             depth,
             terminal_palette: false,
@@ -332,8 +404,8 @@ impl Theme {
             bar_bg: bgc(p.bar_bg),
             add: c(p.add),
             del: c(p.del),
-            add_bg: bgc(p.add_bg),
-            del_bg: bgc(p.del_bg),
+            add_bg,
+            del_bg,
             hunk: c(p.hunk),
             meta: c(p.meta),
             warn: c(p.warn),
@@ -532,15 +604,144 @@ mod tests {
         for colors in [ColorMode::Truecolor, ColorMode::C256, ColorMode::C16] {
             for theme in [ThemeName::Dark, ThemeName::Light] {
                 for icons in [IconMode::Unicode, IconMode::Ascii, IconMode::Nerd] {
-                    let cfg = Config {
-                        colors,
-                        theme,
-                        icons,
-                        ..Config::default()
-                    };
-                    let t = Theme::new(&cfg);
-                    assert_eq!(t.truecolor(), colors == ColorMode::Truecolor);
+                    for color_scheme in [ColorScheme::Default, ColorScheme::Gruvbox] {
+                        let cfg = Config {
+                            colors,
+                            theme,
+                            icons,
+                            color_scheme,
+                            ..Config::default()
+                        };
+                        let t = Theme::new(&cfg);
+                        assert_eq!(t.truecolor(), colors == ColorMode::Truecolor);
+                        assert_eq!(t.low_color, colors == ColorMode::C16);
+                        for color in [t.bg, t.fg, t.add, t.del, t.accent] {
+                            match colors {
+                                ColorMode::Truecolor => assert!(matches!(color, Color::Rgb(..))),
+                                ColorMode::C256 => assert!(matches!(color, Color::Indexed(_))),
+                                ColorMode::C16 => {
+                                    assert!(!matches!(color, Color::Rgb(..) | Color::Indexed(_)));
+                                }
+                                ColorMode::Auto => unreachable!(),
+                            }
+                        }
+                    }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn gruvbox_follows_theme_mode_and_terminal_ignores_scheme() {
+        for (theme, bg, fg, add, del) in [
+            (ThemeName::Dark, 0x282828, 0xddc7a1, 0xa9b665, 0xea6962),
+            (ThemeName::Light, 0xfbf1c7, 0x514036, 0x626b25, 0xaf2528),
+        ] {
+            let cfg = Config {
+                theme,
+                color_scheme: ColorScheme::Gruvbox,
+                colors: ColorMode::Truecolor,
+                ..Config::default()
+            };
+            let rgb = |v: u32| Color::Rgb((v >> 16) as u8, (v >> 8) as u8, v as u8);
+            let t = Theme::new(&cfg);
+            assert_eq!(
+                (t.bg, t.fg, t.add, t.del),
+                (rgb(bg), rgb(fg), rgb(add), rgb(del))
+            );
+            assert_ne!(t.bg, t.sel_bg);
+            assert_ne!(t.sel_bg, t.sel_dim_bg);
+            assert_ne!(
+                t.bg,
+                Theme::new(&Config {
+                    color_scheme: ColorScheme::Default,
+                    ..cfg
+                })
+                .bg
+            );
+        }
+        for colors in [ColorMode::Truecolor, ColorMode::C256, ColorMode::C16] {
+            let cfg = Config {
+                theme: ThemeName::Terminal,
+                colors,
+                ..Config::default()
+            };
+            let default = Theme::new(&cfg);
+            let gruvbox = Theme::new(&Config {
+                color_scheme: ColorScheme::Gruvbox,
+                ..cfg
+            });
+            assert_eq!(format!("{default:?}"), format!("{gruvbox:?}"));
+        }
+    }
+
+    #[test]
+    fn gruvbox_text_contrast_and_diff_tints_survive_color_downgrade() {
+        fn luminance(color: Color) -> f64 {
+            let (r, g, b) = match color {
+                Color::Rgb(r, g, b) => (r, g, b),
+                Color::Indexed(i @ 16..=231) => {
+                    let levels = [0, 95, 135, 175, 215, 255];
+                    let n = usize::from(i - 16);
+                    (levels[n / 36], levels[n / 6 % 6], levels[n % 6])
+                }
+                Color::Indexed(i @ 232..=255) => {
+                    let grey = 8 + (i - 232) * 10;
+                    (grey, grey, grey)
+                }
+                _ => panic!("expected a fixed RGB or xterm color, got {color:?}"),
+            };
+            let linear = |v: u8| {
+                let c = f64::from(v) / 255.0;
+                if c <= 0.04045 {
+                    c / 12.92
+                } else {
+                    ((c + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+        }
+        let contrast = |fg: Color, bg: Color, minimum: f64| {
+            let (a, b) = (luminance(fg), luminance(bg));
+            let ratio = (a.max(b) + 0.05) / (a.min(b) + 0.05);
+            assert!(
+                ratio >= minimum,
+                "{fg:?} on {bg:?}: {ratio:.2}:1, expected at least {minimum}:1"
+            );
+        };
+        for theme in [ThemeName::Dark, ThemeName::Light] {
+            for colors in [ColorMode::Truecolor, ColorMode::C256] {
+                let t = Theme::new(&Config {
+                    theme,
+                    colors,
+                    color_scheme: ColorScheme::Gruvbox,
+                    ..Config::default()
+                });
+                for bg in [t.bg, t.bg_alt, t.bar_bg, t.sel_bg, t.sel_dim_bg] {
+                    contrast(t.fg, bg, 6.0);
+                    contrast(t.dim, bg, 3.0);
+                }
+                contrast(t.dim, t.bg, 4.5);
+                for fg in [
+                    t.accent, t.add, t.del, t.hunk, t.meta, t.warn, t.error, t.ok, t.head,
+                    t.branch, t.remote, t.tag,
+                ]
+                .into_iter()
+                .chain(t.graph)
+                {
+                    contrast(fg, t.bg, if t.truecolor() { 4.5 } else { 4.0 });
+                    contrast(fg, t.sel_bg, 3.0);
+                    contrast(fg, t.sel_dim_bg, 3.0);
+                }
+                for (fg, bg) in [(t.add, t.add_bg), (t.del, t.del_bg)] {
+                    contrast(fg, bg, if t.truecolor() { 4.5 } else { 3.0 });
+                    assert_ne!(bg, t.bg);
+                }
+                assert_ne!(t.add_bg, t.del_bg);
+                assert_ne!(t.sel_bg, t.sel_dim_bg);
+                assert_eq!(t.head, t.accent);
+                assert_ne!(t.branch, t.remote);
+                assert_ne!(t.remote, t.tag);
             }
         }
     }
