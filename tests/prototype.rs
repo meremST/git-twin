@@ -354,6 +354,54 @@ fn real_repository_renders_both_views_and_resizes() {
 }
 
 #[test]
+fn nerd_font_icons_decorate_both_views_without_overlap() {
+    let dir = fixture();
+    let mut app = app(dir.path(), true);
+    app.cfg.icons = IconMode::Nerd;
+    app.theme = git_twin::ui::theme::Theme::new(&app.cfg);
+    app.start();
+    settle(&mut app);
+    let screen = render(&mut app, 120, 35);
+    for expected in [
+        "\u{f1da} History",
+        "\u{e0a0} main",
+        "\u{f023} READ ONLY",
+        "\u{f060} Back",
+        "\u{f002} Find",
+    ] {
+        assert!(screen.contains(expected), "missing {expected}: {screen}");
+    }
+    assert!(!screen.contains("[main]"), "{screen}");
+    app.on_key(KeyEvent::new(KeyCode::F(6), KeyModifiers::NONE));
+    let screen = render(&mut app, 120, 35);
+    for expected in [
+        "\u{f040} Unstaged Changes (1)",
+        "\u{f046} Staged Changes (1)",
+        "\u{e64e} hello.txt",
+        "\u{f417} Commit",
+        "\u{f192} New Commit",
+        "\u{f10c} Amend Last Commit",
+    ] {
+        assert!(screen.contains(expected), "missing {expected}: {screen}");
+    }
+    for view in [ViewKind::Worktree, ViewKind::History] {
+        app.switch_view(view);
+        for (w, h) in [(79, 24), (120, 35), (200, 60)] {
+            render(&mut app, w, h);
+            for (r, hit) in &app.hits.zones {
+                if matches!(hit, Hit::MenuTitle(_) | Hit::ViewTab(_)) {
+                    assert_eq!(
+                        app.hits.at(r.x, r.y).unwrap().1,
+                        hit,
+                        "overlapping menu and view tabs at {w} x {h}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn icon_click_stages_file_and_read_only_refuses_mutations() {
     let dir = fixture();
     let mut app = app(dir.path(), false);
@@ -1364,4 +1412,38 @@ fn both_launchers_and_about_texts_use_the_new_names() {
     let worktree = git_twin::app::history::about_text("git gui");
     assert!(history.contains("Git Twin") && history.contains("gitt"));
     assert!(worktree.contains("Git TUI") && worktree.contains("git tui"));
+}
+
+#[test]
+fn clicking_a_reference_in_list_refs_shows_it_in_history() {
+    let dir = fixture();
+    git(dir.path(), &["tag", "v0", "HEAD"]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    let first = git(dir.path(), &["rev-parse", "HEAD~1"]).trim().to_string();
+    git(dir.path(), &["tag", "v-first", &first]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    settle(&mut app);
+    app.open_list_refs();
+    render(&mut app, 100, 40);
+    let row = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, h)| matches!(h, Hit::DlgListRow(0, i) if app.dialogs.last().is_some_and(|d| matches!(&d.fields[0], git_twin::app::dialog::Field::List { items, .. } if items[*i].ends_with("v-first")))))
+        .unwrap()
+        .0;
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: row.x + 1,
+        row: row.y,
+        modifiers: KeyModifiers::NONE,
+    });
+    settle(&mut app);
+    assert_eq!(app.hist.selected_oid().map(|o| o.to_string()), Some(first));
+    assert!(
+        app.dialogs.last().is_some(),
+        "list stays open after a click"
+    );
 }

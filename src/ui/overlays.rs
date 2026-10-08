@@ -45,13 +45,17 @@ pub(super) fn menus(f: &mut Frame, app: &mut App) {
                 MenuItem::Entry {
                     label, key, check, ..
                 } => {
-                    let prefix = if *check == Some(true) { "*" } else { " " };
+                    let prefix = if *check == Some(true) {
+                        app.theme.icons.mark
+                    } else {
+                        " "
+                    };
                     let pad =
                         usize::from(inner.width).saturating_sub(label.width() + key.width() + 3);
                     format!("{prefix} {label}{}{key}", " ".repeat(pad))
                 }
                 MenuItem::Sub { label, .. } => format!("  {label}  {}", app.theme.icons.submenu),
-                MenuItem::Sep => "-".repeat(usize::from(inner.width)),
+                MenuItem::Sep => app.theme.icons.separator.repeat(usize::from(inner.width)),
             };
             let style = if idx == level.sel {
                 app.theme.base().patch(app.theme.selected(true))
@@ -215,7 +219,15 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 }
             }
             Field::Check { label, value } => {
-                let s = format!("[{}] {label}", if *value { "x" } else { " " });
+                let icons = &app.theme.icons;
+                let s = format!(
+                    "{} {label}",
+                    if *value {
+                        icons.check_on
+                    } else {
+                        icons.check_off
+                    }
+                );
                 rows.extend(
                     wrap(&s, width)
                         .into_iter()
@@ -229,10 +241,11 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 dropdown,
             } => {
                 let value = options.get(*sel).map(String::as_str).unwrap_or("");
+                let icons = &app.theme.icons;
                 let s = if *dropdown {
-                    format!("{label}: [ {value} v ]")
+                    format!("{label}: [ {value} {} ]", icons.dropdown)
                 } else {
-                    format!("{label}: < {value} >")
+                    format!("{label}: {} {value} {}", icons.left, icons.right)
                 };
                 rows.extend(
                     wrap(&s, width)
@@ -248,7 +261,11 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                         } else {
                             app.theme.base().bg(app.theme.bg_alt)
                         };
-                        let marker = if option == *sel { "*" } else { " " };
+                        let marker = if option == *sel {
+                            app.theme.icons.mark
+                        } else {
+                            " "
+                        };
                         rows.extend(
                             wrap(&format!("  {marker} {label}"), width)
                                 .into_iter()
@@ -326,25 +343,69 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
             }
             FormRow::Search(i) => {
                 if let Field::List {
-                    search: Some(s), ..
+                    items,
+                    search: Some(s),
+                    ..
                 } = &mut d.fields[i]
                 {
-                    const P: &str = "Search: ";
-                    let pw = P.len() as u16;
-                    text(f, rr, P, app.theme.base());
-                    let ir = Rect::new(rr.x + pw, rr.y, rr.width.saturating_sub(pw), 1);
+                    let shown = items.len();
+                    let prompt = if app.theme.icons.nerd {
+                        format!("{} ", app.theme.icons.search)
+                    } else {
+                        "Filter: ".to_string()
+                    };
+                    let pw = prompt.width() as u16;
+                    text(f, rr, &prompt, app.theme.base());
+                    let count = format!("{}/{}", shown, s.total());
+                    let cw = count.len() as u16 + 1;
+                    let ir = Rect::new(rr.x + pw, rr.y, rr.width.saturating_sub(pw + cw), 1);
                     input(f, &mut s.input, ir, d.focus == i, &app.theme);
+                    let cr = Rect::new(rr.right().saturating_sub(cw), rr.y, cw, 1);
+                    text(f, cr, count, app.theme.dimmed());
                 }
             }
             FormRow::Blank => {}
             FormRow::Item(i, item) => {
-                if let Field::List { items, sel, .. } = &d.fields[i] {
+                if let Field::List {
+                    items, values, sel, ..
+                } = &d.fields[i]
+                {
                     let style = if *sel == item {
                         app.theme.base().patch(app.theme.selected(d.focus == i))
                     } else {
                         app.theme.base()
                     };
-                    text(f, rr, &items[item], style);
+                    let line = match (app.theme.icons.nerd, items[item].split_once(' ')) {
+                        (true, Some((icon, name))) => {
+                            let color = values
+                                .get(item)
+                                .and_then(|full| app.refs.find_full(full))
+                                .map(|r| {
+                                    if app.refs.is_head_ref(r) {
+                                        app.theme.head
+                                    } else {
+                                        match r.kind {
+                                            RefKind::LocalBranch => app.theme.branch,
+                                            RefKind::RemoteBranch => app.theme.remote,
+                                            RefKind::Tag => app.theme.tag,
+                                            _ => app.theme.meta,
+                                        }
+                                    }
+                                });
+                            match color {
+                                Some(c) => ratatui::text::Line::from(vec![
+                                    ratatui::text::Span::styled(
+                                        icon.to_string(),
+                                        style.patch(Style::default().fg(c)),
+                                    ),
+                                    ratatui::text::Span::styled(format!(" {name}"), style),
+                                ]),
+                                None => ratatui::text::Line::styled(items[item].clone(), style),
+                            }
+                        }
+                        _ => ratatui::text::Line::styled(items[item].clone(), style),
+                    };
+                    f.render_widget(Paragraph::new(line), rr);
                 }
                 app.hits.push(rr, Hit::DlgListRow(i, item));
             }

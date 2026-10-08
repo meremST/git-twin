@@ -17,6 +17,9 @@ Prerequis d'execution :
   ete valide sur une installation reelle. Les essais locaux utilisent Git 2.43.
 - Un terminal interactif UTF-8, au moins 79 x 24 cellules (120 x 35 conseille).
   Aucune Nerd Font n'est necessaire avec les icones Unicode par defaut.
+  `--icons nerd` (Nerd Fonts v3) ajoute des icones aux vues, panneaux,
+  boutons, etats de fichiers et types de fichiers, et affiche les references
+  sous forme de pastilles colorees ; `unicode` et `ascii` restent textuels.
 
 Ces binaires ne sont **pas statiques** : Alpine Linux (musl), les systemes
 avec une ancienne glibc et les machines ARM doivent utiliser une compilation

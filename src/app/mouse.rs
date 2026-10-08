@@ -8,7 +8,7 @@ use ratatui::layout::Rect;
 
 use super::App;
 use super::action::{Action, FileList};
-use super::dialog::{DialogResult, Field};
+use super::dialog::{DialogResult, Field, FormKind, Kind};
 use super::history::HFocus;
 use super::menu::{Ctx, MenuItem};
 use super::worktree::WFocus;
@@ -239,6 +239,7 @@ impl App {
             }
             Hit::DlgListRow(i, row) => {
                 let mut accept = false;
+                let mut preview = false;
                 if let Some(d) = self.dialogs.last_mut() {
                     d.focus = i;
                     if let Some(Field::List { sel, items, .. }) = d.fields.get_mut(i)
@@ -246,7 +247,11 @@ impl App {
                     {
                         accept = n >= 2 && *sel == row;
                         *sel = row;
+                        preview = matches!(d.kind, Kind::Form(FormKind::ListRefs));
                     }
+                }
+                if preview {
+                    self.preview_list_ref();
                 }
                 if accept {
                     self.on_dialog_result(DialogResult::Button(0));

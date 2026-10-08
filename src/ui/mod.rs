@@ -82,17 +82,24 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         StatusTone::Busy => app.theme.warn,
         StatusTone::Error => app.theme.error,
     };
-    let flags = if app.read_only { "READ ONLY | " } else { "" };
-    let busy = if app.busy() || app.pending_busy_status.is_some() {
-        "Working | "
+    let icons = &app.theme.icons;
+    let sep = if icons.nerd { "\u{2502}" } else { "|" };
+    let flags = if app.read_only {
+        format!("{} {sep} ", icons.label(icons.lock, "READ ONLY"))
     } else {
-        ""
+        String::new()
     };
+    let busy = if app.busy() || app.pending_busy_status.is_some() {
+        format!("{} {sep} ", icons.label(icons.busy, "Working"))
+    } else {
+        String::new()
+    };
+    let help = icons.label(icons.help, "F1: help");
     text(
         f,
         row(area, area.height - 1),
         format!(
-            " {flags}{busy}{}  | F6: view  F10: menu  F1: help",
+            " {flags}{busy}{}  {sep} F6: view  F10: menu  {help}",
             sanitize(&app.status.0)
         ),
         app.theme.bar().fg(color),
@@ -178,13 +185,32 @@ fn menu_bar(f: &mut Frame, app: &mut App, r: Rect) {
         text(f, zone, format!(" {title} "), style);
         app.hits.push(zone, Hit::MenuTitle(i));
     }
+    let icons = &app.theme.icons;
+    let menu_end = menu::title_positions(app.view)
+        .into_iter()
+        .map(|(x, w)| r.x + x + w)
+        .max()
+        .unwrap_or(r.x);
+    // Iconised tabs only when they fit beside the menu titles.
+    let nerd = icons.nerd && r.right().saturating_sub(menu_end) >= 24;
     let tabs = [
-        (ViewKind::History, "History"),
-        (ViewKind::Worktree, "Worktree"),
-    ];
-    let start = r.right().saturating_sub(16);
-    for (i, (view, label)) in tabs.into_iter().enumerate() {
-        let zone = Rect::new(start + i as u16 * 8, r.y, 8, 1);
+        (ViewKind::History, icons.history, "History"),
+        (ViewKind::Worktree, icons.worktree, "Worktree"),
+    ]
+    .map(|(view, icon, label)| {
+        if nerd {
+            let label = format!(" {} ", icons.label(icon, label));
+            (view, label.width() as u16, label)
+        } else {
+            (view, 8, label.to_string())
+        }
+    });
+    let mut x = r
+        .right()
+        .saturating_sub(tabs.iter().map(|(_, w, _)| w).sum());
+    for (view, w, label) in tabs {
+        let zone = Rect::new(x, r.y, w, 1);
+        x += w;
         text(
             f,
             zone,
@@ -228,25 +254,33 @@ fn history_top(f: &mut Frame, app: &mut App, top: Rect) {
         let focused = unobscured(app) && app.hist.focus == HFocus::Sha;
         input(f, &mut app.hist.sha, input_r, focused, &app.theme);
         app.hits.push(input_r, Hit::ShaEntry);
+        let icons = &app.theme.icons;
+        let back = icons.label(icons.back, "Back");
+        let forward = icons.label(icons.forward, "Forward");
+        let back_x = nav.x + 50;
+        let back_w = back.width() as u16 + 2;
+        let forward_x = back_x + back_w + 1;
+        let forward_w = forward.width() as u16 + 2;
+        let rows_x = forward_x + forward_w + 1;
         button(
             f,
             app,
-            Rect::new(nav.x + 50, nav.y, 6, 1),
-            "Back",
+            Rect::new(back_x, nav.y, back_w, 1),
+            &back,
             Action::GoBack,
             !app.hist.back.is_empty(),
         );
         button(
             f,
             app,
-            Rect::new(nav.x + 57, nav.y, 9, 1),
-            "Forward",
+            Rect::new(forward_x, nav.y, forward_w, 1),
+            &forward,
             Action::GoForward,
             !app.hist.forward.is_empty(),
         );
         text(
             f,
-            Rect::new(nav.x + 67, nav.y, nav.width.saturating_sub(67), 1),
+            Rect::new(rows_x, nav.y, nav.right().saturating_sub(rows_x), 1),
             format!(
                 "Row {}/{}",
                 app.hist.sel.map_or(0, |i| i + 1),
@@ -255,24 +289,33 @@ fn history_top(f: &mut Frame, app: &mut App, top: Rect) {
             app.theme.dimmed(),
         );
         let find = row(top, top.height - 1);
+        let find_label = app.theme.icons.label(app.theme.icons.search, "Find");
+        let find_w = find_label.width() as u16 + 2;
         button(
             f,
             app,
-            Rect::new(find.x + 1, find.y, 6, 1),
-            "Find",
+            Rect::new(find.x + 1, find.y, find_w, 1),
+            &find_label,
             Action::FindNext,
             true,
         );
+        let type_x = find.x + find_w + 2;
         let label = app.hist.find_type.label();
         button(
             f,
             app,
-            Rect::new(find.x + 8, find.y, 24, 1),
+            Rect::new(type_x, find.y, 24, 1),
             label,
             Action::CycleFindType,
             true,
         );
-        let ir = Rect::new(find.x + 33, find.y, find.width.saturating_sub(58), 1);
+        let input_x = type_x + 25;
+        let ir = Rect::new(
+            input_x,
+            find.y,
+            find.right().saturating_sub(25).saturating_sub(input_x),
+            1,
+        );
         let focused = unobscured(app) && app.hist.focus == HFocus::Find;
         input(f, &mut app.hist.find, ir, focused, &app.theme);
         app.hits.push(ir, Hit::FindEntry);
@@ -299,17 +342,18 @@ fn history_top(f: &mut Frame, app: &mut App, top: Rect) {
 
 fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
     let current = app.focused_pane();
-    let tabs: &[(PaneId, &str)] = match app.view {
-        ViewKind::History => &[
-            (PaneId::HList, "History"),
-            (PaneId::HDiff, "Details"),
-            (PaneId::HFiles, "Files"),
+    let i = &app.theme.icons;
+    let tabs: Vec<(PaneId, String)> = match app.view {
+        ViewKind::History => vec![
+            (PaneId::HList, i.label(i.history, "History")),
+            (PaneId::HDiff, i.label(i.diff, "Details")),
+            (PaneId::HFiles, i.label(i.patch, "Files")),
         ],
-        ViewKind::Worktree => &[
-            (PaneId::WUnstaged, "Unstaged"),
-            (PaneId::WStaged, "Staged"),
-            (PaneId::WDiff, "Diff"),
-            (PaneId::WMessage, "Message"),
+        ViewKind::Worktree => vec![
+            (PaneId::WUnstaged, i.label(i.unstaged, "Unstaged")),
+            (PaneId::WStaged, i.label(i.staged, "Staged")),
+            (PaneId::WDiff, i.label(i.diff, "Diff")),
+            (PaneId::WMessage, i.label(i.message, "Message")),
         ],
     };
     text(
@@ -323,7 +367,7 @@ fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
         app.theme.dimmed(),
     );
     let mut x = r.x + 9;
-    for &(id, label) in tabs {
+    for (id, label) in tabs {
         let w = label.width() as u16 + 3;
         let zone = Rect::new(x, r.y, w, 1);
         text(
@@ -357,13 +401,7 @@ fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
         PaneId::Dialog => {}
     }
     if footer > 0 {
-        let buttons = [
-            ("Rescan", Action::Rescan, false),
-            ("Stage Changed", Action::StageChanged, true),
-            ("Sign Off", Action::SignOff, false),
-            ("Commit", Action::Commit, true),
-            ("Push", Action::Push, true),
-        ];
+        let buttons = worktree_buttons(&app.theme);
         let total_width: u16 = buttons
             .iter()
             .map(|(label, _, _)| label.width() as u16 + 3)
@@ -375,7 +413,7 @@ fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
                 f,
                 app,
                 Rect::new(x, r.bottom() - 1, w, 1),
-                label,
+                &label,
                 action,
                 !write || !app.read_only,
             );
@@ -385,7 +423,10 @@ fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
 }
 
 fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
-    let title = format!("{} - {}", app.repo.display_name(), app.hist.view().name);
+    let title = app.theme.icons.label(
+        app.theme.icons.history,
+        &format!("{} - {}", app.repo.display_name(), app.hist.view().name),
+    );
     let inner = pane(f, r, &title, PaneId::HList, app);
     if inner.height == 0 {
         return;
@@ -497,10 +538,39 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                     _ => app.theme.meta,
                 }
             };
-            let label = format!("[{}] ", reference.short);
+            let icons = &app.theme.icons;
+            let icon = icons.reference(reference.kind);
+            let spans = if app.theme.ref_pills() {
+                let cap = Style::default()
+                    .fg(color)
+                    .bg(style.bg.unwrap_or(app.theme.bg));
+                vec![
+                    Span::styled(icons.pill_left, cap),
+                    Span::styled(
+                        format!("{icon} {}", reference.short),
+                        Style::default()
+                            .fg(app.theme.bg)
+                            .bg(color)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(icons.pill_right, cap),
+                    Span::styled(" ", style),
+                ]
+            } else if icons.nerd {
+                vec![Span::styled(
+                    format!("{icon} {} ", reference.short),
+                    tint(color).add_modifier(Modifier::BOLD),
+                )]
+            } else {
+                vec![Span::styled(
+                    format!("[{}] ", reference.short),
+                    tint(color).add_modifier(Modifier::BOLD),
+                )]
+            };
+            let label = Line::from(spans);
             let w = label.width().min(usize::from(author_x.saturating_sub(x))) as u16;
             let zone = Rect::new(x, rr.y, w, 1);
-            text(f, zone, label, tint(color).add_modifier(Modifier::BOLD));
+            f.render_widget(Paragraph::new(label), zone);
             app.hits
                 .push(zone, Hit::RefLabel(i, reference.full.clone()));
             x += w;
@@ -557,13 +627,11 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
 }
 
 fn history_files(f: &mut Frame, app: &mut App, r: Rect) {
-    let inner = pane(
-        f,
-        r,
-        if app.hist.tree_mode { "Tree" } else { "Patch" },
-        PaneId::HFiles,
-        app,
-    );
+    let i = &app.theme.icons;
+    let patch = i.label(i.patch, "Patch");
+    let tree = i.label(i.tree, "Tree");
+    let title = if app.hist.tree_mode { &tree } else { &patch }.clone();
+    let inner = pane(f, r, &title, PaneId::HFiles, app);
     if inner.height == 0 {
         return;
     }
@@ -572,7 +640,7 @@ fn history_files(f: &mut Frame, app: &mut App, r: Rect) {
         f,
         app,
         Rect::new(inner.x, inner.y, half, 1),
-        "Patch",
+        &patch,
         Action::SetTreeMode(false),
         true,
     );
@@ -580,7 +648,7 @@ fn history_files(f: &mut Frame, app: &mut App, r: Rect) {
         f,
         app,
         Rect::new(inner.x + half, inner.y, inner.width - half, 1),
-        "Tree",
+        &tree,
         Action::SetTreeMode(true),
         true,
     );
@@ -595,11 +663,14 @@ fn history_files(f: &mut Frame, app: &mut App, r: Rect) {
         .enumerate()
     {
         let rr = row(inner, line as u16 + 1);
-        let label = app
-            .hist
-            .file_path(i)
-            .map(|p| crate::domain::sanitize::display_bytes(&p))
-            .unwrap_or_else(|| "Comments".into());
+        let icons = &app.theme.icons;
+        let label = match app.hist.file_path(i) {
+            Some(p) => {
+                let path = crate::domain::sanitize::display_bytes(&p);
+                icons.label(icons.file(&path), &path)
+            }
+            None => icons.label(icons.comment, "Comments"),
+        };
         let style = if i == app.hist.file_sel {
             app.theme
                 .base()
@@ -613,32 +684,33 @@ fn history_files(f: &mut Frame, app: &mut App, r: Rect) {
 }
 
 fn diff_pane(f: &mut Frame, app: &mut App, r: Rect, id: PaneId) {
-    let inner = pane(
-        f,
-        r,
+    let icons = &app.theme.icons;
+    let title = icons.label(
+        icons.diff,
         if id == PaneId::HDiff {
             "Details / Diff"
         } else {
             "File diff"
         },
-        id,
-        app,
     );
+    let inner = pane(f, r, &title, id, app);
     if inner.height == 0 {
         return;
     }
     let mut controls = 1;
     if id == PaneId::HDiff {
+        let label = app.theme.icons.label(app.theme.icons.search, "Search:");
+        let lw = label.width() as u16;
         text(
             f,
-            Rect::new(inner.x, inner.y, 7.min(inner.width), 1),
-            "Search:",
+            Rect::new(inner.x, inner.y, lw.min(inner.width), 1),
+            label,
             app.theme.dimmed(),
         );
         let ir = Rect::new(
-            inner.x + 7.min(inner.width),
+            inner.x + lw.min(inner.width),
             inner.y,
-            inner.width.saturating_sub(7),
+            inner.width.saturating_sub(lw),
             1,
         );
         let focused = unobscured(app) && app.hist.focus == HFocus::Search;
@@ -648,9 +720,14 @@ fn diff_pane(f: &mut Frame, app: &mut App, r: Rect, id: PaneId) {
             controls = 2;
             let mut x = inner.x;
             for show in [Show::Diff, Show::Old, Show::New] {
+                let icons = &app.theme.icons;
                 let label = format!(
                     "{} {}",
-                    if app.hist.show == show { "*" } else { " " },
+                    if app.hist.show == show {
+                        icons.radio_on
+                    } else {
+                        icons.radio_off
+                    },
                     show.label()
                 );
                 let w = (label.width() as u16 + 2).min(inner.right().saturating_sub(x));
@@ -671,7 +748,11 @@ fn diff_pane(f: &mut Frame, app: &mut App, r: Rect, id: PaneId) {
                 (
                     format!(
                         "{} Ignore space",
-                        if app.hist.ignore_space { "*" } else { " " }
+                        if app.hist.ignore_space {
+                            app.theme.icons.toggle_on
+                        } else {
+                            app.theme.icons.toggle_off
+                        }
                     ),
                     Action::ToggleIgnoreSpace,
                 ),
@@ -831,9 +912,17 @@ fn worktree(f: &mut Frame, app: &mut App, r: Rect) {
         f,
         row(r, 0),
         format!(
-            " Current Branch: {}  {}  | {}",
+            " {}: {}  {}  {} {}",
+            app.theme
+                .icons
+                .label(app.theme.icons.branch, "Current Branch"),
             app.wt.branch_label,
             operations,
+            if app.theme.icons.nerd {
+                "\u{2502}"
+            } else {
+                "|"
+            },
             app.repo.display_name()
         ),
         app.theme.base().fg(app.theme.head),
@@ -870,16 +959,10 @@ fn worktree(f: &mut Frame, app: &mut App, r: Rect) {
         left_w.saturating_sub(2),
         bottom.height,
     );
-    for (i, (label, action, write)) in [
-        ("Rescan", Action::Rescan, false),
-        ("Stage Changed", Action::StageChanged, true),
-        ("Sign Off", Action::SignOff, false),
-        ("Commit", Action::Commit, true),
-        ("Push", Action::Push, true),
-    ]
-    .into_iter()
-    .enumerate()
-    .take(usize::from(actions.height))
+    for (i, (label, action, write)) in worktree_buttons(&app.theme)
+        .into_iter()
+        .enumerate()
+        .take(usize::from(actions.height))
     {
         let row = row(actions, i as u16);
         let width = (label.width() as u16 + 2).min(row.width);
@@ -887,7 +970,7 @@ fn worktree(f: &mut Frame, app: &mut App, r: Rect) {
             f,
             app,
             Rect::new(row.right() - width, row.y, width, row.height),
-            label,
+            &label,
             action,
             !write || !app.read_only,
         );
@@ -904,6 +987,22 @@ fn worktree(f: &mut Frame, app: &mut App, r: Rect) {
     );
 }
 
+/// git gui's worktree action column: label, action, and whether it writes.
+fn worktree_buttons(t: &Theme) -> [(String, Action, bool); 5] {
+    let i = &t.icons;
+    [
+        (i.label(i.rescan, "Rescan"), Action::Rescan, false),
+        (
+            i.label(i.stage, "Stage Changed"),
+            Action::StageChanged,
+            true,
+        ),
+        (i.label(i.sign_off, "Sign Off"), Action::SignOff, false),
+        (i.label(i.commit, "Commit"), Action::Commit, true),
+        (i.label(i.push, "Push"), Action::Push, true),
+    ]
+}
+
 fn worktree_files(f: &mut Frame, app: &mut App, r: Rect, list: FileList) {
     let staged = list == FileList::Staged;
     let id = if staged {
@@ -911,14 +1010,18 @@ fn worktree_files(f: &mut Frame, app: &mut App, r: Rect, list: FileList) {
     } else {
         PaneId::WUnstaged
     };
-    let title = format!(
-        "{} ({})",
-        if staged {
-            "Staged Changes"
-        } else {
-            "Unstaged Changes"
-        },
-        app.wt.list(list).len()
+    let icons = &app.theme.icons;
+    let title = icons.label(
+        if staged { icons.staged } else { icons.unstaged },
+        &format!(
+            "{} ({})",
+            if staged {
+                "Staged Changes"
+            } else {
+                "Unstaged Changes"
+            },
+            app.wt.list(list).len()
+        ),
     );
     let inner = pane(f, r, &title, id, app);
     let height = usize::from(inner.height);
@@ -942,12 +1045,41 @@ fn worktree_files(f: &mut Frame, app: &mut App, r: Rect, list: FileList) {
             app.theme.base()
         };
         let rr = row(inner, line as u16);
-        text(
-            f,
-            rr,
-            format!(" {}  {}", file.icon_char(staged), file.display),
-            style,
-        );
+        let icons = &app.theme.icons;
+        let status = file.icon_char(staged);
+        let line = match icons.status(status) {
+            Some(glyph) => {
+                let t = &app.theme;
+                let color = match status {
+                    'A' => t.add,
+                    'D' => t.del,
+                    'M' => t.warn,
+                    'U' => t.error,
+                    '?' | '!' => t.dim,
+                    _ => t.accent,
+                };
+                Line::from(vec![
+                    Span::styled(" ", style),
+                    Span::styled(glyph, t.commit_tint(style, color)),
+                    Span::styled(
+                        format!(
+                            "  {}",
+                            icons.label(icons.file(&file.display), &file.display)
+                        ),
+                        style,
+                    ),
+                ])
+            }
+            None if icons.nerd => Line::styled(
+                format!(
+                    " {status}  {}",
+                    icons.label(icons.file(&file.display), &file.display)
+                ),
+                style,
+            ),
+            None => Line::styled(format!(" {status}  {}", file.display), style),
+        };
+        f.render_widget(Paragraph::new(line).style(style), rr);
         app.hits.push(rr, Hit::WtFile(list, i, false));
         app.hits.push(
             Rect::new(rr.x, rr.y, 3.min(rr.width), 1),
@@ -964,7 +1096,10 @@ fn message(f: &mut Frame, app: &mut App, r: Rect) {
         &app.wt.message.lines[app.wt.message.cursor.row],
         app.wt.message.cursor.col,
     ) + 1;
-    let title = format!("Commit Message - col {column}/{}", app.cfg.commit_width);
+    let title = app.theme.icons.label(
+        app.theme.icons.message,
+        &format!("Commit Message - col {column}/{}", app.cfg.commit_width),
+    );
     let controls = Rect::new(
         r.x.saturating_add(1),
         r.y,
@@ -972,25 +1107,30 @@ fn message(f: &mut Frame, app: &mut App, r: Rect) {
         u16::from(r.height > 0),
     );
     if controls.height > 0 {
-        let new_commit_label = if app.wt.amend {
-            "New Commit"
-        } else {
-            "* New Commit"
+        let icons = &app.theme.icons;
+        let radio = |on: bool, label: &str| {
+            if icons.nerd {
+                format!(
+                    "{} {label}",
+                    if on { icons.radio_on } else { icons.radio_off }
+                )
+            } else if on {
+                format!("* {label}")
+            } else {
+                label.to_string()
+            }
         };
+        let new_commit_label = radio(!app.wt.amend, "New Commit");
+        let amend_label = radio(app.wt.amend, "Amend Last Commit");
         let new_commit_width = (new_commit_label.width() as u16 + 2).min(controls.width);
         button(
             f,
             app,
             Rect::new(controls.x, controls.y, new_commit_width, controls.height),
-            new_commit_label,
+            &new_commit_label,
             Action::SetAmend(false),
             true,
         );
-        let amend_label = if app.wt.amend {
-            "* Amend Last Commit"
-        } else {
-            "Amend Last Commit"
-        };
         let amend_width = (amend_label.width() as u16 + 2)
             .min(controls.width.saturating_sub(new_commit_width + 1));
         button(
@@ -1002,7 +1142,7 @@ fn message(f: &mut Frame, app: &mut App, r: Rect) {
                 amend_width,
                 controls.height,
             ),
-            amend_label,
+            &amend_label,
             Action::SetAmend(true),
             !app.read_only,
         );

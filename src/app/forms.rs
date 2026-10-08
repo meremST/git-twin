@@ -136,34 +136,60 @@ impl App {
     }
 
     pub fn open_list_refs(&mut self) {
-        let (items, values) = self.ref_items(
-            &[
-                RefKind::LocalBranch,
-                RefKind::RemoteBranch,
-                RefKind::Tag,
-                RefKind::Other,
-                RefKind::Stash,
-            ],
-            false,
-        );
-        let keys = items
-            .iter()
-            .map(|s| s.get(2..).unwrap_or("").to_string())
-            .collect();
+        let kinds = [
+            RefKind::LocalBranch,
+            RefKind::RemoteBranch,
+            RefKind::Tag,
+            RefKind::Other,
+            RefKind::Stash,
+        ];
+        let icons = &self.theme.icons;
+        let mut items = Vec::new();
+        let mut values = Vec::new();
+        let mut keys = Vec::new();
+        for r in &self.refs.refs {
+            if !kinds.contains(&r.kind) {
+                continue;
+            }
+            let shown = if icons.nerd {
+                icons.reference(r.kind).to_string()
+            } else {
+                match r.kind {
+                    RefKind::LocalBranch => "H",
+                    RefKind::RemoteBranch => "R",
+                    RefKind::Tag => "T",
+                    _ => "o",
+                }
+                .to_string()
+            };
+            items.push(format!("{shown} {}", r.short));
+            values.push(r.full.clone());
+            keys.push(r.short.clone());
+        }
         let title = format!("Tags and heads: {}", self.repo.display_name());
-        let fields = vec![Field::searchable_list(
-            "H local head, R remote, T tag, o other   (/ search, * wildcard)",
-            items,
-            values,
-            keys,
-            14,
-        )];
+        let legend = if icons.nerd {
+            "type to filter, * wildcard"
+        } else {
+            "H branch  R remote  T tag  o other   (type to filter, * wildcard)"
+        };
+        let fields = vec![Field::filter_list(legend, items, values, keys, 14)];
         self.dialogs.push(form(
             &title,
             FormKind::ListRefs,
             fields,
             &["Select", "Close"],
         ));
+    }
+
+    /// Shows the reference highlighted in the F2 list in the history view,
+    /// leaving the list open.
+    pub fn preview_list_ref(&mut self) {
+        let Some(full) = self.dialogs.last().and_then(|d| d.list_value(0)) else {
+            return;
+        };
+        if let Some(o) = self.refs.find_full(&full).map(|r| r.target) {
+            self.select_oid(o, false);
+        }
     }
 
     pub fn open_view_editor(&mut self, idx: Option<usize>) {

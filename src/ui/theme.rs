@@ -238,83 +238,258 @@ const GRUVBOX_LIGHT: Palette = Palette {
 };
 
 /// Glyphs used by the renderer.
+///
+/// ASCII and Unicode keep their historical, text-only rendering. The Nerd Font
+/// set adds semantic icons (views, panes, buttons, references, file status and
+/// file types); decorative fields are empty outside Nerd mode so callers can
+/// prefix them unconditionally through [`Icons::label`].
 #[derive(Clone, Debug)]
 pub struct Icons {
     pub ascii: bool,
+    pub nerd: bool,
+    /// Dialog check box.
     pub check_on: &'static str,
     pub check_off: &'static str,
+    /// Mutually exclusive choice ("Diff / Old / New", "New Commit / Amend").
     pub radio_on: &'static str,
     pub radio_off: &'static str,
+    /// Inline on/off toggle inside a button ("Ignore space").
+    pub toggle_on: &'static str,
+    pub toggle_off: &'static str,
+    /// Checked menu entry / current dropdown option.
+    pub mark: &'static str,
     pub submenu: &'static str,
+    pub dropdown: &'static str,
     pub left: &'static str,
     pub right: &'static str,
-    pub up: &'static str,
-    pub down: &'static str,
-    pub busy: [&'static str; 4],
-    pub file: &'static str,
-    pub dir: &'static str,
-    pub branch: &'static str,
+    pub separator: &'static str,
     pub node: &'static str,
+    // Decorative icons: empty unless Nerd mode.
+    pub history: &'static str,
+    pub worktree: &'static str,
+    pub commit: &'static str,
+    pub diff: &'static str,
+    pub patch: &'static str,
+    pub tree: &'static str,
+    pub unstaged: &'static str,
+    pub staged: &'static str,
+    pub message: &'static str,
+    pub comment: &'static str,
+    pub branch: &'static str,
+    pub remote: &'static str,
+    pub tag: &'static str,
+    pub lock: &'static str,
+    pub busy: &'static str,
+    pub search: &'static str,
+    pub back: &'static str,
+    pub forward: &'static str,
+    pub rescan: &'static str,
+    pub stage: &'static str,
+    pub sign_off: &'static str,
+    pub push: &'static str,
+    pub help: &'static str,
+    /// Rounded caps drawn around reference "pills" in the history list.
+    pub pill_left: &'static str,
+    pub pill_right: &'static str,
 }
 
 impl Icons {
     fn new(mode: IconMode) -> Icons {
+        let text = Icons {
+            ascii: true,
+            nerd: false,
+            check_on: "[x]",
+            check_off: "[ ]",
+            radio_on: "*",
+            radio_off: " ",
+            toggle_on: "*",
+            toggle_off: " ",
+            mark: "*",
+            submenu: ">",
+            dropdown: "v",
+            left: "<",
+            right: ">",
+            separator: "-",
+            node: "*",
+            history: "",
+            worktree: "",
+            commit: "",
+            diff: "",
+            patch: "",
+            tree: "",
+            unstaged: "",
+            staged: "",
+            message: "",
+            comment: "",
+            branch: "",
+            remote: "",
+            tag: "",
+            lock: "",
+            busy: "",
+            search: "",
+            back: "",
+            forward: "",
+            rescan: "",
+            stage: "",
+            sign_off: "",
+            push: "",
+            help: "",
+            pill_left: "",
+            pill_right: "",
+        };
         match mode {
-            IconMode::Ascii => Icons {
-                ascii: true,
-                check_on: "[x]",
-                check_off: "[ ]",
-                radio_on: "(*)",
-                radio_off: "( )",
-                submenu: ">",
-                left: "<",
-                right: ">",
-                up: "^",
-                down: "v",
-                busy: ["|", "/", "-", "\\"],
-                file: "",
-                dir: "/",
-                branch: "",
-                node: "*",
-            },
+            IconMode::Ascii => text,
             IconMode::Unicode => Icons {
                 ascii: false,
-                check_on: "☑",
-                check_off: "☐",
-                radio_on: "◉",
-                radio_off: "○",
-                submenu: "▸",
-                left: "◂",
-                right: "▸",
-                up: "▲",
-                down: "▼",
-                busy: ["⠋", "⠙", "⠸", "⠴"],
-                file: "",
-                dir: "/",
-                branch: "",
-                node: "●",
+                submenu: "\u{25b8}",
+                node: "\u{25cf}",
+                ..text
             },
             IconMode::Nerd => Icons {
                 ascii: false,
+                nerd: true,
                 check_on: "\u{f14a}",
                 check_off: "\u{f096}",
                 radio_on: "\u{f192}",
                 radio_off: "\u{f10c}",
+                toggle_on: "\u{f14a}",
+                toggle_off: "\u{f096}",
+                mark: "\u{f00c}",
                 submenu: "\u{f054}",
+                dropdown: "\u{f078}",
                 left: "\u{f053}",
                 right: "\u{f054}",
-                up: "\u{f077}",
-                down: "\u{f078}",
-                busy: ["⠋", "⠙", "⠸", "⠴"],
-                file: "\u{f15b} ",
-                dir: "/",
-                branch: "\u{e0a0} ",
+                separator: "\u{2500}",
                 // Nerd Font PUA glyphs (`\u{eafc}`, `\u{eb8a}`) rendered poorly/invisibly
                 // without the matching font, and terminals don't composite overstruck
                 // glyphs into one cell. The plain Unicode circle is supported everywhere
                 // and already looks right, so it's reused here instead.
-                node: "●",
+                node: "\u{25cf}",
+                history: "\u{f1da}",
+                worktree: "\u{f4d2}",
+                commit: "\u{f417}",
+                diff: "\u{f440}",
+                patch: "\u{f0ca}",
+                tree: "\u{f1bb}",
+                unstaged: "\u{f040}",
+                staged: "\u{f046}",
+                message: "\u{f075}",
+                comment: "\u{f0e5}",
+                branch: "\u{e0a0}",
+                remote: "\u{f0c2}",
+                tag: "\u{f02b}",
+                lock: "\u{f023}",
+                busy: "\u{f252}",
+                search: "\u{f002}",
+                back: "\u{f060}",
+                forward: "\u{f061}",
+                rescan: "\u{f021}",
+                stage: "\u{f067}",
+                sign_off: "\u{f2b5}",
+                push: "\u{f093}",
+                help: "\u{f059}",
+                pill_left: "\u{e0b6}",
+                pill_right: "\u{e0b4}",
             },
+        }
+    }
+
+    /// `"<icon> text"` in Nerd mode, `text` otherwise.
+    pub fn label(&self, icon: &str, text: &str) -> String {
+        if icon.is_empty() {
+            text.to_string()
+        } else {
+            format!("{icon} {text}")
+        }
+    }
+
+    /// Icon for a reference kind (empty outside Nerd mode).
+    pub fn reference(&self, kind: crate::domain::refs::RefKind) -> &'static str {
+        use crate::domain::refs::RefKind;
+        match kind {
+            RefKind::LocalBranch => self.branch,
+            RefKind::RemoteBranch => self.remote,
+            RefKind::Tag => self.tag,
+            _ => self.commit,
+        }
+    }
+
+    /// Nerd Font glyph for a git status letter (`M`, `A`, `D`, ...).
+    pub fn status(&self, c: char) -> Option<&'static str> {
+        if !self.nerd {
+            return None;
+        }
+        Some(match c {
+            'M' => "\u{f459}",
+            'A' => "\u{f457}",
+            'D' => "\u{f458}",
+            'R' => "\u{f45a}",
+            'C' => "\u{f0c5}",
+            'T' => "\u{f0ec}",
+            'U' => "\u{f071}",
+            '?' => "\u{f128}",
+            '!' => "\u{f474}",
+            _ => return None,
+        })
+    }
+
+    /// Nerd Font file-type glyph for a path (empty outside Nerd mode).
+    pub fn file(&self, path: &str) -> &'static str {
+        if !self.nerd {
+            return "";
+        }
+        if path.ends_with('/') {
+            return "\u{f07b}";
+        }
+        let name = path.rsplit('/').next().unwrap_or(path);
+        let lower = name.to_ascii_lowercase();
+        match lower.as_str() {
+            "cargo.lock" | "package-lock.json" | "yarn.lock" | "pnpm-lock.yaml" => {
+                return "\u{e672}";
+            }
+            "makefile" | "gnumakefile" | "cmakelists.txt" => return "\u{e673}",
+            "dockerfile" | "containerfile" => return "\u{e650}",
+            ".gitignore" | ".gitattributes" | ".gitmodules" | ".mailmap" => return "\u{e65d}",
+            "license" | "license.md" | "license.txt" | "copying" => return "\u{e60a}",
+            _ => {}
+        }
+        let ext = lower.rsplit_once('.').map_or("", |(_, e)| e);
+        match ext {
+            "rs" => "\u{e7a8}",
+            "py" | "pyi" => "\u{e606}",
+            "c" | "h" => "\u{e649}",
+            "cc" | "cpp" | "cxx" | "hh" | "hpp" | "hxx" => "\u{e646}",
+            "go" => "\u{e627}",
+            "js" | "mjs" | "cjs" | "jsx" => "\u{e60c}",
+            "ts" | "tsx" => "\u{e628}",
+            "java" => "\u{e66d}",
+            "kt" | "kts" => "\u{e634}",
+            "swift" => "\u{e699}",
+            "rb" => "\u{e605}",
+            "php" => "\u{e608}",
+            "lua" => "\u{e620}",
+            "hs" => "\u{e61f}",
+            "ex" | "exs" => "\u{e62d}",
+            "zig" => "\u{e6a9}",
+            "vim" => "\u{e62b}",
+            "sh" | "bash" | "zsh" | "fish" => "\u{e691}",
+            "md" | "markdown" | "rst" => "\u{e609}",
+            "json" => "\u{e60b}",
+            "yml" | "yaml" => "\u{e6a8}",
+            "toml" => "\u{e6b2}",
+            "ini" | "cfg" | "conf" => "\u{e615}",
+            "html" | "htm" => "\u{e60e}",
+            "css" | "scss" | "sass" => "\u{e614}",
+            "xml" => "\u{e619}",
+            "svg" => "\u{e698}",
+            "csv" => "\u{e64a}",
+            "sql" | "db" | "sqlite" => "\u{e64d}",
+            "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "ico" => "\u{f1c5}",
+            "pdf" => "\u{f1c1}",
+            "zip" | "gz" | "tgz" | "xz" | "bz2" | "zst" | "tar" | "7z" => "\u{f1c6}",
+            "txt" | "log" => "\u{e64e}",
+            "lock" => "\u{e672}",
+            _ => "\u{f15b}",
         }
     }
 }
@@ -479,6 +654,12 @@ impl Theme {
 
     pub fn base(&self) -> Style {
         Style::default().fg(self.fg).bg(self.bg)
+    }
+
+    /// Whether reference labels can be drawn as coloured Nerd Font pills:
+    /// needs reliable backgrounds (no 16-colour / terminal palette).
+    pub fn ref_pills(&self) -> bool {
+        self.icons.nerd && !self.low_color && !self.terminal_palette
     }
 
     pub fn dimmed(&self) -> Style {

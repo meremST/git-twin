@@ -52,6 +52,8 @@ pub enum Field {
 #[derive(Clone, Debug)]
 pub struct ListSearch {
     pub active: bool,
+    /// Always-on filter: typing filters directly, Esc clears the text first.
+    pub pinned: bool,
     pub input: TextInput,
     all_items: Vec<String>,
     all_values: Vec<Vec<u8>>,
@@ -104,6 +106,11 @@ fn glob(p: &[char], s: &[char]) -> bool {
 }
 
 impl ListSearch {
+    /// Number of items before filtering.
+    pub fn total(&self) -> usize {
+        self.all_items.len()
+    }
+
     fn apply(
         &self,
         items: &mut Vec<String>,
@@ -179,8 +186,30 @@ impl Field {
         keys: Vec<String>,
         rows: u16,
     ) -> Field {
+        Self::with_search(label, items, values, keys, rows, false)
+    }
+    /// List whose filter is always visible: every printable key edits the
+    /// pattern, arrows still move the selection.
+    pub fn filter_list(
+        label: &str,
+        items: Vec<String>,
+        values: Vec<Vec<u8>>,
+        keys: Vec<String>,
+        rows: u16,
+    ) -> Field {
+        Self::with_search(label, items, values, keys, rows, true)
+    }
+    fn with_search(
+        label: &str,
+        items: Vec<String>,
+        values: Vec<Vec<u8>>,
+        keys: Vec<String>,
+        rows: u16,
+        pinned: bool,
+    ) -> Field {
         let search = ListSearch {
-            active: false,
+            active: pinned,
+            pinned,
             input: TextInput::new(""),
             all_items: items.clone(),
             all_values: values.clone(),
@@ -492,8 +521,9 @@ impl Dialog {
                 ..
             }) = self.fields.get_mut(self.focus)
             && s.active
+            && (!s.pinned || !s.input.text.is_empty())
         {
-            s.active = false;
+            s.active = s.pinned;
             s.input.clear();
             s.apply(items, values, sel, top);
             return DialogResult::None;
@@ -586,11 +616,11 @@ impl Dialog {
                 let h = *rows as usize;
                 if let Some(s) = search {
                     match k.code {
-                        C::Char('/') | C::Char('?') if !s.active && !ctrl && !alt => {
+                        C::Char('/') | C::Char('?') if !s.active && !s.pinned && !ctrl && !alt => {
                             s.active = true;
                             return DialogResult::None;
                         }
-                        C::Backspace if s.active && s.input.text.is_empty() => {
+                        C::Backspace if s.active && !s.pinned && s.input.text.is_empty() => {
                             s.active = false;
                             return DialogResult::None;
                         }
@@ -713,6 +743,32 @@ mod tests {
         };
         assert_eq!(items.len(), 4);
         assert!(!search.as_ref().unwrap().active);
+    }
+
+    #[test]
+    fn filter_list_types_directly_and_escape_clears_first() {
+        let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+        let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let items: Vec<String> = ["H main", "H dev", "T v1.0"].map(String::from).into();
+        let keys = items.iter().map(|s| s[2..].to_string()).collect();
+        let values = items.iter().map(|s| s.as_bytes().to_vec()).collect();
+        let mut d = Dialog::new("t", Kind::Info)
+            .with_fields(vec![Field::filter_list("l", items, values, keys, 5)]);
+        for c in "v1".chars() {
+            d.on_key(key(c));
+        }
+        let Some(Field::List { items, search, .. }) = d.fields.first() else {
+            panic!()
+        };
+        assert_eq!(items, &["T v1.0"]);
+        assert!(search.as_ref().unwrap().active);
+        assert!(matches!(d.on_key(esc), DialogResult::None));
+        let Some(Field::List { items, search, .. }) = d.fields.first() else {
+            panic!()
+        };
+        assert_eq!(items.len(), 3);
+        assert!(search.as_ref().unwrap().active);
+        assert!(matches!(d.on_key(esc), DialogResult::Close));
     }
 
     #[test]
