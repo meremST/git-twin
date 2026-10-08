@@ -357,14 +357,19 @@ fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
         PaneId::Dialog => {}
     }
     if footer > 0 {
-        let mut x = r.x;
-        for (label, action, write) in [
+        let buttons = [
             ("Rescan", Action::Rescan, false),
             ("Stage Changed", Action::StageChanged, true),
             ("Sign Off", Action::SignOff, false),
             ("Commit", Action::Commit, true),
             ("Push", Action::Push, true),
-        ] {
+        ];
+        let total_width: u16 = buttons
+            .iter()
+            .map(|(label, _, _)| label.width() as u16 + 3)
+            .sum();
+        let mut x = r.right().saturating_sub(total_width);
+        for (label, action, write) in buttons {
             let w = label.width() as u16 + 3;
             button(
                 f,
@@ -876,10 +881,12 @@ fn worktree(f: &mut Frame, app: &mut App, r: Rect) {
     .enumerate()
     .take(usize::from(actions.height))
     {
+        let row = row(actions, i as u16);
+        let width = (label.width() as u16 + 2).min(row.width);
         button(
             f,
             app,
-            row(actions, i as u16),
+            Rect::new(row.right() - width, row.y, width, row.height),
             label,
             action,
             !write || !app.read_only,
@@ -958,36 +965,59 @@ fn message(f: &mut Frame, app: &mut App, r: Rect) {
         app.wt.message.cursor.col,
     ) + 1;
     let title = format!("Commit Message - col {column}/{}", app.cfg.commit_width);
-    let inner = pane(f, r, &title, PaneId::WMessage, app);
-    if inner.height == 0 {
-        return;
-    }
-    let half = inner.width / 2;
-    button(
-        f,
-        app,
-        Rect::new(inner.x, inner.y, half, 1),
-        if app.wt.amend {
+    let controls = Rect::new(
+        r.x.saturating_add(1),
+        r.y,
+        r.width.saturating_sub(2),
+        u16::from(r.height > 0),
+    );
+    if controls.height > 0 {
+        let new_commit_label = if app.wt.amend {
             "New Commit"
         } else {
             "* New Commit"
-        },
-        Action::SetAmend(false),
-        true,
-    );
-    button(
-        f,
-        app,
-        Rect::new(inner.x + half, inner.y, inner.width - half, 1),
-        if app.wt.amend {
+        };
+        let new_commit_width = (new_commit_label.width() as u16 + 2).min(controls.width);
+        button(
+            f,
+            app,
+            Rect::new(controls.x, controls.y, new_commit_width, controls.height),
+            new_commit_label,
+            Action::SetAmend(false),
+            true,
+        );
+        let amend_label = if app.wt.amend {
             "* Amend Last Commit"
         } else {
             "Amend Last Commit"
-        },
-        Action::SetAmend(true),
-        !app.read_only,
+        };
+        let amend_width = (amend_label.width() as u16 + 2)
+            .min(controls.width.saturating_sub(new_commit_width + 1));
+        button(
+            f,
+            app,
+            Rect::new(
+                controls.x + new_commit_width + 1,
+                controls.y,
+                amend_width,
+                controls.height,
+            ),
+            amend_label,
+            Action::SetAmend(true),
+            !app.read_only,
+        );
+    }
+    let frame = Rect::new(
+        r.x,
+        r.y.saturating_add(1),
+        r.width,
+        r.height.saturating_sub(1),
     );
-    let area = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 1);
+    let inner = pane(f, frame, &title, PaneId::WMessage, app);
+    if inner.height == 0 {
+        return;
+    }
+    let area = inner;
     app.wt.msg_height = usize::from(area.height);
     app.wt.msg_width = usize::from(area.width);
     let focused = unobscured(app) && app.focused_pane() == PaneId::WMessage;

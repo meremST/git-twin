@@ -829,6 +829,32 @@ fn check_compact_panes(width: u16, height: u16) {
     app.switch_view(ViewKind::Worktree);
     let screen = render(&mut app, width, height);
     assert!(screen.contains("Compact:"), "{screen}");
+    for (action, label) in [
+        (Action::Rescan, "Rescan"),
+        (Action::StageChanged, "Stage Changed"),
+        (Action::SignOff, "Sign Off"),
+        (Action::Commit, "Commit"),
+        (Action::Push, "Push"),
+    ] {
+        let (r, _) = app
+            .hits
+            .zones
+            .iter()
+            .find(|(_, h)| *h == Hit::Button(action.clone()))
+            .unwrap();
+        assert!(r.x > 0, "compact {label} button should shift right");
+    }
+    let (push, _) = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, h)| *h == Hit::Button(Action::Push))
+        .unwrap();
+    assert_eq!(
+        push.right(),
+        width,
+        "compact action group should end at right"
+    );
     for label in [
         "[Unstaged]",
         "[Staged]",
@@ -863,12 +889,96 @@ fn check_compact_panes(width: u16, height: u16) {
         assert!(app.hits.zones.iter().any(|(_, h)| *h == Hit::Pane(id)));
         if id == PaneId::WMessage {
             assert!(screen.contains("[Amend Last Commit]"), "{screen}");
+            let (new_commit, _) = app
+                .hits
+                .zones
+                .iter()
+                .find(|(_, h)| *h == Hit::Button(Action::SetAmend(false)))
+                .unwrap();
+            let (amend, _) = app
+                .hits
+                .zones
+                .iter()
+                .find(|(_, h)| *h == Hit::Button(Action::SetAmend(true)))
+                .unwrap();
+            let (message_pane, _) = app
+                .hits
+                .zones
+                .iter()
+                .find(|(_, h)| *h == Hit::Pane(PaneId::WMessage))
+                .unwrap();
+            let (message_area, _) = app
+                .hits
+                .zones
+                .iter()
+                .find(|(_, h)| *h == Hit::Message)
+                .unwrap();
+            assert_eq!(
+                amend.x,
+                new_commit.right() + 1,
+                "amend control should sit beside new commit"
+            );
+            assert_eq!(amend.y, new_commit.y);
+            assert!(
+                new_commit.y < message_pane.y,
+                "controls should sit outside the frame"
+            );
+            assert_eq!(
+                message_area, message_pane,
+                "message field should start at the top of the frame's inner area"
+            );
         }
     }
     let screen = render(&mut app, 120, 35);
     assert!(!screen.contains("Compact:"));
     for label in ["Staged Changes", "Unstaged Changes", "Commit Message"] {
         assert!(screen.contains(label));
+    }
+    let (message, _) = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, h)| *h == Hit::Pane(PaneId::WMessage))
+        .unwrap();
+    let (message_area, _) = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, h)| *h == Hit::Message)
+        .unwrap();
+    assert_eq!(message_area, message);
+    let (amend, _) = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, h)| *h == Hit::Button(Action::SetAmend(true)))
+        .unwrap();
+    assert!(
+        amend.y < message.y,
+        "full-layout amend control should sit outside the frame"
+    );
+    for (action, label) in [
+        (Action::Rescan, "Rescan"),
+        (Action::StageChanged, "Stage Changed"),
+        (Action::SignOff, "Sign Off"),
+        (Action::Commit, "Commit"),
+        (Action::Push, "Push"),
+    ] {
+        let (r, _) = app
+            .hits
+            .zones
+            .iter()
+            .find(|(_, h)| *h == Hit::Button(action.clone()))
+            .unwrap();
+        assert_eq!(
+            r.width,
+            unicode_width::UnicodeWidthStr::width(label) as u16 + 2,
+            "full-layout {label} button should have a compact hit area"
+        );
+        assert!(
+            r.right() <= message.x && message.x - r.right() <= 3,
+            "full-layout {label} button should sit next to the commit message pane"
+        );
     }
     app.switch_view(ViewKind::History);
     app.hist.focus = git_twin::app::history::HFocus::Sha;
