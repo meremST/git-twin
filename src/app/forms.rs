@@ -124,6 +124,14 @@ impl App {
             ),
             Field::check("Allow external diff drivers / textconv", c.allow_textconv),
             Field::check("Ask before quitting with a commit message", c.confirm_quit),
+            Field::text(
+                "History graph: max columns (0 = as many as fit)",
+                &c.graph_max_lanes.to_string(),
+            ),
+            Field::text(
+                "History graph: cut lines idle for N rows (0 = never)",
+                &c.graph_cut_after.to_string(),
+            ),
         ];
         let mut d = form(
             "Preferences",
@@ -1041,9 +1049,15 @@ impl App {
         };
         c.allow_textconv = d.checked(12);
         c.confirm_quit = d.checked(13);
+        let (Some(ml), Some(ca)) = (num(14), num(15)) else {
+            return self.reject(d, "Numeric fields must contain positive integers.");
+        };
+        c.graph_max_lanes = ml.min(500) as u16;
+        c.graph_cut_after = ca.min(1_000_000) as u32;
         let c = c.clamped();
         let ctx_changed = c.history_context != self.cfg.history_context;
         let wctx_changed = c.worktree_context != self.cfg.worktree_context;
+        let cut_changed = c.graph_cut_after != self.cfg.graph_cut_after;
         self.cfg = c;
         self.mouse_enabled = self.cfg.mouse;
         self.theme = crate::ui::theme::Theme::new(&self.cfg);
@@ -1061,6 +1075,10 @@ impl App {
             Err(e) => self.error("Preferences applied but not saved", e),
         }
         self.hist.rebuild_diff();
+        if cut_changed {
+            // The graph layout is computed while loading.
+            self.load_history(None);
+        }
     }
 
     fn submit_view(&mut self, d: Dialog, idx: Option<usize>, apply_only: bool) {

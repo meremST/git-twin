@@ -1522,3 +1522,88 @@ fn stash_changes_creates_stash_and_refreshes_refs() {
         "history refs must show the new stash"
     );
 }
+
+#[test]
+fn cut_graph_lines_end_in_arrows_that_lead_to_each_other() {
+    let dir = fixture();
+    git(dir.path(), &["commit", "-qm", "Base"]);
+    git(dir.path(), &["branch", "side"]);
+    for k in 0..8 {
+        git(
+            dir.path(),
+            &["commit", "-q", "--allow-empty", "-m", &format!("Main {k}")],
+        );
+    }
+    git(dir.path(), &["checkout", "-q", "side"]);
+    git(
+        dir.path(),
+        &["commit", "-q", "--allow-empty", "-m", "Side work"],
+    );
+    git(dir.path(), &["checkout", "-q", "main"]);
+    git(
+        dir.path(),
+        &["merge", "-q", "--no-ff", "-m", "Merge side", "side"],
+    );
+    for (icons, connectors) in [
+        (IconMode::Ascii, false),
+        (IconMode::Unicode, false),
+        (IconMode::Unicode, true),
+    ] {
+        let mut app = App::new(
+            repo::discover(dir.path()).unwrap(),
+            Config {
+                icons,
+                graph_cut_after: 3,
+                graph_connectors: connectors,
+                ..Config::default()
+            },
+            State::default(),
+            Options {
+                view: Some(ViewKind::History),
+                read_only: false,
+                mouse: Some(true),
+                all_refs: false,
+                paths: Vec::new(),
+            },
+        );
+        app.start();
+        settle(&mut app);
+        let show = |app: &mut App| {
+            let screen = render(app, 120, 80);
+            if std::env::var_os("SHOW_GRAPH").is_some() {
+                println!("{}", screen.lines().take(32).collect::<Vec<_>>().join("\n"));
+            }
+        };
+        show(&mut app);
+        let click = |app: &mut App, hit: fn(&Hit) -> bool| {
+            let (r, h) = app.hits.zones.iter().find(|(_, h)| hit(h)).unwrap().clone();
+            app.on_mouse(MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: r.x,
+                row: r.y,
+                modifiers: KeyModifiers::NONE,
+            });
+            app.on_mouse(MouseEvent {
+                kind: MouseEventKind::Up(MouseButton::Left),
+                column: r.x,
+                row: r.y,
+                modifiers: KeyModifiers::NONE,
+            });
+            h
+        };
+        let Hit::CutArrow(row, lane) = click(&mut app, |h| matches!(h, Hit::CutArrow(..))) else {
+            unreachable!()
+        };
+        let target = app.hist.cut_target[&(row, lane)];
+        let node = app.hist.index[&target];
+        assert_eq!(app.hist.sel, Some(node));
+        show(&mut app);
+        let Hit::ResumeArrow { node: up, .. } =
+            click(&mut app, |h| matches!(h, Hit::ResumeArrow { .. }))
+        else {
+            unreachable!()
+        };
+        assert_eq!(up, node);
+        assert_eq!(app.hist.sel, Some(row));
+    }
+}

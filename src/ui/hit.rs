@@ -33,7 +33,10 @@ pub enum SplitId {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Hit {
     MenuTitle(usize),
-    MenuItem { depth: usize, idx: usize },
+    MenuItem {
+        depth: usize,
+        idx: usize,
+    },
     MenuBackdrop,
     ViewTab(ViewKind),
     Split(SplitId, Rect),
@@ -41,6 +44,13 @@ pub enum Hit {
     PaneTab(PaneId),
     CommitRow(usize),
     RefLabel(usize, Vec<u8>),
+    /// Down arrow ending a cut graph line, at (row, lane).
+    CutArrow(usize, u16),
+    /// Up arrow drawn on `row`, resuming a cut line into commit `node`.
+    ResumeArrow {
+        row: usize,
+        node: usize,
+    },
     ShaEntry,
     FindEntry,
     SearchEntry,
@@ -62,7 +72,9 @@ impl Hit {
     pub fn pane(&self) -> Option<PaneId> {
         match self {
             Hit::Pane(p) | Hit::DiffLine(p, _) => Some(*p),
-            Hit::CommitRow(_) | Hit::RefLabel(..) => Some(PaneId::HList),
+            Hit::CommitRow(_) | Hit::RefLabel(..) | Hit::CutArrow(..) | Hit::ResumeArrow { .. } => {
+                Some(PaneId::HList)
+            }
             Hit::HFileRow(_) => Some(PaneId::HFiles),
             Hit::WtFile(FileList::Unstaged, ..) => Some(PaneId::WUnstaged),
             Hit::WtFile(FileList::Staged, ..) => Some(PaneId::WStaged),

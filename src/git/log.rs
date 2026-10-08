@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::runner::{GitError, Opts, Runner, clean_message, os};
 use crate::domain::commit::{Commit, Interner};
-use crate::domain::graph::{GraphBuilder, GraphRow};
+use crate::domain::graph::{Cut, GraphBuilder, GraphRow};
 use crate::domain::oid::Oid;
 use crate::domain::sanitize;
 
@@ -243,6 +243,7 @@ pub const LOCAL_DATE: &str = "--date=format-local:%Y-%m-%d %H:%M:%S";
 pub struct LogBatch {
     pub commits: Vec<Commit>,
     pub graph: Vec<GraphRow>,
+    pub cuts: Vec<Cut>,
 }
 
 /// Parses one 5-field record (fields without terminators).
@@ -271,10 +272,12 @@ pub struct LocalRows {
 }
 
 /// Streams the history. `sink` receives batches and returns false to stop.
+/// Graph lines idle for more than `cut_after` rows are cut (0 = never).
 pub fn stream_log(
     runner: &Runner,
     view: &ViewSpec,
     local: Option<LocalRows>,
+    cut_after: usize,
     cancel: &AtomicBool,
     mut sink: impl FnMut(LogBatch) -> bool,
 ) -> Result<usize, GitError> {
@@ -287,11 +290,12 @@ pub fn stream_log(
         os(LOCAL_DATE),
     ];
     args.extend(view.log_args().map_err(|e| GitError::new("git log", e))?);
-    let mut graph = GraphBuilder::new();
+    let mut graph = GraphBuilder::with_cut_after(cut_after);
     let mut interner = Interner::default();
     let mut batch = LogBatch {
         commits: Vec::new(),
         graph: Vec::new(),
+        cuts: Vec::new(),
     };
     if let Some(l) = local {
         let mut push_fake = |oid: Oid, parent: Option<Oid>, subject: &str| {
@@ -367,6 +371,7 @@ pub fn stream_log(
             nf = 0;
             if let Some(c) = parse_record(&fields, &mut interner) {
                 batch.graph.push(graph.push(c.oid, &c.parents));
+                batch.cuts.extend(graph.take_cuts());
                 batch.commits.push(c);
                 total += 1;
             }
@@ -382,6 +387,7 @@ pub fn stream_log(
                     LogBatch {
                         commits: Vec::new(),
                         graph: Vec::new(),
+                        cuts: Vec::new(),
                     },
                 );
                 if !sink(b) {

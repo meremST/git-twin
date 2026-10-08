@@ -470,9 +470,13 @@ impl App {
     pub fn on_msg(&mut self, m: worker::Msg) {
         let fresh = m.generation == self.generation;
         match m.payload {
-            Payload::LogBatch { commits, graph } => {
+            Payload::LogBatch {
+                commits,
+                graph,
+                cuts,
+            } => {
                 if m.id == self.req.log {
-                    self.on_log_batch(commits, graph);
+                    self.on_log_batch(commits, graph, cuts);
                 }
             }
             Payload::LogDone(r) => {

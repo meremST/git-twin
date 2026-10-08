@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::domain::commit::{Commit, CommitDetails};
 use crate::domain::diff::Diff;
-use crate::domain::graph::GraphRow;
+use crate::domain::graph::{Cut, GraphRow};
 use crate::domain::oid::Oid;
 use crate::domain::refs::RefSet;
 use crate::domain::status::RepoStatus;
@@ -53,6 +53,7 @@ pub enum Payload {
     LogBatch {
         commits: Vec<Commit>,
         graph: Vec<GraphRow>,
+        cuts: Vec<Cut>,
     },
     LogDone(Result<usize, GitError>),
     Refs(Result<RefSet, GitError>),

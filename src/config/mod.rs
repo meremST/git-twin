@@ -113,6 +113,12 @@ pub struct Config {
     /// it to the next one. Off by default since it halves how many commits
     /// fit on screen.
     pub graph_connectors: bool,
+    /// Most graph columns drawn in the history list (0 = as many as fit).
+    /// Extra columns are folded into a `…` marker so subjects stay visible.
+    pub graph_max_lanes: u16,
+    /// Like gitk, cut graph lines that stay idle for more than this many
+    /// rows: an arrow marks both ends (0 = never cut).
+    pub graph_cut_after: u32,
     /// Copy to the system clipboard with OSC 52 (off by default).
     pub osc52: bool,
     /// gitk "Lines of context".
@@ -140,6 +146,8 @@ impl Default for Config {
             colors: ColorMode::Auto,
             mouse: true,
             graph_connectors: false,
+            graph_max_lanes: 20,
+            graph_cut_after: 50,
             osc52: false,
             history_context: 3,
             worktree_context: 5,
@@ -183,6 +191,8 @@ impl Config {
         self.tab_width = self.tab_width.clamp(1, 16);
         self.commit_width = self.commit_width.clamp(20, 400);
         self.double_click_ms = self.double_click_ms.clamp(100, 2000);
+        self.graph_max_lanes = self.graph_max_lanes.min(500);
+        self.graph_cut_after = self.graph_cut_after.min(1_000_000);
         self
     }
 

@@ -168,6 +168,18 @@ sur les selections. L'onglet actif et le menu ouvert sont surlignes en dore
 plein. Le rendu le plus fidele utilise `--colors truecolor`.
 Le presse-papiers OSC 52 est optionnel et desactive par defaut.
 
+Sur les historiques tres ramifies (`gitt --all` sur le noyau Linux par
+exemple), deux preferences gardent le graphe lisible :
+`graph_max_lanes` (20 par defaut, 0 = autant que la place le permet) limite
+le nombre de colonnes dessinees ; au-dela, un `…` les resume et le sujet reste
+visible. `graph_cut_after` (50 par defaut, 0 = jamais) coupe, comme gitk, les
+lignes restees inactives plus de N commits : la ligne se termine en
+pointilles gras `┇` et reprend en pointilles juste au-dessus du commit parent
+(dans une colonne libre raccordee par `─╯` si la place est prise), ce qui
+libere la colonne (`v` / `^` en ASCII). Un clic sur le pointille de fin mene
+au commit parent ; un clic sur celui de reprise remonte a la coupure (clics
+repetes : coupure suivante quand plusieurs lignes menent au meme parent).
+
 ## Developpement
 
 ```sh

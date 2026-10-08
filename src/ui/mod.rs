@@ -27,6 +27,9 @@ use crate::domain::{graph, refs::RefKind, sanitize::sanitize};
 use hit::{Hit, HitMap, PaneId, SplitId};
 use theme::Theme;
 
+/// Columns kept for the subject when the history graph is wide.
+const GRAPH_MIN_SUBJECT: u16 = 24;
+
 const ASCII_BORDER: ratatui::symbols::border::Set<'static> = ratatui::symbols::border::Set {
     top_left: "+",
     top_right: "+",
@@ -482,27 +485,62 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         let tint = |c| app.theme.commit_tint(style, c);
         let mut x = inner.x;
         if let Some(g) = app.hist.graph.get(i) {
-            for (lane, cell) in g.cells.iter().enumerate() {
-                if x + 2 >= author_x {
-                    break;
-                }
-                let fg = if lane == usize::from(g.node) {
+            let ascii = app.theme.icons.ascii;
+            let connectors = app.cfg.graph_connectors;
+            // Up arrow of a cut line resuming into the next commit: the
+            // builder keeps this row's cell empty for it.
+            let resume_col = app.hist.graph.get(i + 1).and_then(|n| {
+                n.cells
+                    .iter()
+                    .position(|c| c.bits & graph::RESUME != 0)
+                    .map(|k| (k, n.cells[k].color))
+            });
+            // Dashed box-drawing stubs line up with "│", unlike arrow glyphs.
+            let up_arrow = if ascii { "^" } else { "┇" };
+            let down_arrow = if ascii { "v" } else { "┇" };
+            let room = usize::from(author_x.saturating_sub(inner.x + GRAPH_MIN_SUBJECT)) / 2;
+            let cap = match usize::from(app.cfg.graph_max_lanes) {
+                0 => room,
+                m => m.min(room),
+            }
+            .max(1);
+            let width = g.cells.len().max(resume_col.map_or(0, |(c, _)| c + 1));
+            let mut arrows = Vec::new();
+            let overflow = width > cap;
+            let shown = if overflow { cap - 1 } else { width };
+            for lane in 0..shown {
+                let cell = g.cells.get(lane).copied().unwrap_or_default();
+                let is_node = lane == usize::from(g.node);
+                let resume_here = resume_col.filter(|(c, _)| *c == lane);
+                let fg = if is_node {
                     if c.oid == crate::git::log::null_unstaged() {
                         app.theme.error
                     } else {
                         app.theme.graph_color(g.node_color)
                     }
+                } else if let (Some((_, color)), false) = (resume_here, connectors) {
+                    app.theme.graph_color(color)
                 } else {
                     app.theme.graph_color(cell.color)
                 };
-                let ch = if lane == usize::from(g.node) {
+                let ch = if is_node {
                     app.theme.icons.node.to_string()
+                } else if cell.bits & graph::CUT != 0 {
+                    arrows.push((Rect::new(x, rr.y, 1, 1), Hit::CutArrow(i, lane as u16)));
+                    down_arrow.to_string()
+                } else if resume_here.is_some() && !connectors {
+                    let hit = Hit::ResumeArrow {
+                        row: i,
+                        node: i + 1,
+                    };
+                    arrows.push((Rect::new(x, rr.y, 1, 1), hit));
+                    up_arrow.to_string()
                 } else {
-                    graph::glyph(cell.bits, app.theme.icons.ascii).to_string()
+                    graph::glyph(cell.bits, ascii).to_string()
                 };
                 text(f, Rect::new(x, rr.y, 1, 1), ch, tint(fg));
                 let h = if cell.bits & graph::RIGHT != 0 {
-                    if app.theme.icons.ascii { "-" } else { "─" }
+                    if ascii { "-" } else { "─" }
                 } else {
                     " "
                 };
@@ -516,15 +554,47 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                 // continue on to the next commit, so consecutive nodes in the
                 // same lane read as visually linked.
                 if cell.bits & graph::DOWN != 0 {
-                    let v = if app.theme.icons.ascii { "|" } else { "│" };
+                    let v = if ascii { "|" } else { "│" };
                     text(
                         f,
                         Rect::new(x, connector.y, 1, connector.height),
                         v,
                         tint(app.theme.graph_color(cell.color)),
                     );
+                } else if let Some((_, color)) = resume_here {
+                    let zone = Rect::new(x, connector.y, 1, connector.height);
+                    text(f, zone, up_arrow, tint(app.theme.graph_color(color)));
+                    arrows.push((
+                        zone,
+                        Hit::ResumeArrow {
+                            row: i,
+                            node: i + 1,
+                        },
+                    ));
                 }
                 x += 2;
+            }
+            if overflow {
+                // Columns beyond the limit fold into "…"; a node among them
+                // is still drawn so every commit keeps its marker.
+                let more = if ascii { "~" } else { "…" };
+                if usize::from(g.node) >= shown {
+                    let fg = app.theme.graph_color(g.node_color);
+                    text(
+                        f,
+                        Rect::new(x, rr.y, 1, 1),
+                        app.theme.icons.node.to_string(),
+                        tint(fg),
+                    );
+                    text(f, Rect::new(x + 1, rr.y, 1, 1), more, app.theme.dimmed());
+                    x += 1;
+                } else {
+                    text(f, Rect::new(x, rr.y, 1, 1), more, app.theme.dimmed());
+                }
+                x += 2;
+            }
+            for (zone, hit) in arrows {
+                app.hits.push(zone, hit);
             }
         }
         for reference in app.refs.for_commit(&c.oid) {

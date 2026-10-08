@@ -14,7 +14,7 @@ use super::{App, Handoff, Pending, StatusTone};
 use crate::config::{Config, State, ViewKind};
 use crate::domain::commit::{Commit, CommitDetails};
 use crate::domain::diff::Diff;
-use crate::domain::graph::GraphRow;
+use crate::domain::graph::{Cut, GraphRow};
 use crate::domain::oid::Oid;
 use crate::domain::refs::{Head, RefKind};
 use crate::domain::sanitize;
@@ -46,6 +46,10 @@ pub struct HistoryState {
     pub cur_view: usize,
     pub commits: Vec<Commit>,
     pub graph: Vec<GraphRow>,
+    /// Commit awaited by the line cut at (row, lane).
+    pub cut_target: HashMap<(usize, u16), Oid>,
+    /// Rows where lines heading for a commit were cut, top to bottom.
+    pub cut_rows: HashMap<Oid, Vec<usize>>,
     pub index: HashMap<Oid, usize>,
     pub sel: Option<usize>,
     pub top: usize,
@@ -120,6 +124,8 @@ impl HistoryState {
             cur_view: 0,
             commits: Vec::new(),
             graph: Vec::new(),
+            cut_target: HashMap::new(),
+            cut_rows: HashMap::new(),
             index: HashMap::new(),
             sel: None,
             top: 0,
@@ -471,6 +477,8 @@ impl App {
         let keep = keep.or_else(|| h.selected_oid());
         h.commits.clear();
         h.graph.clear();
+        h.cut_target.clear();
+        h.cut_rows.clear();
         h.index.clear();
         h.sel = None;
         h.local_rows = 0;
@@ -482,6 +490,7 @@ impl App {
         let view = h.view().clone();
         let cancel = h.cancel.clone();
         let with_local = !self.repo.is_bare() && view.includes_head();
+        let cut_after = self.cfg.graph_cut_after as usize;
         let r = self.runner.clone();
         self.req.log = self.workers.stream(self.generation, move |sink| {
             let local = if with_local {
@@ -502,18 +511,23 @@ impl App {
             } else {
                 None
             };
-            let res = log::stream_log(&r, &view, local, cancel.flag(), |b| {
+            let res = log::stream_log(&r, &view, local, cut_after, cancel.flag(), |b| {
                 sink.send(Payload::LogBatch {
                     commits: b.commits,
                     graph: b.graph,
+                    cuts: b.cuts,
                 })
             });
             sink.send(Payload::LogDone(res));
         });
     }
 
-    pub fn on_log_batch(&mut self, commits: Vec<Commit>, graph: Vec<GraphRow>) {
+    pub fn on_log_batch(&mut self, commits: Vec<Commit>, graph: Vec<GraphRow>, cuts: Vec<Cut>) {
         let h = &mut self.hist;
+        for c in cuts {
+            h.cut_target.insert((c.row, c.lane), c.target);
+            h.cut_rows.entry(c.target).or_default().push(c.row);
+        }
         let first = h.commits.is_empty();
         for c in commits {
             if HistoryState::is_pseudo(&c.oid) {
@@ -608,6 +622,50 @@ impl App {
             self.hist.top = i.saturating_sub(h / 2);
             self.hist.scroll(0);
         }
+    }
+
+    /// Down arrow of a cut graph line clicked: go to the commit it leads to,
+    /// whose matching up arrow is drawn just above it.
+    pub fn follow_cut(&mut self, row: usize, lane: u16) {
+        let Some(target) = self.hist.cut_target.get(&(row, lane)).copied() else {
+            return;
+        };
+        match self.hist.index.get(&target).copied() {
+            Some(i) => {
+                self.hist.focus = HFocus::List;
+                self.select_row(i);
+                self.center_selection();
+            }
+            None => self.set_status(
+                format!(
+                    "The line leads to {}, which is not loaded in this view.",
+                    target.short(10)
+                ),
+                StatusTone::Info,
+            ),
+        }
+    }
+
+    /// Up arrow above commit `node` clicked: go to the row where its line
+    /// was cut. Repeated clicks cycle through the lines cut towards it.
+    pub fn follow_resume(&mut self, node: usize) {
+        let Some(oid) = self.hist.commits.get(node).map(|c| c.oid) else {
+            return;
+        };
+        let Some(rows) = self.hist.cut_rows.get(&oid) else {
+            return;
+        };
+        let target = match self
+            .hist
+            .sel
+            .and_then(|s| rows.iter().position(|r| *r == s))
+        {
+            Some(p) if p > 0 => rows[p - 1],
+            _ => *rows.last().expect("non-empty"),
+        };
+        self.hist.focus = HFocus::List;
+        self.select_row(target);
+        self.center_selection();
     }
 
     /// Requests details, diff (and tree) for the selected row.

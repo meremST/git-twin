@@ -11,6 +11,10 @@ inspire de gitk et git gui.
   Worktree ; bascule entre les deux vues avec F6.
 - Historique avec graphe, branches, tags, recherche, diffs, option `--all`
   et filtrage par chemins (`gitt chemin/fichier.c`, comme gitk).
+- Graphe lisible sur les gros historiques : largeur plafonnee (colonnes en
+  trop resumees par `…`) et, comme gitk, coupure des longues lignes inactives
+  par des pointilles gras `┇` cliquables qui menent l'un a l'autre (reglables
+  dans Preferences).
 - Indexation/desindexation par fichier, bloc ou lignes, edition du message de
   commit et sauvegarde des brouillons.
 - Clavier, souris, menus, panneaux redimensionnables, mode compact,

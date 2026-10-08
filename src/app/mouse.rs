@@ -157,6 +157,8 @@ impl App {
                 self.hist.focus = HFocus::List;
                 self.dispatch(Action::SelectRow(i));
             }
+            Hit::CutArrow(row, lane) => self.follow_cut(row, lane),
+            Hit::ResumeArrow { node, .. } => self.follow_resume(node),
             Hit::RefLabel(i, full) => {
                 self.hist.focus = HFocus::List;
                 if self
@@ -304,7 +306,7 @@ impl App {
             return;
         };
         let ctx = match hit {
-            Hit::CommitRow(i) => {
+            Hit::CommitRow(i) | Hit::CutArrow(i, _) | Hit::ResumeArrow { row: i, .. } => {
                 self.hist.focus = HFocus::List;
                 Ctx::Commit(i)
             }
