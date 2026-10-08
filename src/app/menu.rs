@@ -544,6 +544,7 @@ impl App {
                                 "",
                                 Action::SwitchView(ViewKind::Worktree),
                             ),
+                            en("Stash changes", "", Action::StashChanges, !self.read_only),
                             e("Rescan", "", Action::Rescan),
                         ],
                     );
@@ -571,7 +572,7 @@ impl App {
                             has_sel,
                         ),
                         e("Make patch", "", Action::MakePatch(*row)),
-                        en("Create tag", "", Action::CreateTag(*row), ro),
+                        en("Create tag...", "", Action::CreateTag(*row), ro),
                         e("Copy commit reference", "", Action::CopyCommitRef(*row)),
                         e("Copy commit ID", "", Action::CopyCommitId(*row)),
                         e("Write commit to file", "", Action::WriteCommit(*row)),
@@ -581,7 +582,7 @@ impl App {
                             if detached {
                                 "Detached head: can't reset"
                             } else {
-                                "Reset HEAD branch to here"
+                                "Reset current branch to this commit..."
                             },
                             "",
                             Action::ResetHere(*row),
@@ -640,7 +641,7 @@ impl App {
                             ro && !is_head,
                         ),
                         en(
-                            "Rename this branch",
+                            "Rename branch...",
                             "",
                             Action::RenameBranch(full.clone()),
                             ro && local,

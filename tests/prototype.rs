@@ -1447,3 +1447,78 @@ fn clicking_a_reference_in_list_refs_shows_it_in_history() {
         "list stays open after a click"
     );
 }
+
+#[test]
+fn checkout_moves_head_marker_but_keeps_history_rows() {
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    git(dir.path(), &["branch", "feature", "HEAD~1"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    settle(&mut app);
+    let rows_before: Vec<_> = app.hist.commits.iter().map(|c| c.oid).collect();
+    let feature = git(dir.path(), &["rev-parse", "feature"])
+        .trim()
+        .to_string();
+    app.dispatch(Action::CheckoutRef(b"refs/heads/feature".to_vec()));
+    settle(&mut app);
+    settle(&mut app);
+    assert_eq!(
+        app.hist.commits.iter().map(|c| c.oid).collect::<Vec<_>>(),
+        rows_before,
+        "history rows must stay as they were"
+    );
+    assert_eq!(app.refs.head.label(), "feature");
+    let feature_ref = app
+        .refs
+        .for_commit(&git_twin::domain::oid::Oid::from_hex(&feature).unwrap())
+        .find(|r| r.short == "feature")
+        .unwrap();
+    assert!(app.refs.is_head_ref(feature_ref));
+}
+
+#[test]
+fn reset_dialog_lists_every_mode() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    settle(&mut app);
+    let oid = app
+        .hist
+        .commits
+        .iter()
+        .map(|c| c.oid)
+        .find(|o| !o.is_zero())
+        .unwrap();
+    app.open_reset(oid);
+    let screen = render(&mut app, 120, 40);
+    for mode in ["Soft:", "Mixed:", "Hard:"] {
+        assert!(screen.contains(mode), "reset dialog must show {mode}");
+    }
+}
+
+#[test]
+fn stash_changes_creates_stash_and_refreshes_refs() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    settle(&mut app);
+    app.dispatch(Action::StashChanges);
+    settle(&mut app);
+    settle(&mut app);
+    assert!(
+        !git(dir.path(), &["stash", "list"]).trim().is_empty(),
+        "a stash entry must exist"
+    );
+    assert!(
+        app.refs
+            .refs
+            .iter()
+            .any(|r| r.kind == git_twin::domain::refs::RefKind::Stash),
+        "history refs must show the new stash"
+    );
+}

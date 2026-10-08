@@ -1410,6 +1410,9 @@ impl App {
                     Some(head),
                 );
             }
+            A::StashChanges => {
+                self.run_op("Stash", Box::new(ops::stash), After::Refresh, None);
+            }
             A::MarkCommit(row) => {
                 if let Some(o) = self.row_oid(*row) {
                     self.hist.mark = Some(o);
@@ -1456,26 +1459,12 @@ impl App {
                         return true;
                     }
                     let head = self.head();
-                    self.confirm(
-                        "Check out commit",
-                        &[
-                            (
-                                &format!("Check out commit {} (detached HEAD)?", o.short(10)),
-                                Tone::Normal,
-                            ),
-                            (
-                                "Local changes are kept; Git refuses if they conflict.",
-                                Tone::Normal,
-                            ),
-                        ],
-                        "Check out",
-                        Pending::Op {
-                            label: "Checkout".into(),
-                            f: Box::new(move |r| ops::checkout_detach(r, &o)),
-                            after: After::Refresh,
-                            expect_head: Some(head),
-                        },
-                    );
+                    self.run_pending(Pending::Op {
+                        label: "Checkout".into(),
+                        f: Box::new(move |r| ops::checkout_detach(r, &o)),
+                        after: After::RefsOnly,
+                        expect_head: Some(head),
+                    });
                 }
             }
             A::CheckoutRef(full) => self.checkout_ref(full.clone()),
@@ -1538,37 +1527,12 @@ impl App {
             return;
         }
         let head = self.head();
-        let branch = self.head_branch_short().unwrap_or_else(|| "HEAD".into());
-        let p = Pending::Op {
+        self.run_pending(Pending::Op {
             label: "Cherry-pick".into(),
             f: Box::new(move |r| ops::cherry_pick(r, &oid, None)),
             after: After::Refresh,
             expect_head: Some(head),
-        };
-        if head.is_some_and(|h| read::is_ancestor(&self.runner, &oid, &h)) {
-            self.confirm(
-                "Confirm cherry-pick",
-                &[(
-                    &format!(
-                        "Commit {} is already included in branch {branch} -- really re-apply it?",
-                        oid.short(10)
-                    ),
-                    Tone::Warn,
-                )],
-                "Cherry-pick",
-                p,
-            );
-        } else {
-            self.confirm(
-                "Cherry-pick",
-                &[(
-                    &format!("Cherry-pick commit {} onto {branch}?", oid.short(10)),
-                    Tone::Normal,
-                )],
-                "Cherry-pick",
-                p,
-            );
-        }
+        });
     }
 
     fn revert_row(&mut self, row: usize) {
@@ -1577,40 +1541,13 @@ impl App {
             return;
         }
         let head = self.head();
-        let branch = self.head_branch_short().unwrap_or_else(|| "HEAD".into());
-        let merge = self.hist.commits[row].parents.len() > 1;
-        let mainline = merge.then_some(1);
-        let mut body = vec![];
-        let contained = head.is_some_and(|h| read::is_ancestor(&self.runner, &oid, &h));
-        let q = if contained {
-            format!("Revert commit {} on {branch}?", oid.short(10))
-        } else {
-            format!(
-                "Commit {} is not included in branch {branch} -- really revert it?",
-                oid.short(10)
-            )
-        };
-        body.push((
-            q.as_str(),
-            if contained { Tone::Normal } else { Tone::Warn },
-        ));
-        if merge {
-            body.push((
-                "Merge commit: reverted against its first parent (-m 1).",
-                Tone::Warn,
-            ));
-        }
-        self.confirm(
-            "Revert commit",
-            &body,
-            "Revert",
-            Pending::Op {
-                label: "Revert".into(),
-                f: Box::new(move |r| ops::revert_commit(r, &oid, mainline)),
-                after: After::Refresh,
-                expect_head: Some(head),
-            },
-        );
+        let mainline = (self.hist.commits[row].parents.len() > 1).then_some(1);
+        self.run_pending(Pending::Op {
+            label: "Revert".into(),
+            f: Box::new(move |r| ops::revert_commit(r, &oid, mainline)),
+            after: After::Refresh,
+            expect_head: Some(head),
+        });
     }
 
     fn find_descendant(&mut self, row: usize) {
@@ -1693,17 +1630,12 @@ impl App {
                 )
             }
         };
-        self.confirm(
-            "Check out",
-            &[(&format!("{label}?"), Tone::Normal)],
-            "Check out",
-            Pending::Op {
-                label,
-                f,
-                after: After::Refresh,
-                expect_head: Some(head),
-            },
-        );
+        self.run_pending(Pending::Op {
+            label,
+            f,
+            after: After::RefsOnly,
+            expect_head: Some(head),
+        });
     }
 
     fn remove_branch(&mut self, full: Vec<u8>) {

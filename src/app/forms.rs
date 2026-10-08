@@ -281,7 +281,11 @@ impl App {
         let fields = vec![
             self.commit_label(&oid),
             Field::text("Tag name", ""),
-            Field::text("Tag message (optional, makes an annotated tag)", ""),
+            Field::text("Message (optional)", ""),
+            Field::label(
+                "Empty message: lightweight tag. With a message: annotated tag.",
+                Tone::Normal,
+            ),
         ];
         self.dialogs.push(form(
             "Create tag",
@@ -329,12 +333,12 @@ impl App {
                 Tone::Strong,
             ),
             self.commit_label(&oid),
-            Field::choice(
+            Field::radio(
                 "Reset type",
                 &[
-                    "Soft: Leave working tree and index untouched",
-                    "Mixed: Leave working tree untouched, reset index",
-                    "Hard: Reset working tree and index (discard ALL local changes)",
+                    "Soft: move the branch only; index and files are kept",
+                    "Mixed: move the branch and unstage; files are kept",
+                    "Hard: move the branch, index and files (discards local changes)",
                 ],
                 1,
             ),
@@ -358,7 +362,7 @@ impl App {
             return;
         }
         let fields = vec![
-            Field::label(&format!("Branch: {}", r.short), Tone::Strong),
+            Field::label(&format!("Current name: {}", r.short), Tone::Strong),
             Field::text("New name", &r.short),
         ];
         self.dialogs.push(form(
@@ -831,7 +835,7 @@ impl App {
                     self.run_op(
                         &format!("Checkout {}", r.short),
                         Box::new(move |rr| ops::checkout_detach(rr, &t)),
-                        After::Refresh,
+                        After::RefsOnly,
                         Some(head),
                     );
                 } else {

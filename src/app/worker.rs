@@ -37,6 +37,8 @@ pub enum After {
     Refresh,
     /// Only the working tree status changed.
     Rescan,
+    /// Re-read only refs (HEAD and branch labels); history rows are kept.
+    RefsOnly,
     /// Clear the commit message (successful commit).
     Committed,
     /// Select a commit after the refresh.

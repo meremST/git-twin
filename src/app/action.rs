@@ -97,6 +97,7 @@ pub enum Action {
     CherryPick(usize),
     ResetHere(usize),
     ResetTo(Oid, ResetMode),
+    StashChanges,
     MarkCommit(usize),
     ReturnToMark,
     FindDescendant(usize),

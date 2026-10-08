@@ -405,6 +405,10 @@ pub fn reset(r: &Runner, mode: ResetMode, oid: &Oid) -> Result<String, GitError>
     .map(done)
 }
 
+pub fn stash(r: &Runner) -> Result<String, GitError> {
+    r.write(&[os("stash")], None, Opts::default()).map(done)
+}
+
 pub fn cherry_pick(r: &Runner, oid: &Oid, mainline: Option<usize>) -> Result<String, GitError> {
     let mut a = vec![os("cherry-pick")];
     if let Some(m) = mainline {

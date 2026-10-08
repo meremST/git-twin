@@ -32,6 +32,8 @@ pub enum Field {
         options: Vec<String>,
         sel: usize,
         dropdown: bool,
+        /// All options listed vertically with a marker on the selected one.
+        radio: bool,
     },
     List {
         label: String,
@@ -151,7 +153,15 @@ impl Field {
             options: options.iter().map(|s| s.to_string()).collect(),
             sel,
             dropdown: false,
+            radio: false,
         }
+    }
+    pub fn radio(label: &str, options: &[&str], sel: usize) -> Field {
+        let mut field = Self::choice(label, options, sel);
+        if let Field::Choice { radio, .. } = &mut field {
+            *radio = true;
+        }
+        field
     }
     pub fn dropdown(label: &str, options: &[&str], sel: usize) -> Field {
         let mut field = Self::choice(label, options, sel);

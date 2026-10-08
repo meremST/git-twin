@@ -239,6 +239,28 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 options,
                 sel,
                 dropdown,
+                radio,
+            } if *radio => {
+                rows.extend(
+                    wrap(label, width)
+                        .into_iter()
+                        .map(|s| FormRow::Label(s, style, Some(Hit::DlgField(i)))),
+                );
+                for (option, text) in options.iter().enumerate() {
+                    let mark = if option == *sel { "(•)" } else { "( )" };
+                    rows.extend(
+                        wrap(&format!("  {mark} {text}"), width)
+                            .into_iter()
+                            .map(|s| FormRow::Label(s, style, Some(Hit::DlgChoice(i, option)))),
+                    );
+                }
+            }
+            Field::Choice {
+                label,
+                options,
+                sel,
+                dropdown,
+                ..
             } => {
                 let value = options.get(*sel).map(String::as_str).unwrap_or("");
                 let icons = &app.theme.icons;

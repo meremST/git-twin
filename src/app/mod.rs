@@ -598,6 +598,7 @@ impl App {
                 }
                 match after {
                     After::Nothing => {}
+                    After::RefsOnly => self.load_refs(),
                     After::Rescan => {
                         self.generation += 1;
                         self.rescan();
