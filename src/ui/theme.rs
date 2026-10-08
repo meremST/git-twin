@@ -195,6 +195,7 @@ pub struct Icons {
     pub file: &'static str,
     pub dir: &'static str,
     pub branch: &'static str,
+    pub node: &'static str,
 }
 
 impl Icons {
@@ -215,6 +216,7 @@ impl Icons {
                 file: "",
                 dir: "/",
                 branch: "",
+                node: "*",
             },
             IconMode::Unicode => Icons {
                 ascii: false,
@@ -231,6 +233,7 @@ impl Icons {
                 file: "",
                 dir: "/",
                 branch: "",
+                node: "●",
             },
             IconMode::Nerd => Icons {
                 ascii: false,
@@ -247,6 +250,11 @@ impl Icons {
                 file: "\u{f15b} ",
                 dir: "/",
                 branch: "\u{e0a0} ",
+                // Nerd Font PUA glyphs (`\u{eafc}`, `\u{eb8a}`) rendered poorly/invisibly
+                // without the matching font, and terminals don't composite overstruck
+                // glyphs into one cell. The plain Unicode circle is supported everywhere
+                // and already looks right, so it's reused here instead.
+                node: "●",
             },
         }
     }

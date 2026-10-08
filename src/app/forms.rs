@@ -84,6 +84,10 @@ impl App {
                 },
             ),
             Field::check("Mouse support (applies on restart)", c.mouse),
+            Field::check(
+                "Show a connector line below each commit's graph node",
+                c.graph_connectors,
+            ),
             Field::check("Copy to the system clipboard (OSC 52)", c.osc52),
             Field::text("History: lines of context", &c.history_context.to_string()),
             Field::text(
@@ -974,26 +978,27 @@ impl App {
             _ => IconMode::Unicode,
         };
         c.mouse = d.checked(2);
-        c.osc52 = d.checked(3);
-        let (Some(hc), Some(wc), Some(tw), Some(cw)) = (num(4), num(5), num(6), num(7)) else {
+        c.graph_connectors = d.checked(3);
+        c.osc52 = d.checked(4);
+        let (Some(hc), Some(wc), Some(tw), Some(cw)) = (num(5), num(6), num(7), num(8)) else {
             return self.reject(d, "Numeric fields must contain positive integers.");
         };
         c.history_context = hc as u32;
         c.worktree_context = wc as u32;
         c.tab_width = tw.min(16) as u8;
         c.commit_width = cw.min(400) as u16;
-        c.stage_untracked = match d.chosen(8) {
+        c.stage_untracked = match d.chosen(9) {
             1 => StageUntracked::Yes,
             2 => StageUntracked::No,
             _ => StageUntracked::Ask,
         };
-        c.commit_handoff = match d.chosen(9) {
+        c.commit_handoff = match d.chosen(10) {
             1 => HandoffCfg::Always,
             2 => HandoffCfg::Never,
             _ => HandoffCfg::Auto,
         };
-        c.allow_textconv = d.checked(10);
-        c.confirm_quit = d.checked(11);
+        c.allow_textconv = d.checked(11);
+        c.confirm_quit = d.checked(12);
         let c = c.clamped();
         let ctx_changed = c.history_context != self.cfg.history_context;
         let wctx_changed = c.worktree_context != self.cfg.worktree_context;

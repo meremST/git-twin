@@ -100,6 +100,10 @@ pub struct Config {
     pub icons: IconMode,
     pub colors: ColorMode,
     pub mouse: bool,
+    /// Draw an extra connector line below each commit's graph node, linking
+    /// it to the next one. Off by default since it halves how many commits
+    /// fit on screen.
+    pub graph_connectors: bool,
     /// Copy to the system clipboard with OSC 52 (off by default).
     pub osc52: bool,
     /// gitk "Lines of context".
@@ -125,6 +129,7 @@ impl Default for Config {
             icons: IconMode::Unicode,
             colors: ColorMode::Auto,
             mouse: true,
+            graph_connectors: false,
             osc52: false,
             history_context: 3,
             worktree_context: 5,

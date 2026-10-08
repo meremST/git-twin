@@ -398,7 +398,8 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         "Date",
         app.theme.dimmed(),
     );
-    app.hist.height = usize::from(inner.height - 1);
+    let step: u16 = if app.cfg.graph_connectors { 2 } else { 1 };
+    app.hist.height = usize::from((inner.height - 1) / step).max(1);
     app.hist.top = app.hist.top.min(
         app.hist
             .commits
@@ -409,7 +410,12 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         .take(app.hist.height)
         .enumerate()
     {
-        let rr = row(inner, line as u16 + 1);
+        let rr = row(inner, line as u16 * step + 1);
+        let connector = if app.cfg.graph_connectors {
+            row(inner, line as u16 * step + 2)
+        } else {
+            Rect::new(rr.x, rr.y, rr.width, 0)
+        };
         let c = &app.hist.commits[i];
         let selected = app.hist.sel == Some(i);
         let style = if selected {
@@ -420,7 +426,9 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             app.theme.base()
         };
         f.render_widget(Block::default().style(style), rr);
+        f.render_widget(Block::default().style(style), connector);
         app.hits.push(rr, Hit::CommitRow(i));
+        app.hits.push(connector, Hit::CommitRow(i));
         let tint = |c| app.theme.commit_tint(style, c);
         let mut x = inner.x;
         if let Some(g) = app.hist.graph.get(i) {
@@ -428,11 +436,6 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                 if x + 2 >= author_x {
                     break;
                 }
-                let ch = if lane == usize::from(g.node) {
-                    if app.theme.icons.ascii { '*' } else { '●' }
-                } else {
-                    graph::glyph(cell.bits, app.theme.icons.ascii)
-                };
                 let fg = if lane == usize::from(g.node) {
                     if c.oid == crate::git::log::null_unstaged() {
                         app.theme.error
@@ -442,7 +445,12 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                 } else {
                     app.theme.graph_color(cell.color)
                 };
-                text(f, Rect::new(x, rr.y, 1, 1), ch.to_string(), tint(fg));
+                let ch = if lane == usize::from(g.node) {
+                    app.theme.icons.node.to_string()
+                } else {
+                    graph::glyph(cell.bits, app.theme.icons.ascii).to_string()
+                };
+                text(f, Rect::new(x, rr.y, 1, 1), ch, tint(fg));
                 let h = if cell.bits & graph::RIGHT != 0 {
                     if app.theme.icons.ascii { "-" } else { "─" }
                 } else {
@@ -454,6 +462,18 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                     h,
                     tint(app.theme.graph_color(cell.hcolor)),
                 );
+                // Connector line: a short vertical stub under the lanes that
+                // continue on to the next commit, so consecutive nodes in the
+                // same lane read as visually linked.
+                if cell.bits & graph::DOWN != 0 {
+                    let v = if app.theme.icons.ascii { "|" } else { "│" };
+                    text(
+                        f,
+                        Rect::new(x, connector.y, 1, connector.height),
+                        v,
+                        tint(app.theme.graph_color(cell.color)),
+                    );
+                }
                 x += 2;
             }
         }
