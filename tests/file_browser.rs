@@ -111,7 +111,13 @@ fn browsing_a_file_shows_highlighted_open_in_editor_view() {
         .flat_map(|line| line.iter().map(|(_, t)| *t))
         .collect();
     assert!(tones.contains(&Tone::Keyword), "fn/let should be keywords");
-    assert!(tones.contains(&Tone::Str), "the string literal should be coloured");
-    assert!(tones.contains(&Tone::Comment), "the comment should be coloured");
+    assert!(
+        tones.contains(&Tone::Str),
+        "the string literal should be coloured"
+    );
+    assert!(
+        tones.contains(&Tone::Comment),
+        "the comment should be coloured"
+    );
     assert!(tones.contains(&Tone::Number), "42 should be coloured");
 }

@@ -1,7 +1,7 @@
 # Git Twin — development status
 
-Last update: 2026-10-08, preparing the 0.2.0 release.
-Spec: `design.md`. Version 0.2.0 is prepared, not published; full parity is
+Last update: 2026-10-12, preparing the 0.3.0 release.
+Spec: `design.md`. Version 0.3.0 is prepared, not published; full parity is
 not a release claim.
 
 ## TL;DR
@@ -49,7 +49,7 @@ PTYs and terminals that do not answer terminal queries.
   installs and Cargo installs (`--cargo`), preserving user data. Included in
   release archives and exercised by isolated tests and archive-install CI.
 - Linux x86_64 GNU packaging with both launchers, docs, dependency licenses and
-  SHA-256. `scripts/package-release.py --tag v0.2.0` rejects version mismatches.
+  SHA-256. `scripts/package-release.py --tag v0.3.0` rejects version mismatches.
 - CI for formatting, strict Clippy, tests, archive building on Ubuntu 22.04,
   and installation on Ubuntu 22.04/24.04. Tag pushes create a draft only after
   all checks pass; publication remains a maintainer decision.

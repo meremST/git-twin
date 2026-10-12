@@ -213,9 +213,8 @@ impl App {
             .collect();
         let keys = items.clone();
         let dim: Vec<bool> = entries.iter().map(|(_, _, on)| !on).collect();
-        let fields = vec![
-            Field::fuzzy_list("type to filter (fuzzy)", items, values, keys, 14).dimmed(dim),
-        ];
+        let fields =
+            vec![Field::fuzzy_list("type to filter (fuzzy)", items, values, keys, 14).dimmed(dim)];
         self.dialogs.push(form(
             "Command palette",
             FormKind::CommandPalette,
@@ -1059,17 +1058,18 @@ impl App {
                 let tab = self.hist.tab;
                 let title = sanitize::display_bytes(&path);
                 let view_path = path.clone();
-                self.workers.read(self.generation, move || Payload::FileView {
-                    title,
-                    path: view_path,
-                    result: read::blob(&r, &oid, &path).map(|b| {
-                        if b.is_binary() {
-                            "Binary file, not shown.".to_string()
-                        } else {
-                            sanitize::display_lines_tabs(&b.data, tab)
-                        }
-                    }),
-                });
+                self.workers
+                    .read(self.generation, move || Payload::FileView {
+                        title,
+                        path: view_path,
+                        result: read::blob(&r, &oid, &path).map(|b| {
+                            if b.is_binary() {
+                                "Binary file, not shown.".to_string()
+                            } else {
+                                sanitize::display_lines_tabs(&b.data, tab)
+                            }
+                        }),
+                    });
             }
         }
     }

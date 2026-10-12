@@ -56,37 +56,142 @@ pub fn lang_for_path(path: &[u8]) -> Lang {
 fn keywords(lang: Lang) -> &'static [&'static str] {
     match lang {
         Lang::Rust => &[
-            "as", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
-            "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move",
-            "mut", "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait",
-            "true", "type", "unsafe", "use", "where", "while", "async", "await",
+            "as", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false",
+            "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+            "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
+            "unsafe", "use", "where", "while", "async", "await",
         ],
         Lang::Python => &[
             "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del",
-            "elif", "else", "except", "False", "finally", "for", "from", "global", "if",
-            "import", "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise",
-            "return", "True", "try", "while", "with", "yield",
+            "elif", "else", "except", "False", "finally", "for", "from", "global", "if", "import",
+            "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return",
+            "True", "try", "while", "with", "yield",
         ],
         Lang::Js => &[
-            "break", "case", "catch", "class", "const", "continue", "debugger", "default",
-            "delete", "do", "else", "export", "extends", "false", "finally", "for", "function",
-            "if", "import", "in", "instanceof", "interface", "implements", "enum", "let", "new",
-            "null", "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var",
-            "void", "while", "with", "yield", "async", "await", "of", "type", "as",
+            "break",
+            "case",
+            "catch",
+            "class",
+            "const",
+            "continue",
+            "debugger",
+            "default",
+            "delete",
+            "do",
+            "else",
+            "export",
+            "extends",
+            "false",
+            "finally",
+            "for",
+            "function",
+            "if",
+            "import",
+            "in",
+            "instanceof",
+            "interface",
+            "implements",
+            "enum",
+            "let",
+            "new",
+            "null",
+            "return",
+            "super",
+            "switch",
+            "this",
+            "throw",
+            "true",
+            "try",
+            "typeof",
+            "var",
+            "void",
+            "while",
+            "with",
+            "yield",
+            "async",
+            "await",
+            "of",
+            "type",
+            "as",
         ],
         Lang::Go => &[
-            "break", "case", "chan", "const", "continue", "default", "defer", "else",
-            "fallthrough", "for", "func", "go", "goto", "if", "import", "interface", "map",
-            "package", "range", "return", "select", "struct", "switch", "type", "var", "true",
-            "false", "nil",
+            "break",
+            "case",
+            "chan",
+            "const",
+            "continue",
+            "default",
+            "defer",
+            "else",
+            "fallthrough",
+            "for",
+            "func",
+            "go",
+            "goto",
+            "if",
+            "import",
+            "interface",
+            "map",
+            "package",
+            "range",
+            "return",
+            "select",
+            "struct",
+            "switch",
+            "type",
+            "var",
+            "true",
+            "false",
+            "nil",
         ],
         Lang::C => &[
-            "auto", "break", "case", "char", "const", "continue", "default", "do", "double",
-            "else", "enum", "extern", "float", "for", "goto", "if", "int", "long", "register",
-            "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef",
-            "union", "unsigned", "void", "volatile", "while", "class", "public", "private",
-            "protected", "namespace", "template", "new", "delete", "this", "true", "false",
-            "nullptr", "virtual", "override", "include",
+            "auto",
+            "break",
+            "case",
+            "char",
+            "const",
+            "continue",
+            "default",
+            "do",
+            "double",
+            "else",
+            "enum",
+            "extern",
+            "float",
+            "for",
+            "goto",
+            "if",
+            "int",
+            "long",
+            "register",
+            "return",
+            "short",
+            "signed",
+            "sizeof",
+            "static",
+            "struct",
+            "switch",
+            "typedef",
+            "union",
+            "unsigned",
+            "void",
+            "volatile",
+            "while",
+            "class",
+            "public",
+            "private",
+            "protected",
+            "namespace",
+            "template",
+            "new",
+            "delete",
+            "this",
+            "true",
+            "false",
+            "nullptr",
+            "virtual",
+            "override",
+            "include",
         ],
         Lang::Shell => &[
             "if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case", "esac",
@@ -176,7 +281,12 @@ fn highlight_line(line: &str, kw: &[&str], comment: &str) -> Vec<(String, Token)
         let start = i;
         while i < n {
             let c = chars[i];
-            if c == '"' || c == '\'' || c == '`' || c.is_ascii_digit() || c.is_alphabetic() || c == '_'
+            if c == '"'
+                || c == '\''
+                || c == '`'
+                || c.is_ascii_digit()
+                || c.is_alphabetic()
+                || c == '_'
             {
                 break;
             }
@@ -209,7 +319,11 @@ fn find_delim(chars: &[char], from: usize, delim: &str) -> Option<usize> {
 /// images). Returns (end of "[text](", start of url, end of url).
 fn md_link_span(chars: &[char], start: usize) -> Option<(usize, usize, usize)> {
     let n = chars.len();
-    let open = if chars[start] == '!' { start + 1 } else { start };
+    let open = if chars[start] == '!' {
+        start + 1
+    } else {
+        start
+    };
     if chars.get(open) != Some(&'[') {
         return None;
     }
@@ -496,10 +610,13 @@ mod tests {
     #[test]
     fn plain_language_keeps_one_span_per_line() {
         let out = highlight("hello\nworld", Lang::Plain);
-        assert_eq!(out, vec![
-            vec![("hello".to_string(), Token::Plain)],
-            vec![("world".to_string(), Token::Plain)],
-        ]);
+        assert_eq!(
+            out,
+            vec![
+                vec![("hello".to_string(), Token::Plain)],
+                vec![("world".to_string(), Token::Plain)],
+            ]
+        );
     }
 
     #[test]

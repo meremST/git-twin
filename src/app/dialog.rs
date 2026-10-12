@@ -137,7 +137,8 @@ pub fn fuzzy_score(pattern: &str, key: &str) -> Option<i32> {
     for (ki, c) in k.iter().enumerate() {
         if pi < p.len() && *c == p[pi] {
             score += 1;
-            let word_start = ki == 0 || matches!(k[ki - 1], ' ' | '>' | '/' | '-' | '_' | '.' | '(');
+            let word_start =
+                ki == 0 || matches!(k[ki - 1], ' ' | '>' | '/' | '-' | '_' | '.' | '(');
             if word_start {
                 score += 8;
             }

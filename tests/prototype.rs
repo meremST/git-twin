@@ -1561,9 +1561,11 @@ fn command_palette_lists_only_enabled_commands_with_menu_path() {
             .any(|(l, a, on)| l.starts_with("File > Update") && *a == Action::Update && *on),
         "{entries:?}"
     );
-    assert!(entries.iter().any(
-        |(l, a, _)| l.starts_with("Help > Command palette") && *a == Action::CommandPalette
-    ));
+    assert!(
+        entries.iter().any(
+            |(l, a, _)| l.starts_with("Help > Command palette") && *a == Action::CommandPalette
+        )
+    );
 }
 
 #[test]
@@ -1571,10 +1573,7 @@ fn command_palette_keeps_unavailable_commands_visible_but_refuses_them() {
     let dir = fixture();
     let mut app = app(dir.path(), false);
     let entries = app.palette_entries();
-    let unavailable = entries
-        .iter()
-        .find(|(_, _, on)| !on)
-        .cloned();
+    let unavailable = entries.iter().find(|(_, _, on)| !on).cloned();
     let Some((label, action, _)) = unavailable else {
         panic!("expected at least one unavailable entry: {entries:?}");
     };
@@ -1611,7 +1610,9 @@ fn command_palette_includes_context_menu_of_focused_selection() {
         "context menu entries must be listed: {entries:?}"
     );
     assert!(
-        entries.iter().any(|(l, _, _)| l.starts_with("File > Update")),
+        entries
+            .iter()
+            .any(|(l, _, _)| l.starts_with("File > Update")),
         "menu-bar entries must still be listed"
     );
 }

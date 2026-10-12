@@ -1,5 +1,35 @@
 # Notes de version
 
+## 0.3.0 — 2026-10-12
+
+Mise a jour depuis le tag `v0.2.0` : palette de commandes, fichiers ouverts
+dans l'editeur et messages d'etat plus clairs.
+
+### Nouveautes
+
+- Palette de commandes sur `F12` : recherche floue de toutes les commandes
+  activees de la vue courante et du menu contextuel de la selection. Les
+  commandes recemment lancees apparaissent en premier ; les commandes
+  indisponibles sont grisees et ne se lancent pas.
+- Visualiseur de fichier avec coloration syntaxique (Rust, Python, JS/TS, Go,
+  C/C++, Shell, TOML, YAML, JSON, Markdown, reStructuredText), defilement
+  horizontal et vertical, numeros de ligne.
+- « Open in editor » sur les fichiers des panneaux patch (History et
+  Worktree) ; les editeurs terminaux (vim, nvim, nano, hx...) prennent le
+  terminal pendant l'edition.
+- Barre d'etat : « Ready » ou « Working » selon l'activite reelle, suivi du
+  dernier message. Clic sur le message : historique des messages.
+
+### Changements
+
+- Messages de fin d'operation explicites (nom de la commande et resultat).
+- Entree « Online Documentation » retiree du menu Help de Worktree.
+
+### Distribution
+
+- Versions `Cargo.toml`, `Cargo.lock` et documentation portees a 0.3.0.
+- Archive attendue : `git-twin-0.3.0-x86_64-unknown-linux-gnu.tar.gz`.
+
 ## 0.2.0 — 2026-10-08
 
 Mise a jour depuis le tag `v0.1.0` : themes, panneau de preferences, gestion
