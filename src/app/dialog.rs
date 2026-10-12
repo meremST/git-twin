@@ -560,6 +560,14 @@ impl Dialog {
             let b = self.focus - nf;
             match k.code {
                 C::Enter | C::Char(' ') => return DialogResult::Button(b),
+                C::Up if matches!(self.kind, Kind::Info) => self.scroll_by(-1),
+                C::Down if matches!(self.kind, Kind::Info) => self.scroll_by(1),
+                C::Home if matches!(self.kind, Kind::Info) => {
+                    self.scroll_by(-(self.content_height as isize));
+                }
+                C::End if matches!(self.kind, Kind::Info) => {
+                    self.scroll_by(self.content_height as isize);
+                }
                 C::Left | C::Up => self.focus_next(-1),
                 C::Right | C::Down => self.focus_next(1),
                 C::PageUp => self.scroll_by(-(self.viewport_height as isize)),

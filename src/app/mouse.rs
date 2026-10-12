@@ -143,6 +143,7 @@ impl App {
             Hit::MenuItem { depth, idx } => self.menu_click(depth, idx),
             Hit::MenuBackdrop => self.menu = None,
             Hit::ViewTab(v) => self.switch_view(v),
+            Hit::StatusMsg => self.show_message_log(),
             Hit::Split(id, rect) => self.drag = Some(Drag::Split(id, rect)),
             Hit::Pane(p) => {
                 self.focus_pane(p);

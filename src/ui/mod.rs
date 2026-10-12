@@ -105,10 +105,17 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         format!("{}  {sep} ", sanitize(&app.status.0))
     };
     let help = icons.label(icons.help, "F1: help");
+    let prefix = format!(" {flags}{activity}  {sep} ");
+    let bar = row(area, area.height - 1);
+    if !app.status.0.is_empty() {
+        let x = bar.x.saturating_add(prefix.width() as u16);
+        let w = (sanitize(&app.status.0).width() as u16).min(bar.right().saturating_sub(x));
+        app.hits.push(Rect::new(x, bar.y, w, 1), Hit::StatusMsg);
+    }
     text(
         f,
-        row(area, area.height - 1),
-        format!(" {flags}{activity}  {sep} {message}F6: view  F10: menu  {help}"),
+        bar,
+        format!("{prefix}{message}F6: view  F10: menu  {help}"),
         app.theme.bar().fg(color),
     );
     overlays::menus(f, app);

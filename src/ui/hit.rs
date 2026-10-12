@@ -60,6 +60,8 @@ pub enum Hit {
     DiffLine(PaneId, usize),
     WtFile(FileList, usize, bool),
     Message,
+    /// Message text in the status bar (opens the message history).
+    StatusMsg,
     DlgField(usize),
     DlgArea(usize, usize),
     DlgChoice(usize, usize),

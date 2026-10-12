@@ -7,7 +7,7 @@ use std::{
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use git_twin::{
     app::{
-        App, Handoff, Options,
+        App, Handoff, Options, StatusTone,
         action::{Action, FileList},
         dialog::{Dialog, Field, FormKind, Kind},
     },
@@ -1686,4 +1686,77 @@ fn open_in_editor_hands_terminal_editors_to_the_tui_suspend() {
         }
         other => panic!("expected OpenFile handoff, got {other:?}"),
     }
+}
+
+#[test]
+fn clicking_status_message_opens_timestamped_history() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.set_status("First message", StatusTone::Info);
+    app.set_status("Hello history", StatusTone::Info);
+    let screen = render(&mut app, 120, 35);
+    let bar = screen.lines().last().unwrap();
+    let x = bar.find("Hello history").unwrap() as u16;
+    assert!(
+        app.hits.zones.iter().any(|(_, h)| *h == Hit::StatusMsg),
+        "status message is not clickable"
+    );
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: x + 2,
+        row: 34,
+        modifiers: KeyModifiers::NONE,
+    });
+    let dialog = app.dialogs.last().expect("history dialog");
+    assert_eq!(dialog.title, "Messages");
+    let lines: Vec<&str> = dialog.body.iter().map(|(s, _)| s.as_str()).collect();
+    assert_eq!(lines.len(), 2);
+    assert!(lines[0].ends_with("  First message"), "{lines:?}");
+    assert!(lines[1].ends_with("  Hello history"), "{lines:?}");
+    assert_eq!(lines[0].len(), "HH:MM:SS  Hello history".len());
+}
+
+#[test]
+fn message_history_scrolls_with_keys_and_wheel() {
+    use crossterm::event::{
+        KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
+
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    for i in 0..60 {
+        app.set_status(format!("Message {i:02}"), StatusTone::Info);
+    }
+    render(&mut app, 120, 35);
+    let x = {
+        let screen = render(&mut app, 120, 35);
+        screen.lines().last().unwrap().find("Message 59").unwrap() as u16
+    };
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: x + 1,
+        row: 34,
+        modifiers: KeyModifiers::NONE,
+    });
+    let screen = render(&mut app, 120, 35);
+    assert!(screen.contains("  Message 59 "), "{screen}");
+    assert!(!screen.contains("  Message 00 "), "{screen}");
+
+    let key = |code| KeyEvent::new(code, KeyModifiers::NONE);
+    app.dialogs.last_mut().unwrap().on_key(key(KeyCode::Home));
+    let screen = render(&mut app, 120, 35);
+    assert!(screen.contains("  Message 00 "), "{screen}");
+    assert!(!screen.contains("  Message 59 "), "{screen}");
+
+    app.dialogs.last_mut().unwrap().on_key(key(KeyCode::Down));
+    render(&mut app, 120, 35);
+    assert_eq!(app.dialogs.last().unwrap().scroll, 1);
+    app.dialogs.last_mut().unwrap().on_key(key(KeyCode::Up));
+    render(&mut app, 120, 35);
+    assert_eq!(app.dialogs.last().unwrap().scroll, 0);
+
+    app.dialogs.last_mut().unwrap().on_key(key(KeyCode::End));
+    let screen = render(&mut app, 120, 35);
+    assert!(screen.contains("  Message 59 "), "{screen}");
+    assert!(!screen.contains("  Message 00 "), "{screen}");
 }

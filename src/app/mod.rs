@@ -12,9 +12,10 @@ pub mod mouse;
 pub mod worker;
 pub mod worktree;
 
+use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::config::{Config, State, ViewKind};
 use crate::domain::oid::Oid;
@@ -101,6 +102,33 @@ pub enum StatusTone {
 /// Minimum time the bar shows "Working", so quick operations stay readable.
 const WORKING_MIN_DISPLAY: Duration = Duration::from_millis(150);
 
+/// Number of messages kept for the message history dialog.
+const MAX_LOG: usize = 500;
+
+/// A message shown in the status bar, kept for the history dialog.
+#[derive(Clone, Debug)]
+pub struct LogEntry {
+    pub at: SystemTime,
+    pub text: String,
+    pub tone: StatusTone,
+}
+
+/// Local `HH:MM:SS` for a timestamp.
+fn clock(at: SystemTime) -> String {
+    let secs = at
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs()) as libc::time_t;
+    // SAFETY: `localtime_r` writes into the zeroed `tm` we pass; `tm` is
+    // only read when the call succeeds.
+    unsafe {
+        let mut tm: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&secs, &mut tm).is_null() {
+            return String::from("--:--:--");
+        }
+        format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+    }
+}
+
 pub struct App {
     pub repo: RepoInfo,
     pub runner: Runner,
@@ -114,6 +142,8 @@ pub struct App {
     pub dialogs: Vec<Dialog>,
     /// Last message shown in the bar. An empty text means no message.
     pub status: (String, StatusTone),
+    /// Every message shown in the bar, oldest first (bounded by `MAX_LOG`).
+    pub log: VecDeque<LogEntry>,
     /// Set by [`App::mark_working`] to the time work was started, so the bar
     /// keeps showing "Working" until the work completes and at least a
     /// minimal duration has passed (avoids a flicker on fast refreshes).
@@ -200,6 +230,7 @@ impl App {
                 .collect(),
             status: (String::new(), StatusTone::Info),
             pending_busy_status: None,
+            log: VecDeque::new(),
             searching: false,
             workers: Workers::new(4),
             generation: 1,
@@ -245,7 +276,45 @@ impl App {
     /// Sets the message shown in the bar. Info messages stay until replaced;
     /// error messages are also dropped on the next user action.
     pub fn set_status(&mut self, s: impl Into<String>, tone: StatusTone) {
-        self.status = (s.into(), tone);
+        let text = s.into();
+        if !text.is_empty() {
+            if self.log.len() == MAX_LOG {
+                self.log.pop_front();
+            }
+            self.log.push_back(LogEntry {
+                at: SystemTime::now(),
+                text: text.clone(),
+                tone,
+            });
+        }
+        self.status = (text, tone);
+    }
+
+    /// Opens a dialog listing the messages shown so far, with their times.
+    pub fn show_message_log(&mut self) {
+        let mut d = Dialog::new("Messages", Kind::Info);
+        d.body = if self.log.is_empty() {
+            vec![(String::from("No message yet."), Tone::Normal)]
+        } else {
+            self.log
+                .iter()
+                .map(|e| {
+                    let tone = match e.tone {
+                        StatusTone::Error => Tone::Error,
+                        StatusTone::Info => Tone::Normal,
+                    };
+                    let text = e.text.replace(['\n', '\r'], " ");
+                    (format!("{}  {text}", clock(e.at)), tone)
+                })
+                .collect()
+        };
+        d.buttons = vec![String::from("Close")];
+        d.width = 78;
+        // Open at the newest message, at the bottom of the list.
+        d.scroll = usize::MAX;
+        d.reveal_focus = false;
+        d.last_focus = Some(d.focus);
+        self.dialogs.push(d);
     }
 
     pub fn clear_message(&mut self) {
