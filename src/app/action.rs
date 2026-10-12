@@ -178,6 +178,5 @@ pub enum Action {
     UseVersion(Vec<u8>, bool),
     ShowSshKey,
     AboutGitGui,
-    OnlineDoc,
     WtOptions,
 }

@@ -95,9 +95,11 @@ pub struct Requests {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatusTone {
     Info,
-    Busy,
     Error,
 }
+
+/// Minimum time the bar shows "Working", so quick operations stay readable.
+const WORKING_MIN_DISPLAY: Duration = Duration::from_millis(150);
 
 pub struct App {
     pub repo: RepoInfo,
@@ -110,13 +112,14 @@ pub struct App {
     pub wt: WorktreeState,
     pub menu: Option<MenuState>,
     pub dialogs: Vec<Dialog>,
+    /// Last message shown in the bar. An empty text means no message.
     pub status: (String, StatusTone),
-    /// Set by [`App::set_busy_status`] to the time a transient busy message
-    /// (e.g. "Reloading...", "Rescanning...") was shown and that exact text,
-    /// so `tick` can restore the status bar to "Ready." once the triggered
-    /// background work completes and at least a minimal duration has passed
-    /// (avoids a flicker on fast refreshes).
-    pub pending_busy_status: Option<(Instant, &'static str)>,
+    /// Set by [`App::mark_working`] to the time work was started, so the bar
+    /// keeps showing "Working" until the work completes and at least a
+    /// minimal duration has passed (avoids a flicker on fast refreshes).
+    pub pending_busy_status: Option<Instant>,
+    /// True while a diff search runs in the background (not counted by `busy`).
+    pub searching: bool,
     pub workers: Workers,
     pub generation: u64,
     pub req: Requests,
@@ -195,8 +198,9 @@ impl App {
                 .map(|e| Dialog::error("Cannot read draft", e))
                 .into_iter()
                 .collect(),
-            status: (String::from("Ready."), StatusTone::Info),
+            status: (String::new(), StatusTone::Info),
             pending_busy_status: None,
+            searching: false,
             workers: Workers::new(4),
             generation: 1,
             req: Requests::default(),
@@ -238,17 +242,32 @@ impl App {
         }
     }
 
+    /// Sets the message shown in the bar. Info messages stay until replaced;
+    /// error messages are also dropped on the next user action.
     pub fn set_status(&mut self, s: impl Into<String>, tone: StatusTone) {
         self.status = (s.into(), tone);
     }
 
-    /// Shows a transient busy message (e.g. "Reloading...", "Rescanning...")
-    /// that `tick` automatically clears back to "Ready." once the triggered
-    /// background work finishes, holding it for at least 1s so fast
-    /// refreshes don't just flicker.
-    pub fn set_busy_status(&mut self, s: &'static str) {
-        self.set_status(s, StatusTone::Busy);
-        self.pending_busy_status = Some((Instant::now(), s));
+    pub fn clear_message(&mut self) {
+        self.status = (String::new(), StatusTone::Info);
+    }
+
+    /// Drops an error message once the user acts again.
+    pub fn dismiss_error(&mut self) {
+        if self.status.1 == StatusTone::Error {
+            self.clear_message();
+        }
+    }
+
+    /// Marks work as started so the bar shows "Working" right away, even
+    /// before a worker is queued. `tick` keeps it visible for at least 500ms.
+    pub fn mark_working(&mut self) {
+        self.pending_busy_status = Some(Instant::now());
+    }
+
+    /// True while the bar should show "Working" instead of "Ready".
+    pub fn working(&self) -> bool {
+        self.busy() || self.pending_busy_status.is_some() || self.searching
     }
 
     pub fn error(&mut self, title: &str, e: impl std::fmt::Display) {
@@ -323,7 +342,6 @@ impl App {
         }
         let r = self.runner.clone();
         let label_s = label.to_string();
-        self.set_status(format!("{label}..."), StatusTone::Busy);
         self.workers.write(self.generation, label, move || {
             if let Some(exp) = expect_head {
                 let now = crate::git::read::load_refs(&r).ok().and_then(|rs| rs.head.oid());
@@ -413,8 +431,7 @@ impl App {
                 std::thread::spawn(move || {
                     let _ = child.wait();
                 });
-                // Info messages never expire, so leave the bar on "Ready." instead.
-                self.set_status("Ready.", StatusTone::Info);
+                self.clear_message();
             }
             Err(e) => self.error("Open in editor", format!("{program}: {e}")),
         }
@@ -466,7 +483,7 @@ impl App {
             );
         } else {
             self.set_status(
-                format!("Copied {n} characters (internal clipboard; enable osc52 in Preferences for the system clipboard)."),
+                format!("Copied {n} characters to the internal clipboard. Enable OSC 52 in Preferences to also use the system clipboard."),
                 StatusTone::Info,
             );
         }
@@ -523,14 +540,15 @@ impl App {
         if now.duration_since(self.last_draft_save) > Duration::from_secs(2) {
             self.save_draft();
         }
-        if let Some((started, text)) = self.pending_busy_status
-            && !self.busy()
-            && now.duration_since(started) >= Duration::from_millis(500)
+        let active = self.busy() || self.searching;
+        if active && self.pending_busy_status.is_none() {
+            self.pending_busy_status = Some(now);
+        }
+        if let Some(started) = self.pending_busy_status
+            && !active
+            && now.duration_since(started) >= WORKING_MIN_DISPLAY
         {
             self.pending_busy_status = None;
-            if self.status == (String::from(text), StatusTone::Busy) {
-                self.set_status("Ready.", StatusTone::Info);
-            }
         }
     }
 
@@ -590,6 +608,7 @@ impl App {
             }
             Payload::Find(r) => {
                 if m.id == self.req.find {
+                    self.searching = false;
                     self.on_find(r);
                 }
             }

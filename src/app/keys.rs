@@ -20,6 +20,7 @@ impl App {
         if k.kind == KeyEventKind::Release {
             return;
         }
+        self.dismiss_error();
         if k.code == C::Char('c') && k.modifiers.contains(M::CONTROL) {
             let now = Instant::now();
             if self

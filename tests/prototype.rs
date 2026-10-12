@@ -1635,7 +1635,7 @@ fn open_in_editor_runs_configured_editor_on_the_working_copy_file() {
         args.trim(),
         format!("--reuse-window {}", dir.path().join("hello.txt").display())
     );
-    assert_eq!(app.status.0, "Ready.");
+    assert!(app.status.0.is_empty(), "{}", app.status.0);
 
     app.dispatch(Action::OpenInEditor(b"missing.txt".to_vec()));
     assert!(

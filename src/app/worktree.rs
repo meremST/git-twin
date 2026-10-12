@@ -997,7 +997,7 @@ impl App {
                 self.generation += 1;
                 self.load_refs();
                 self.rescan();
-                self.set_busy_status("Rescanning...");
+                self.mark_working();
             }
             A::StageSelected | A::UnstageSelected => {
                 if !self.guard_write() {
@@ -1034,9 +1034,16 @@ impl App {
                 if *i >= n {
                     return true;
                 }
-                let anchor = if self.wt.last_list == *l { self.wt.anchor.unwrap_or(*i) } else { *i };
+                let anchor = if self.wt.last_list == *l {
+                    self.wt.anchor.unwrap_or(*i)
+                } else {
+                    *i
+                };
                 let (a0, b0) = (anchor.min(*i), anchor.max(*i));
-                let paths: Vec<Vec<u8>> = self.wt.list(*l)[a0..=b0].iter().map(|f| f.path.clone()).collect();
+                let paths: Vec<Vec<u8>> = self.wt.list(*l)[a0..=b0]
+                    .iter()
+                    .map(|f| f.path.clone())
+                    .collect();
                 let s = self.wt.sel_mut(*l);
                 s.clear();
                 s.extend(paths);
@@ -1057,7 +1064,10 @@ impl App {
             A::WtContextMore | A::WtContextLess => {
                 let c = self.wt.context as i64 + if *a == A::WtContextMore { 1 } else { -1 };
                 self.wt.context = c.clamp(0, 1000) as u32;
-                self.set_status(format!("Diff context: {} lines", self.wt.context), StatusTone::Info);
+                self.set_status(
+                    format!("Diff context: {} lines", self.wt.context),
+                    StatusTone::Info,
+                );
                 self.load_wt_diff(true);
             }
             A::SignOff => self.sign_off(),
@@ -1171,10 +1181,14 @@ impl App {
                 });
             }
             A::Push => self.open_push(),
-            A::Fetch(remote) => self.remote_handoff(vec!["fetch"], remote, format!("Fetch from {remote}")),
-            A::Prune(remote) => {
-                self.remote_handoff(vec!["remote", "prune"], remote, format!("Prune from {remote}"))
+            A::Fetch(remote) => {
+                self.remote_handoff(vec!["fetch"], remote, format!("Fetch from {remote}"))
             }
+            A::Prune(remote) => self.remote_handoff(
+                vec!["remote", "prune"],
+                remote,
+                format!("Prune from {remote}"),
+            ),
             A::RemoveRemote(remote) => {
                 if !self.guard_write() {
                     return true;
@@ -1213,11 +1227,15 @@ impl App {
             }
             A::DbVerify => {
                 let r = self.runner.clone();
-                self.set_busy_status("Verifying the object database...");
+                self.mark_working();
                 self.workers.read(self.generation, move || Payload::Text {
                     title: "Verify Database".into(),
                     result: r
-                        .read_opts(&[os("fsck"), os("--full"), os("--no-progress")], Default::default(), &[0, 1, 2])
+                        .read_opts(
+                            &[os("fsck"), os("--full"), os("--no-progress")],
+                            Default::default(),
+                            &[0, 1, 2],
+                        )
                         .map(|o| {
                             let mut s = o.stdout_text();
                             s.push_str(&o.stderr_text());
@@ -1251,7 +1269,9 @@ impl App {
                     .stderr(std::process::Stdio::null())
                     .spawn()
                 {
-                    Ok(_) => self.set_status("Opened the working copy with xdg-open.", StatusTone::Info),
+                    Ok(_) => {
+                        self.set_status("Opened the working copy with xdg-open.", StatusTone::Info)
+                    }
                     Err(e) => self.error("Explore Working Copy", e),
                 }
             }
@@ -1272,7 +1292,14 @@ impl App {
                     Box::new(move |r| {
                         let mut a = vec![os("checkout"), os(which), os("--")];
                         a.push(OsString::from_vec(p.clone()));
-                        r.write(&a, None, crate::git::Opts { literal_paths: true, ..Default::default() })?;
+                        r.write(
+                            &a,
+                            None,
+                            crate::git::Opts {
+                                literal_paths: true,
+                                ..Default::default()
+                            },
+                        )?;
                         ops::stage(r, &[p])
                     }),
                     After::Rescan,
@@ -1283,7 +1310,13 @@ impl App {
                 let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
                 let mut text = String::new();
                 if let Some(h) = home {
-                    for n in ["id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub", "id_dsa.pub", "identity.pub"] {
+                    for n in [
+                        "id_ed25519.pub",
+                        "id_ecdsa.pub",
+                        "id_rsa.pub",
+                        "id_dsa.pub",
+                        "identity.pub",
+                    ] {
                         if let Ok(s) = std::fs::read_to_string(h.join(".ssh").join(n)) {
                             text = format!("~/.ssh/{n}:\n\n{}", sanitize::sanitize(s.trim()));
                             break;
@@ -1295,10 +1328,9 @@ impl App {
                 }
                 self.info("Your OpenSSH Public Key", &text);
             }
-            A::AboutGitGui => self.info("About Git TUI (git tui)", &super::history::about_text("git gui")),
-            A::OnlineDoc => self.info(
-                "Online Documentation",
-                "Documentation: https://git-scm.com/docs/git-gui\n(not opened automatically: no network access without an explicit action)",
+            A::AboutGitGui => self.info(
+                "About Git TUI (git tui)",
+                &super::history::about_text("git gui"),
             ),
             _ => return false,
         }

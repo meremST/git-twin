@@ -522,7 +522,6 @@ impl App {
             }
             _ => vec![
                 e("About Git TUI (git tui)", "", Action::AboutGitGui),
-                e("Online Documentation", "", Action::OnlineDoc),
                 e("Show SSH Key", "", Action::ShowSshKey),
                 e("Key bindings", "F1", Action::KeyBindings),
             ],

@@ -74,6 +74,9 @@ impl App {
         let (x, y) = (m.column, m.row);
         let shift = m.modifiers.contains(KeyModifiers::SHIFT);
         let ctrl = m.modifiers.contains(KeyModifiers::CONTROL);
+        if matches!(m.kind, MouseEventKind::Down(_)) {
+            self.dismiss_error();
+        }
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 let n = self.clicks.press(x, y, Instant::now());

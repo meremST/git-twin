@@ -938,7 +938,7 @@ impl App {
                     "Commit {} not loaded yet; it will be selected when it appears.",
                     oid.short(10)
                 ),
-                StatusTone::Busy,
+                StatusTone::Info,
             );
         } else {
             self.set_status(
@@ -1040,7 +1040,7 @@ impl App {
         };
         let view = h.view().clone();
         let r = self.runner.clone();
-        self.set_status("Searching...", StatusTone::Busy);
+        self.searching = true;
         self.req.find = self.workers.stream(self.generation, move |sink| {
             sink.send(Payload::Find(read::find(&r, &view, &spec, cancel.flag())));
         });
@@ -1203,7 +1203,7 @@ impl App {
         match a {
             A::Update | A::Reload => {
                 self.refresh_all(None);
-                self.set_busy_status("Reloading...");
+                self.mark_working();
             }
             A::RereadRefs => self.load_refs(),
             A::ListRefs => self.open_list_refs(),

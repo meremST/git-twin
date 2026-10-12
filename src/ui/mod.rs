@@ -80,10 +80,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             ViewKind::Worktree => worktree(f, app, body),
         }
     }
-    let color = match app.status.1 {
-        StatusTone::Info => app.theme.fg,
-        StatusTone::Busy => app.theme.warn,
-        StatusTone::Error => app.theme.error,
+    let color = if app.status.1 == StatusTone::Error {
+        app.theme.error
+    } else if app.working() {
+        app.theme.warn
+    } else {
+        app.theme.fg
     };
     let icons = &app.theme.icons;
     let sep = if icons.nerd { "\u{2502}" } else { "|" };
@@ -92,19 +94,21 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     } else {
         String::new()
     };
-    let busy = if app.busy() || app.pending_busy_status.is_some() {
-        format!("{} {sep} ", icons.label(icons.busy, "Working"))
+    let activity = if app.working() {
+        icons.label(icons.busy, "Working")
     } else {
+        String::from("Ready")
+    };
+    let message = if app.status.0.is_empty() {
         String::new()
+    } else {
+        format!("{}  {sep} ", sanitize(&app.status.0))
     };
     let help = icons.label(icons.help, "F1: help");
     text(
         f,
         row(area, area.height - 1),
-        format!(
-            " {flags}{busy}{}  {sep} F6: view  F10: menu  {help}",
-            sanitize(&app.status.0)
-        ),
+        format!(" {flags}{activity}  {sep} {message}F6: view  F10: menu  {help}"),
         app.theme.bar().fg(color),
     );
     overlays::menus(f, app);
