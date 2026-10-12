@@ -1524,6 +1524,99 @@ fn stash_changes_creates_stash_and_refreshes_refs() {
 }
 
 #[test]
+fn command_palette_opens_filters_and_runs_a_command() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.on_key(KeyEvent::new(KeyCode::F(12), KeyModifiers::NONE));
+    assert!(
+        matches!(
+            app.dialogs.last().map(|d| &d.kind),
+            Some(git_twin::app::dialog::Kind::Form(
+                git_twin::app::dialog::FormKind::CommandPalette
+            ))
+        ),
+        "Ctrl+Shift+P must open the command palette"
+    );
+    for c in "key bind".chars() {
+        app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    settle(&mut app);
+    assert!(
+        app.dialogs.iter().any(|d| d.title.contains("Key")),
+        "selecting Key bindings must run it"
+    );
+}
+
+#[test]
+fn command_palette_lists_only_enabled_commands_with_menu_path() {
+    let dir = fixture();
+    let app = app(dir.path(), false);
+    let entries = app.palette_entries();
+    assert!(
+        entries
+            .iter()
+            .any(|(l, a, on)| l.starts_with("File > Update") && *a == Action::Update && *on),
+        "{entries:?}"
+    );
+    assert!(entries.iter().any(
+        |(l, a, _)| l.starts_with("Help > Command palette") && *a == Action::CommandPalette
+    ));
+}
+
+#[test]
+fn command_palette_keeps_unavailable_commands_visible_but_refuses_them() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    let entries = app.palette_entries();
+    let unavailable = entries
+        .iter()
+        .find(|(_, _, on)| !on)
+        .cloned();
+    let Some((label, action, _)) = unavailable else {
+        panic!("expected at least one unavailable entry: {entries:?}");
+    };
+    app.palette_recent.clear();
+    let sorted = app.palette_sorted();
+    let (_, _, enabled) = sorted
+        .iter()
+        .find(|(l, _, _)| *l == label)
+        .expect("unavailable entry is listed");
+    assert!(!enabled);
+    assert!(!app.palette_recent.contains(&action));
+}
+
+#[test]
+fn command_palette_puts_recent_commands_first() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.palette_recent = vec![Action::CommandPalette];
+    let sorted = app.palette_sorted();
+    assert_eq!(sorted[0].1, Action::CommandPalette);
+}
+
+#[test]
+fn command_palette_includes_context_menu_of_focused_selection() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    settle(&mut app);
+    app.hist.sel = Some(0);
+    let entries = app.palette_entries();
+    assert!(
+        entries.iter().any(|(l, _, _)| l.starts_with("Selection")),
+        "context menu entries must be listed: {entries:?}"
+    );
+    assert!(
+        entries.iter().any(|(l, _, _)| l.starts_with("File > Update")),
+        "menu-bar entries must still be listed"
+    );
+}
+
+#[test]
 fn cut_graph_lines_end_in_arrows_that_lead_to_each_other() {
     let dir = fixture();
     git(dir.path(), &["commit", "-qm", "Base"]);

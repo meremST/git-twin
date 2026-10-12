@@ -428,13 +428,26 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
             FormRow::Blank => {}
             FormRow::Item(i, item) => {
                 if let Field::List {
-                    items, values, sel, ..
+                    items,
+                    values,
+                    sel,
+                    search,
+                    ..
                 } = &d.fields[i]
                 {
-                    let style = if *sel == item {
-                        app.theme.base().patch(app.theme.selected(d.focus == i))
+                    let disabled = search
+                        .as_ref()
+                        .and_then(|s| s.dim.get(item))
+                        .unwrap_or(&false);
+                    let base = if *disabled {
+                        app.theme.dimmed()
                     } else {
                         app.theme.base()
+                    };
+                    let style = if *sel == item {
+                        base.patch(app.theme.selected(d.focus == i))
+                    } else {
+                        base
                     };
                     let line = match (app.theme.icons.nerd, items[item].split_once(' ')) {
                         (true, Some((icon, name))) => {

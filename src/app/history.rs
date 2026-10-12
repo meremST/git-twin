@@ -1881,6 +1881,7 @@ fn keybindings_dialog() -> Dialog {
                 ("F10 / Alt+letter", "Open menus"),
                 ("Tab / Shift-Tab", "Move to next / previous pane"),
                 ("Ctrl-Q / Ctrl-W", "Quit"),
+                ("F12", "Command palette (search all commands)"),
                 ("F11", "Maximize / restore focused pane"),
                 ("Ctrl-1 .. 9", "Select n-th parent (History)"),
                 ("Alt-1 .. 4", "Focus pane (Worktree)"),

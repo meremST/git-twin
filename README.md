@@ -90,6 +90,7 @@ separement les tags voisins dans l'historique.
 | `F10` / `Alt` + lettre du menu | Ouvrir les menus |
 | `Shift-F10` / clic droit | Menu contextuel |
 | `F1` | Aide clavier |
+| `F12` | Palette de commandes (recherche floue, commandes récentes en premier, indisponibles affichées en gris) |
 | `F11` | Agrandir / restaurer le panneau actif |
 | `Ctrl-Q` / `Ctrl-W` | Confirmer si le message est non vide, sauvegarder le brouillon et quitter |
 | Glisser dans un diff / `Shift-Gauche/Droite` | Selectionner du texte precis pour la copie |

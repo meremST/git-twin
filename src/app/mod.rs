@@ -140,6 +140,8 @@ pub struct App {
     pub wt: WorktreeState,
     pub menu: Option<MenuState>,
     pub dialogs: Vec<Dialog>,
+    /// Commands run from the palette, most recent first (this session only).
+    pub palette_recent: Vec<crate::app::action::Action>,
     /// Last message shown in the bar. An empty text means no message.
     pub status: (String, StatusTone),
     /// Every message shown in the bar, oldest first (bounded by `MAX_LOG`).
@@ -223,6 +225,7 @@ impl App {
             hist,
             wt,
             menu: None,
+            palette_recent: Vec::new(),
             dialogs: draft_error
                 .as_ref()
                 .map(|e| Dialog::error("Cannot read draft", e))
@@ -936,6 +939,7 @@ impl App {
         }
         match a {
             Action::Noop => {}
+            Action::CommandPalette => self.open_command_palette(),
             Action::Quit => self.request_quit(),
             Action::ForceQuit => self.finish_quit(),
             Action::SwitchView(v) => self.switch_view(v),

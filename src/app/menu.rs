@@ -42,6 +42,31 @@ impl MenuItem {
     }
 }
 
+/// Collects enabled leaf entries below `items`, prefixing each label with its menu path.
+fn flatten_menu(prefix: &str, items: &[MenuItem], out: &mut Vec<(String, Action, bool)>) {
+    for item in items {
+        match item {
+            MenuItem::Entry {
+                label,
+                key,
+                action,
+                enabled,
+                ..
+            } => {
+                let mut shown = format!("{prefix} > {label}");
+                if !key.is_empty() {
+                    shown.push_str(&format!("  ({key})"));
+                }
+                out.push((shown, action.clone(), *enabled));
+            }
+            MenuItem::Sub { label, items } => {
+                flatten_menu(&format!("{prefix} > {label}"), items, out);
+            }
+            _ => {}
+        }
+    }
+}
+
 fn e(label: &str, key: &str, action: Action) -> MenuItem {
     MenuItem::Entry {
         label: label.into(),
@@ -244,6 +269,25 @@ impl App {
         self.menu = Some(m);
     }
 
+    /// Every command of the current view, plus the context menu of the focused
+    /// pane, flattened to "Menu > Submenu > Label (key)". The flag is false when
+    /// the command is unavailable in the current state.
+    pub fn palette_entries(&self) -> Vec<(String, Action, bool)> {
+        let mut out = Vec::new();
+        for (i, title) in titles(self.view).iter().enumerate() {
+            flatten_menu(title, &self.menu_items(i), &mut out);
+        }
+        if let Some(c) = self.focused_ctx() {
+            let (title, items) = self.context_items(&c);
+            let prefix = match title {
+                Some(t) => format!("Selection: {t}"),
+                None => "Selection".to_string(),
+            };
+            flatten_menu(&prefix, &items, &mut out);
+        }
+        out
+    }
+
     /// Activates the selected entry (or opens its submenu).
     pub fn menu_activate(&mut self) {
         let Some(m) = &mut self.menu else { return };
@@ -366,6 +410,8 @@ impl App {
                 v
             }
             _ => vec![
+                e("Command palette", "F12", Action::CommandPalette),
+                MenuItem::Sep,
                 e("About Git Twin (gitt)", "", Action::AboutGitk),
                 e("Key bindings", "F1", Action::KeyBindings),
             ],
@@ -521,6 +567,8 @@ impl App {
                 v
             }
             _ => vec![
+                e("Command palette", "F12", Action::CommandPalette),
+                MenuItem::Sep,
                 e("About Git TUI (git tui)", "", Action::AboutGitGui),
                 e("Show SSH Key", "", Action::ShowSshKey),
                 e("Key bindings", "F1", Action::KeyBindings),

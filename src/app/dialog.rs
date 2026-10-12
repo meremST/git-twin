@@ -69,6 +69,12 @@ pub struct ListSearch {
     all_values: Vec<Vec<u8>>,
     /// Text matched against the pattern for each item.
     keys: Vec<String>,
+    /// Rank matches by `fuzzy_score` instead of substring/glob matching.
+    fuzzy: bool,
+    /// Per-item "dimmed" flag (e.g. unavailable command), parallel to all_items.
+    all_dim: Vec<bool>,
+    /// Dimmed flag of each displayed item, parallel to the filtered items.
+    pub dim: Vec<bool>,
 }
 
 /// Case-insensitive match. Without wildcards: substring. With `*` (any
@@ -115,6 +121,40 @@ fn glob(p: &[char], s: &[char]) -> bool {
     p[pi..].iter().all(|c| *c == '*')
 }
 
+/// Fuzzy subsequence match for command-style lists: every pattern character
+/// must appear in order in `key`. Scores favour word starts and consecutive
+/// characters, and penalise late matches. Higher is better.
+pub fn fuzzy_score(pattern: &str, key: &str) -> Option<i32> {
+    let p: Vec<char> = pattern.trim().to_lowercase().chars().collect();
+    if p.is_empty() {
+        return Some(0);
+    }
+    let k: Vec<char> = key.to_lowercase().chars().collect();
+    let mut score = 0i32;
+    let mut pi = 0;
+    let mut first = None;
+    let mut last: Option<usize> = None;
+    for (ki, c) in k.iter().enumerate() {
+        if pi < p.len() && *c == p[pi] {
+            score += 1;
+            let word_start = ki == 0 || matches!(k[ki - 1], ' ' | '>' | '/' | '-' | '_' | '.' | '(');
+            if word_start {
+                score += 8;
+            }
+            if last.is_some_and(|l| l + 1 == ki) {
+                score += 5;
+            }
+            first.get_or_insert(ki);
+            last = Some(ki);
+            pi += 1;
+        }
+    }
+    if pi < p.len() {
+        return None;
+    }
+    Some(score - first.unwrap_or(0) as i32)
+}
+
 impl ListSearch {
     /// Number of items before filtering.
     pub fn total(&self) -> usize {
@@ -122,19 +162,28 @@ impl ListSearch {
     }
 
     fn apply(
-        &self,
+        &mut self,
         items: &mut Vec<String>,
         values: &mut Vec<Vec<u8>>,
         sel: &mut usize,
         top: &mut usize,
     ) {
         let pat = self.input.text.trim();
-        let keep: Vec<usize> = (0..self.keys.len())
-            .filter(|i| search_match(pat, &self.keys[*i]))
-            .collect();
+        let keep: Vec<usize> = if self.fuzzy {
+            let mut ranked: Vec<(i32, usize)> = (0..self.keys.len())
+                .filter_map(|i| fuzzy_score(pat, &self.keys[i]).map(|s| (s, i)))
+                .collect();
+            ranked.sort_by(|a, b| b.0.cmp(&a.0));
+            ranked.into_iter().map(|(_, i)| i).collect()
+        } else {
+            (0..self.keys.len())
+                .filter(|i| search_match(pat, &self.keys[*i]))
+                .collect()
+        };
         let current = values.get(*sel).cloned();
         *items = keep.iter().map(|i| self.all_items[*i].clone()).collect();
         *values = keep.iter().map(|i| self.all_values[*i].clone()).collect();
+        self.dim = keep.iter().map(|i| self.all_dim[*i]).collect();
         *sel = current
             .and_then(|v| values.iter().position(|x| *x == v))
             .unwrap_or(0);
@@ -217,6 +266,34 @@ impl Field {
     ) -> Field {
         Self::with_search(label, items, values, keys, rows, true)
     }
+    /// Always-on filter that ranks matches fuzzily, best first.
+    pub fn fuzzy_list(
+        label: &str,
+        items: Vec<String>,
+        values: Vec<Vec<u8>>,
+        keys: Vec<String>,
+        rows: u16,
+    ) -> Field {
+        let mut f = Self::filter_list(label, items, values, keys, rows);
+        if let Field::List {
+            search: Some(s), ..
+        } = &mut f
+        {
+            s.fuzzy = true;
+        }
+        f
+    }
+    /// Marks items as dimmed (drawn grey), one flag per item in order.
+    pub fn dimmed(mut self, flags: Vec<bool>) -> Field {
+        if let Field::List {
+            search: Some(s), ..
+        } = &mut self
+        {
+            s.dim = flags.clone();
+            s.all_dim = flags;
+        }
+        self
+    }
     fn with_search(
         label: &str,
         items: Vec<String>,
@@ -232,6 +309,9 @@ impl Field {
             all_items: items.clone(),
             all_values: values.clone(),
             keys,
+            fuzzy: false,
+            all_dim: vec![false; items.len()],
+            dim: vec![false; items.len()],
         };
         let mut f = Field::list(label, items, values, 0, rows);
         if let Field::List { search: s, .. } = &mut f {
@@ -290,6 +370,7 @@ pub enum FormKind {
     MakePatch(Oid, Oid),
     WriteCommit(Oid),
     ListRefs,
+    CommandPalette,
     GuiCreateBranch,
     GuiCheckout,
     GuiRename,
@@ -760,6 +841,16 @@ pub fn edit_input(input: &mut TextInput, k: crossterm::event::KeyEvent) {
 mod tests {
     use super::*;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    fn fuzzy_score_matches_subsequences_and_ranks_word_starts() {
+        assert!(fuzzy_score("stc", "Stash changes").is_some());
+        assert!(fuzzy_score("zq", "Stash changes").is_none());
+        assert!(fuzzy_score("", "anything").is_some());
+        let word_start = fuzzy_score("sc", "Stash changes").unwrap();
+        let mid_word = fuzzy_score("sc", "discs").unwrap();
+        assert!(word_start > mid_word);
+    }
 
     #[test]
     fn search_patterns() {

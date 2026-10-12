@@ -204,6 +204,40 @@ impl App {
         }
     }
 
+    /// Opens the command palette: a filterable list of every enabled command.
+    pub fn open_command_palette(&mut self) {
+        let entries = self.palette_sorted();
+        let items: Vec<String> = entries.iter().map(|(l, _, _)| l.clone()).collect();
+        let values: Vec<Vec<u8>> = (0..entries.len())
+            .map(|i| i.to_string().into_bytes())
+            .collect();
+        let keys = items.clone();
+        let dim: Vec<bool> = entries.iter().map(|(_, _, on)| !on).collect();
+        let fields = vec![
+            Field::fuzzy_list("type to filter (fuzzy)", items, values, keys, 14).dimmed(dim),
+        ];
+        self.dialogs.push(form(
+            "Command palette",
+            FormKind::CommandPalette,
+            fields,
+            &["Run", "Close"],
+        ));
+    }
+
+    /// Palette entries with recently run commands first, most recent first.
+    /// Both opening and running use this order, so list indices agree.
+    pub fn palette_sorted(&self) -> Vec<(String, Action, bool)> {
+        let mut entries = self.palette_entries();
+        let rank = |a: &Action| {
+            self.palette_recent
+                .iter()
+                .position(|r| r == a)
+                .unwrap_or(usize::MAX)
+        };
+        entries.sort_by_key(|(_, a, _)| rank(a));
+        entries
+    }
+
     pub fn open_view_editor(&mut self, idx: Option<usize>) {
         let v = match idx {
             Some(i) => self.hist.views.get(i).cloned().unwrap_or_default(),
@@ -701,6 +735,23 @@ impl App {
                 {
                     let o = r.target;
                     self.select_oid(o, true);
+                }
+            }
+            FormKind::CommandPalette => {
+                let entry = d
+                    .list_value(0)
+                    .and_then(|v| String::from_utf8(v).ok())
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .and_then(|i| self.palette_sorted().into_iter().nth(i));
+                match entry {
+                    Some((_, a, true)) => {
+                        self.palette_recent.retain(|r| *r != a);
+                        self.palette_recent.insert(0, a.clone());
+                        self.palette_recent.truncate(10);
+                        self.dispatch(a);
+                    }
+                    // Unavailable (or no) entry: keep the palette open, do nothing.
+                    _ => self.dialogs.push(d),
                 }
             }
             FormKind::ViewEdit(idx) => self.submit_view(d, idx, b == 1),

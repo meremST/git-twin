@@ -41,6 +41,7 @@ pub enum Action {
     SelectView(usize),
     AboutGitk,
     KeyBindings,
+    CommandPalette,
 
     // ---- gitk: navigation
     SelectRow(usize),

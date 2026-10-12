@@ -120,6 +120,7 @@ impl App {
         let alt = k.modifiers.contains(M::ALT);
         let shift = k.modifiers.contains(M::SHIFT);
         let a = match k.code {
+            C::F(12) => Action::CommandPalette,
             C::Char('q') if ctrl => Action::Quit,
             C::Char('w') if ctrl => Action::Quit,
             C::F(10) if shift => {
@@ -167,21 +168,23 @@ impl App {
     fn context_from_keyboard(&mut self) {
         let (w, h) = self.size;
         let (x, y) = (w / 3, h / 3);
-        let c = match self.focused_pane() {
-            PaneId::HList => match self.hist.sel {
-                Some(i) => Ctx::Commit(i),
-                None => return,
-            },
-            PaneId::HFiles => Ctx::HFile(self.hist.file_sel),
-            PaneId::HDiff => Ctx::HDiff(self.hist.diff.cursor),
-            PaneId::WUnstaged | PaneId::WStaged => match self.wt.cursor_index() {
-                Some((l, i)) => Ctx::WtFile(l, i),
-                None => return,
-            },
-            PaneId::WDiff => Ctx::WtDiff(self.wt.diff.cursor),
-            _ => return,
-        };
-        self.open_context(c, x, y);
+        if let Some(c) = self.focused_ctx() {
+            self.open_context(c, x, y);
+        }
+    }
+
+    /// Context for the pane that has focus, if it has a selection.
+    pub fn focused_ctx(&self) -> Option<Ctx> {
+        match self.focused_pane() {
+            PaneId::HList => self.hist.sel.map(Ctx::Commit),
+            PaneId::HFiles => Some(Ctx::HFile(self.hist.file_sel)),
+            PaneId::HDiff => Some(Ctx::HDiff(self.hist.diff.cursor)),
+            PaneId::WUnstaged | PaneId::WStaged => {
+                self.wt.cursor_index().map(|(l, i)| Ctx::WtFile(l, i))
+            }
+            PaneId::WDiff => Some(Ctx::WtDiff(self.wt.diff.cursor)),
+            _ => None,
+        }
     }
 
     // ------------------------------------------------------------------
