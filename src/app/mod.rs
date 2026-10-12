@@ -352,6 +352,18 @@ impl App {
         self.dialogs.push(Dialog::info(title, text));
     }
 
+    /// Shows file content in the syntax-highlighted, "Open in editor"-capable
+    /// viewer (used by the file browser).
+    pub fn info_file(&mut self, title: &str, path: &[u8], text: &str) {
+        let lang = crate::domain::highlight::lang_for_path(path);
+        let code = crate::domain::highlight::highlight(text, lang)
+            .into_iter()
+            .map(|line| line.into_iter().map(|(s, t)| (s, tone_of(t))).collect())
+            .collect();
+        self.dialogs
+            .push(Dialog::file_view(title, path.to_vec(), code));
+    }
+
     pub fn confirm(&mut self, title: &str, body: &[(&str, Tone)], yes: &str, p: Pending) {
         let mut d = Dialog::new(title, Kind::Confirm(Box::new(p)))
             .with_body(body)
@@ -713,6 +725,14 @@ impl App {
                 Ok(t) => self.info(&title, &t),
                 Err(e) => self.error(&title, e),
             },
+            Payload::FileView {
+                title,
+                path,
+                result,
+            } => match result {
+                Ok(t) => self.info_file(&title, &path, &t),
+                Err(e) => self.error(&title, e),
+            },
             Payload::Goto(r) => {
                 if m.id == self.req.goto {
                     match r {
@@ -1071,6 +1091,19 @@ fn is_terminal_editor(program: &str, args: &[String]) -> bool {
         .unwrap_or(program);
     TERMINAL.contains(&name)
         || (name == "emacs" && args.iter().any(|a| a == "-nw" || a == "--no-window-system"))
+}
+
+/// Maps a syntax-highlighting token to the dialog tone used to render it.
+fn tone_of(t: crate::domain::highlight::Token) -> Tone {
+    use crate::domain::highlight::Token;
+    match t {
+        Token::Plain => Tone::Normal,
+        Token::Keyword => Tone::Keyword,
+        Token::Str => Tone::Str,
+        Token::Comment => Tone::Comment,
+        Token::Number => Tone::Number,
+        Token::Code => Tone::Code,
+    }
 }
 
 #[cfg(test)]

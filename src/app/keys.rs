@@ -38,6 +38,15 @@ impl App {
         if !self.dialogs.is_empty() {
             if k.code == C::Char('c') && k.modifiers.contains(M::CONTROL) {
                 let d = self.dialogs.last().expect("dialog");
+                if d.fields.is_empty() && !d.code.is_empty() {
+                    let t: Vec<String> = d
+                        .code
+                        .iter()
+                        .map(|line| line.iter().map(|(s, _)| s.as_str()).collect::<String>())
+                        .collect();
+                    self.copy_text(t.join("\n"));
+                    return;
+                }
                 if d.fields.is_empty() {
                     let t: Vec<String> = d.body.iter().map(|(s, _)| s.clone()).collect();
                     self.copy_text(t.join("\n"));

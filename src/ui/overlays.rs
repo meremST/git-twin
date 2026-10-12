@@ -1,6 +1,6 @@
 use super::*;
 use crate::app::{
-    dialog::{Field, Tone},
+    dialog::{Field, Kind, Tone},
     menu::MenuItem,
 };
 use ratatui::widgets::Clear;
@@ -78,6 +78,10 @@ fn tone(t: &Theme, tone: Tone) -> Style {
         Tone::Warn => t.base().fg(t.warn),
         Tone::Error => t.base().fg(t.error),
         Tone::Code => t.base().fg(t.hunk),
+        Tone::Keyword => t.base().fg(t.meta).add_modifier(Modifier::BOLD),
+        Tone::Str => t.base().fg(t.add),
+        Tone::Comment => t.dimmed(),
+        Tone::Number => t.base().fg(t.warn),
     }
 }
 
@@ -106,6 +110,9 @@ enum FormRow {
     Item(usize, usize),
     Search(usize),
     Blank,
+    /// Line index into `Dialog::code` (file viewer), rendered unwrapped with
+    /// a line-number gutter and horizontal scroll.
+    Code(usize),
 }
 
 pub(super) fn dialog(f: &mut Frame, app: &mut App) {
@@ -135,12 +142,16 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
     let max_content = usize::from(screen.height.saturating_sub(footer + 4)).max(1);
     let reveal = d.reveal_focus || d.last_focus != Some(d.focus);
     let mut rows = Vec::new();
-    for (s, t) in &d.body {
-        rows.extend(
-            wrap(&sanitize(s), width)
-                .into_iter()
-                .map(|s| FormRow::Label(s, tone(&app.theme, *t), None)),
-        );
+    if matches!(d.kind, Kind::FileView(_)) {
+        rows.extend((0..d.code.len()).map(FormRow::Code));
+    } else {
+        for (s, t) in &d.body {
+            rows.extend(
+                wrap(&sanitize(s), width)
+                    .into_iter()
+                    .map(|s| FormRow::Label(s, tone(&app.theme, *t), None)),
+            );
+        }
     }
     let mut ranges = Vec::new();
     let visible: Vec<bool> = (0..d.fields.len()).map(|i| d.field_visible(i)).collect();
@@ -306,6 +317,7 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
         }
         ranges.push((start, rows.len()));
     }
+    let gutter_w = (d.code.len().max(1).to_string().len() as u16 + 1).max(3);
     let content_h = rows.len().min(max_content).max(1);
     let height = content_h as u16 + footer + 2;
     let r = Rect::new(
@@ -346,6 +358,33 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 text(f, rr, s, style);
                 if let Some(hit) = hit {
                     app.hits.push(rr, hit);
+                }
+            }
+            FormRow::Code(i) => {
+                if let Some(spans) = d.code.get(i) {
+                    let gr = Rect::new(rr.x, rr.y, gutter_w.min(rr.width), 1);
+                    text(
+                        f,
+                        gr,
+                        format!("{:>w$} ", i + 1, w = usize::from(gutter_w) - 1),
+                        app.theme.dimmed(),
+                    );
+                    let cr = Rect::new(
+                        rr.x + gutter_w.min(rr.width),
+                        rr.y,
+                        rr.width.saturating_sub(gutter_w),
+                        1,
+                    );
+                    let line_spans: Vec<Span<'_>> = spans
+                        .iter()
+                        .map(|(s, t)| Span::styled(s.clone(), tone(&app.theme, *t)))
+                        .collect();
+                    f.render_widget(
+                        Paragraph::new(Line::from(line_spans))
+                            .style(app.theme.base())
+                            .scroll((0, d.hscroll.min(u16::MAX as usize) as u16)),
+                        cr,
+                    );
                 }
             }
             FormRow::Input(i) => {

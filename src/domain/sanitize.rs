@@ -47,6 +47,18 @@ pub fn expand_tabs(s: &str, tab: usize) -> String {
     out
 }
 
+/// Sanitizes multi-line content for display, keeping line breaks and
+/// expanding tabs on each line independently (file/code viewers).
+/// `display_bytes_tabs` instead collapses the whole byte string onto a
+/// single line and is meant for single-line displays (status bar, titles).
+pub fn display_lines_tabs(bytes: &[u8], tab: usize) -> String {
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .map(|l| expand_tabs(l, tab))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Sanitizes bytes with tab expansion (diff content).
 pub fn display_bytes_tabs(bytes: &[u8], tab: usize) -> String {
     match std::str::from_utf8(bytes) {

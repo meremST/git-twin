@@ -10,6 +10,14 @@ pub enum Tone {
     Warn,
     Error,
     Code,
+    /// Syntax highlighting: language keyword.
+    Keyword,
+    /// Syntax highlighting: string/char literal.
+    Str,
+    /// Syntax highlighting: comment.
+    Comment,
+    /// Syntax highlighting: numeric literal.
+    Number,
 }
 
 #[derive(Clone, Debug)]
@@ -266,6 +274,9 @@ pub enum Kind {
     Confirm(Box<crate::app::Pending>),
     /// Form handled by `App::submit_form`.
     Form(FormKind),
+    /// Read-only, syntax-highlighted file content; holds the file's path
+    /// relative to the working copy (for "Open in editor").
+    FileView(Vec<u8>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -313,6 +324,11 @@ pub struct Dialog {
     pub reveal_focus: bool,
     /// Field index and highlighted option; selection is committed on acceptance.
     pub open_choice: Option<(usize, usize)>,
+    /// `Kind::FileView` content: one entry per source line, pre-highlighted
+    /// into styled spans. Lines are not word-wrapped; `hscroll` pans them.
+    pub code: Vec<Vec<(String, Tone)>>,
+    /// Horizontal scroll offset (columns) for `Kind::FileView`.
+    pub hscroll: usize,
 }
 
 pub enum DialogResult {
@@ -338,7 +354,19 @@ impl Dialog {
             last_focus: None,
             reveal_focus: true,
             open_choice: None,
+            code: Vec::new(),
+            hscroll: 0,
         }
+    }
+
+    /// Read-only, syntax-highlighted file viewer with an "Open in editor" button.
+    pub fn file_view(title: &str, path: Vec<u8>, code: Vec<Vec<(String, Tone)>>) -> Dialog {
+        let mut d = Dialog::new(title, Kind::FileView(path));
+        d.code = code;
+        d.buttons = vec!["Open in editor".into(), "Close".into()];
+        d.cancel = Some(1);
+        d.width = 200;
+        d
     }
 
     pub fn info(title: &str, text: &str) -> Dialog {
@@ -560,13 +588,23 @@ impl Dialog {
             let b = self.focus - nf;
             match k.code {
                 C::Enter | C::Char(' ') => return DialogResult::Button(b),
-                C::Up if matches!(self.kind, Kind::Info) => self.scroll_by(-1),
-                C::Down if matches!(self.kind, Kind::Info) => self.scroll_by(1),
-                C::Home if matches!(self.kind, Kind::Info) => {
+                C::Up if matches!(self.kind, Kind::Info | Kind::FileView(_)) => {
+                    self.scroll_by(-1);
+                }
+                C::Down if matches!(self.kind, Kind::Info | Kind::FileView(_)) => {
+                    self.scroll_by(1);
+                }
+                C::Home if matches!(self.kind, Kind::Info | Kind::FileView(_)) => {
                     self.scroll_by(-(self.content_height as isize));
                 }
-                C::End if matches!(self.kind, Kind::Info) => {
+                C::End if matches!(self.kind, Kind::Info | Kind::FileView(_)) => {
                     self.scroll_by(self.content_height as isize);
+                }
+                C::Left if matches!(self.kind, Kind::FileView(_)) => {
+                    self.hscroll = self.hscroll.saturating_sub(4);
+                }
+                C::Right if matches!(self.kind, Kind::FileView(_)) => {
+                    self.hscroll = self.hscroll.saturating_add(4);
                 }
                 C::Left | C::Up => self.focus_next(-1),
                 C::Right | C::Down => self.focus_next(1),

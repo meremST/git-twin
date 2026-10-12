@@ -81,6 +81,13 @@ pub enum Payload {
         title: String,
         result: Result<String, GitError>,
     },
+    /// File content for the built-in file browser (syntax-highlighted,
+    /// with an "Open in editor" button bound to `path`).
+    FileView {
+        title: String,
+        path: Vec<u8>,
+        result: Result<String, GitError>,
+    },
     Goto(Result<Oid, GitError>),
     Origin(Result<(Oid, u32), GitError>),
     Amend(Result<String, GitError>),

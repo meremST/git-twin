@@ -648,6 +648,13 @@ impl App {
         let Some(d) = self.dialogs.pop() else { return };
         match d.kind {
             Kind::Info => {}
+            Kind::FileView(ref path) => {
+                if b == 0 {
+                    let path = path.clone();
+                    self.dialogs.push(d);
+                    self.open_in_editor(&path);
+                }
+            }
             Kind::Confirm(p) => {
                 if b == 0 {
                     self.run_pending(*p);
@@ -1000,13 +1007,15 @@ impl App {
                 let r = self.runner.clone();
                 let tab = self.hist.tab;
                 let title = sanitize::display_bytes(&path);
-                self.workers.read(self.generation, move || Payload::Text {
+                let view_path = path.clone();
+                self.workers.read(self.generation, move || Payload::FileView {
                     title,
+                    path: view_path,
                     result: read::blob(&r, &oid, &path).map(|b| {
                         if b.is_binary() {
                             "Binary file, not shown.".to_string()
                         } else {
-                            sanitize::display_bytes_tabs(&b.data, tab)
+                            sanitize::display_lines_tabs(&b.data, tab)
                         }
                     }),
                 });

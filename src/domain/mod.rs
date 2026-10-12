@@ -3,6 +3,7 @@
 pub mod commit;
 pub mod diff;
 pub mod graph;
+pub mod highlight;
 pub mod oid;
 pub mod patch;
 pub mod path;
