@@ -528,7 +528,10 @@ impl App {
                 self.on_committed();
                 self.set_status("Commit created.", StatusTone::Info);
             }
-            (_, Ok(true)) => self.set_status("Done.", StatusTone::Info),
+            (Handoff::Git { label, .. } | Handoff::Shell { label, .. }, Ok(true)) => {
+                self.set_status(format!("{label}: finished successfully."), StatusTone::Info);
+            }
+            (_, Ok(true)) => self.set_status("Command finished successfully.", StatusTone::Info),
             (_, Ok(false)) => self.set_status(
                 "Command failed (see the terminal output).",
                 StatusTone::Error,
@@ -751,7 +754,10 @@ impl App {
             Ok(msg) => {
                 let first = msg.lines().last().unwrap_or("").to_string();
                 if first.is_empty() {
-                    self.set_status(format!("{label}: done."), StatusTone::Info);
+                    self.set_status(
+                        format!("{label}: completed successfully (no output)."),
+                        StatusTone::Info,
+                    );
                 } else {
                     self.set_status(format!("{label}: {first}"), StatusTone::Info);
                 }
