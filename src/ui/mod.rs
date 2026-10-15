@@ -658,7 +658,7 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             if open {
                 let t = if app.theme.icons.ascii { "< " } else { "‹ " };
                 let zone = Rect::new(x, rr.y, 2, 1);
-                text(f, zone, t.to_string(), app.theme.dimmed());
+                text(f, zone, t.to_string(), tint(app.theme.dim));
                 app.hits.push(zone, Hit::RefToggle(i));
                 x += 2;
             }
