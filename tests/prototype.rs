@@ -15,7 +15,7 @@ use git_twin::{
     git::repo,
     ui::{self, hit::Hit},
 };
-use ratatui::{Terminal, backend::TestBackend};
+use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 
 fn git(path: &std::path::Path, args: &[&str]) -> String {
     let output = Command::new("git")
@@ -2503,4 +2503,34 @@ fn message_history_scrolls_with_keys_and_wheel() {
     let screen = render(&mut app, 120, 35);
     assert!(screen.contains("  Message 59 "), "{screen}");
     assert!(!screen.contains("  Message 00 "), "{screen}");
+}
+
+#[test]
+fn hovering_a_menu_item_highlights_it() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.open_menu(0);
+    render(&mut app, 120, 35);
+    let items: Vec<(Rect, usize)> = app
+        .hits
+        .zones
+        .iter()
+        .filter_map(|(r, h)| match h {
+            Hit::MenuItem { depth: 0, idx } => Some((*r, *idx)),
+            _ => None,
+        })
+        .collect();
+    let level = &app.menu.as_ref().unwrap().levels[0];
+    let (r, idx) = *items
+        .iter()
+        .rev()
+        .find(|(_, i)| *i != level.sel && level.items[*i].selectable())
+        .expect("another selectable item");
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::Moved,
+        column: r.x + 1,
+        row: r.y,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert_eq!(app.menu.as_ref().unwrap().levels[0].sel, idx);
 }

@@ -84,6 +84,7 @@ impl App {
             }
             MouseEventKind::Down(MouseButton::Right) => self.right_click(x, y),
             MouseEventKind::Drag(MouseButton::Left) => self.on_drag(x, y),
+            MouseEventKind::Moved => self.menu_hover(x, y),
             MouseEventKind::Up(_) => {
                 if matches!(self.drag, Some(Drag::Split(..))) {
                     self.save_state();
@@ -307,6 +308,28 @@ impl App {
         }
         l.sel = idx;
         self.menu_activate();
+    }
+
+    /// Highlights the menu item under the pointer, opening its submenu if any.
+    fn menu_hover(&mut self, x: u16, y: u16) {
+        let Some(Hit::MenuItem { depth, idx }) = self.hits.at(x, y).map(|(_, h)| h.clone()) else {
+            return;
+        };
+        let Some(m) = &mut self.menu else { return };
+        let has_child = m.levels.len() > depth + 1;
+        let Some(l) = m.levels.get_mut(depth) else {
+            return;
+        };
+        let Some(item) = l.items.get(idx) else { return };
+        if !item.selectable() || (l.sel == idx && has_child) {
+            return;
+        }
+        let is_sub = matches!(item, MenuItem::Sub { .. });
+        l.sel = idx;
+        m.levels.truncate(depth + 1);
+        if is_sub {
+            m.open_sub();
+        }
     }
 
     fn right_click(&mut self, x: u16, y: u16) {

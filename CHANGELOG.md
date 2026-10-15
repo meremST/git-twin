@@ -3,6 +3,8 @@
 ## 0.3.1 — 2026-10-15
 
 ### Nouveautes
+- Les menus (barre de menus et clic droit) surlignent l'entree sous la souris ;
+  survoler un sous-menu l'ouvre.
 - Le mode « Compact refs » est memorise dans l'etat (`state.toml`) et
   restaure au lancement.
 - Comme gitk, l'historique garde le sommet de depart (HEAD au lancement) apres

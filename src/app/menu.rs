@@ -108,6 +108,8 @@ fn sub(label: &str, items: Vec<MenuItem>) -> MenuItem {
 pub struct Level {
     pub items: Vec<MenuItem>,
     pub sel: usize,
+    /// First visible item when the box is too short for all items.
+    pub scroll: usize,
     /// Top-left corner where the box is drawn.
     pub x: u16,
     pub y: u16,
@@ -126,7 +128,13 @@ impl MenuState {
         let sel = items.iter().position(MenuItem::selectable).unwrap_or(0);
         MenuState {
             bar,
-            levels: vec![Level { items, sel, x, y }],
+            levels: vec![Level {
+                items,
+                sel,
+                scroll: 0,
+                x,
+                y,
+            }],
             title: None,
         }
     }
@@ -164,6 +172,7 @@ impl MenuState {
             self.levels.push(Level {
                 items,
                 sel: s,
+                scroll: 0,
                 x: x + w,
                 y: y + sel as u16,
             });

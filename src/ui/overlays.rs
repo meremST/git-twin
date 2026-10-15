@@ -30,9 +30,14 @@ pub(super) fn menus(f: &mut Frame, app: &mut App) {
             .border_style(app.theme.border_style(true));
         let inner = block.inner(r);
         f.render_widget(block, r);
-        let top = level
-            .sel
-            .saturating_sub(usize::from(inner.height).saturating_sub(1));
+        let visible = usize::from(inner.height).max(1);
+        if level.sel < level.scroll {
+            level.scroll = level.sel;
+        } else if level.sel >= level.scroll + visible {
+            level.scroll = level.sel + 1 - visible;
+        }
+        level.scroll = level.scroll.min(level.items.len().saturating_sub(visible));
+        let top = level.scroll;
         for (line, (idx, item)) in level
             .items
             .iter()
