@@ -9,12 +9,12 @@ use super::action::Action;
 use super::dialog::{Dialog, Kind, Tone};
 use super::diffview::{BuildOpts, DKind, DLine, DiffView, Show, WordStyle};
 use super::input::TextInput;
-use super::worker::{After, Cancel, Payload};
+use super::worker::{After, Cancel, HistoryUpdate, Payload};
 use super::{App, Handoff, Pending, StatusTone};
 use crate::config::{Config, State, ViewKind};
 use crate::domain::commit::{Commit, CommitDetails};
 use crate::domain::diff::Diff;
-use crate::domain::graph::{Cut, GraphRow};
+use crate::domain::graph::{Cut, GraphBuilder, GraphRow};
 use crate::domain::oid::Oid;
 use crate::domain::refs::{Head, RefKind};
 use crate::domain::sanitize;
@@ -67,6 +67,11 @@ pub struct HistoryState {
     pub local_flags: (bool, bool),
     pub loading: bool,
     pub load_error: Option<String>,
+    pub log_head: Option<Oid>,
+    loaded_view: Option<ViewSpec>,
+    loaded_base: Vec<Oid>,
+    replace_pending: bool,
+    update_pending: bool,
     pub pending_select: Option<Oid>,
     pub focus: HFocus,
     pub diff: DiffView,
@@ -147,6 +152,11 @@ impl HistoryState {
             local_flags: (false, false),
             loading: false,
             load_error: None,
+            log_head: None,
+            loaded_view: None,
+            loaded_base: Vec::new(),
+            replace_pending: false,
+            update_pending: false,
             pending_select: None,
             focus: HFocus::List,
             diff: DiffView::default(),
@@ -192,6 +202,11 @@ impl HistoryState {
 
     pub fn selected_oid(&self) -> Option<Oid> {
         self.sel.and_then(|i| self.commits.get(i)).map(|c| c.oid)
+    }
+
+    /// The replacement is visible; older history may still be streaming.
+    pub fn view_ready(&self) -> bool {
+        !self.replace_pending && !self.update_pending && self.pending_select.is_none()
     }
 
     pub fn selected(&self) -> Option<&Commit> {
@@ -476,65 +491,309 @@ fn bytes_list(paths: &[String]) -> Vec<Vec<u8>> {
     paths.iter().map(|p| p.as_bytes().to_vec()).collect()
 }
 
+fn local_rows(status: &crate::domain::status::RepoStatus) -> LocalRows {
+    let tracked = |entry: &&crate::domain::status::StatusEntry| {
+        !matches!(
+            entry.kind,
+            crate::domain::status::EntryKind::Untracked | crate::domain::status::EntryKind::Ignored
+        )
+    };
+    LocalRows {
+        unstaged: status
+            .entries
+            .iter()
+            .filter(tracked)
+            .any(|e| e.has_unstaged()),
+        staged: status
+            .entries
+            .iter()
+            .filter(tracked)
+            .any(|e| e.has_staged()),
+        head: status.branch.oid,
+    }
+}
+
 impl App {
     // ------------------------------------------------------------------
     // Loading
+
+    pub fn update_history(&mut self, keep: Option<Oid>) {
+        let h = &mut self.hist;
+        if h.loading
+            || h.load_error.is_some()
+            || !h.view().incremental_head_view()
+            || h.loaded_view.as_ref() != Some(h.view())
+            || h.loaded_base != h.base_tips
+            || h.log_head.is_none()
+            || h.commits.len() == h.local_rows
+        {
+            self.load_history(keep);
+            return;
+        }
+        let old = h.log_head.expect("checked above");
+        h.cancel.cancel();
+        h.cancel = Cancel::default();
+        h.loading = true;
+        h.update_pending = true;
+        h.pending_select = keep.or_else(|| h.selected_oid());
+        let cancel = h.cancel.clone();
+        let r = self.runner.clone();
+        let bare = self.repo.is_bare();
+        let common_dir = self.repo.common_dir.clone();
+        self.req.log = self.workers.stream(self.generation, move |sink| {
+            let result = (|| {
+                if !log::history_cache_safe(&r, &common_dir)? {
+                    return Ok(None);
+                }
+                let (head, local) = if bare {
+                    (read::load_refs(&r)?.head.oid(), None)
+                } else {
+                    let status = read::status(&r)?;
+                    let local = local_rows(&status);
+                    (local.head, Some(local))
+                };
+                let extension = match head {
+                    Some(head) => log::linear_extension(&r, old, head, cancel.flag())?,
+                    None => None,
+                };
+                Ok(Some(HistoryUpdate {
+                    head,
+                    local,
+                    extension,
+                }))
+            })();
+            sink.send(Payload::HistoryUpdate(result));
+        });
+    }
+
+    pub fn on_history_update(
+        &mut self,
+        result: Result<Option<HistoryUpdate>, crate::git::GitError>,
+    ) {
+        self.hist.loading = false;
+        self.hist.update_pending = false;
+        let update = match result {
+            Ok(Some(update)) => update,
+            Ok(None) => {
+                self.load_history(self.hist.pending_select);
+                return;
+            }
+            Err(error) => {
+                self.on_log_done(Err(error));
+                return;
+            }
+        };
+        let h = &self.hist;
+        let keep_existing = update.head == h.log_head
+            || (h.log_head.is_some_and(|head| h.base_tips.contains(&head))
+                && update.head.is_some_and(|head| h.index.contains_key(&head)));
+        let extension = if keep_existing {
+            Some(Vec::new())
+        } else {
+            update.extension.filter(|commits| {
+                h.commits.get(h.local_rows).map(|c| c.oid) == h.log_head
+                    && commits.iter().all(|c| !h.index.contains_key(&c.oid))
+            })
+        };
+        if let Some(extension) = extension {
+            let mut prefix = log::local_commits(update.local);
+            prefix.extend(extension);
+            if self.replace_history_prefix(prefix) {
+                self.hist.log_head = update.head;
+                self.on_log_done(Ok(self.hist.total));
+                if let Some(oid) = self.hist.selected_oid()
+                    && !HistoryState::is_pseudo(&oid)
+                    && self.hist.compare.is_none()
+                    && self.hist.detail_oid == Some(oid)
+                    && self.hist.sel_changed_at.is_none()
+                {
+                    self.queue_commit_details(oid);
+                }
+                return;
+            }
+        }
+        self.load_history(self.hist.pending_select);
+    }
+
+    /// Reuse the suffix only if its graph builder state is exactly unchanged.
+    /// This also handles local rows without visiting Git history.
+    fn replace_history_prefix(&mut self, prefix: Vec<Commit>) -> bool {
+        let h = &mut self.hist;
+        let previous_selection = h.selected_oid();
+        if prefix.len() == h.local_rows
+            && prefix
+                .iter()
+                .zip(&h.commits)
+                .all(|(a, b)| a.oid == b.oid && a.parents == b.parents)
+            && h.pending_select.or(previous_selection) == previous_selection
+        {
+            h.pending_select = None;
+            if previous_selection.is_some_and(|oid| HistoryState::is_pseudo(&oid)) {
+                h.sel_changed_at = Some(Instant::now());
+            }
+            return true;
+        }
+        let Some(boundary) = h.commits.get(h.local_rows) else {
+            return false;
+        };
+        let mut old = GraphBuilder::with_cut_after(self.cfg.graph_cut_after as usize);
+        for commit in h.commits.iter().take(h.local_rows + 1) {
+            old.push(commit.oid, &commit.parents);
+        }
+        let mut new = GraphBuilder::with_cut_after(self.cfg.graph_cut_after as usize);
+        let mut graph = Vec::new();
+        for commit in prefix.iter().chain(std::iter::once(boundary)) {
+            graph.push(new.push(commit.oid, &commit.parents));
+        }
+        if !old.same_continuation(&new) {
+            return false;
+        }
+        let selected = h.pending_select.or_else(|| h.selected_oid());
+        let top = h.commits.get(h.top).map(|c| c.oid);
+        let removed = h.local_rows;
+        let inserted = prefix.len();
+        h.local_rows = prefix
+            .iter()
+            .take_while(|c| HistoryState::is_pseudo(&c.oid))
+            .count();
+        h.local_flags = (
+            prefix.iter().any(|c| c.oid == null_unstaged()),
+            prefix.iter().any(|c| c.oid == null_staged()),
+        );
+        h.commits.splice(..removed, prefix);
+        h.graph.splice(..removed + 1, graph);
+        h.cut_target = std::mem::take(&mut h.cut_target)
+            .into_iter()
+            .filter(|((row, _), _)| *row > removed)
+            .map(|((row, lane), oid)| ((row - removed + inserted, lane), oid))
+            .collect();
+        for cut in new.take_cuts() {
+            h.cut_target.insert((cut.row, cut.lane), cut.target);
+        }
+        h.cut_rows.clear();
+        for (&(row, _), &oid) in &h.cut_target {
+            h.cut_rows.entry(oid).or_default().push(row);
+        }
+        for rows in h.cut_rows.values_mut() {
+            rows.sort_unstable();
+        }
+        h.index.remove(&null_unstaged());
+        h.index.remove(&null_staged());
+        if removed != inserted {
+            for index in h.index.values_mut() {
+                *index = *index - removed + inserted;
+            }
+        }
+        h.index.extend(
+            h.commits
+                .iter()
+                .take(inserted)
+                .enumerate()
+                .map(|(i, c)| (c.oid, i)),
+        );
+        h.total = h.commits.len();
+        h.top = top
+            .and_then(|oid| h.index.get(&oid).copied())
+            .unwrap_or(h.top);
+        let selected = selected
+            .and_then(|oid| h.index.get(&oid).copied())
+            .unwrap_or(0);
+        h.pending_select = h.pending_select.filter(|oid| !h.index.contains_key(oid));
+        if previous_selection == Some(h.commits[selected].oid) {
+            h.sel = Some(selected);
+            if previous_selection.is_some_and(|oid| HistoryState::is_pseudo(&oid)) {
+                h.sel_changed_at = Some(Instant::now());
+            }
+        } else {
+            h.sel = None;
+            self.select_row_ex(selected, false, false);
+        }
+        self.hist.scroll(0);
+        true
+    }
+
+    pub fn update_local_history(&mut self, local: LocalRows) {
+        if !self.hist.loading
+            && self.hist.load_error.is_none()
+            && self.hist.loaded_view.as_ref() == Some(self.hist.view())
+            && !self.hist.view().has_paths()
+            && self.hist.log_head == local.head
+            && self.replace_history_prefix(log::local_commits(Some(local)))
+        {
+            return;
+        }
+        self.load_history(None);
+    }
 
     pub fn load_history(&mut self, keep: Option<Oid>) {
         let h = &mut self.hist;
         h.cancel.cancel();
         h.cancel = Cancel::default();
         let keep = keep.or_else(|| h.selected_oid());
-        h.commits.clear();
-        h.graph.clear();
-        h.cut_target.clear();
-        h.cut_rows.clear();
-        h.index.clear();
-        h.sel = None;
-        h.local_rows = 0;
-        h.local_flags = (false, false);
+        h.replace_pending = true;
+        h.update_pending = false;
+        h.log_head = None;
         h.loading = true;
         h.load_error = None;
         h.pending_select = keep;
-        h.total = 0;
         let view = h.view().clone();
+        h.loaded_view = Some(view.clone());
+        h.loaded_base = h.base_tips.clone();
         let base = h.base_tips.clone();
         let cancel = h.cancel.clone();
         let with_local = !self.repo.is_bare() && view.includes_head();
         let cut_after = self.cfg.graph_cut_after as usize;
         let r = self.runner.clone();
+        let common_dir = self.repo.common_dir.clone();
         self.req.log = self.workers.stream(self.generation, move |sink| {
-            let local = if with_local {
-                read::status_in(&r, &view.path_list()).ok().map(|s| {
-                    let tracked = |e: &&crate::domain::status::StatusEntry| {
-                        !matches!(
-                            e.kind,
-                            crate::domain::status::EntryKind::Untracked
-                                | crate::domain::status::EntryKind::Ignored
-                        )
+            let res = (|| {
+                let local = if with_local {
+                    Some(local_rows(&read::status_in(&r, &view.path_list())?))
+                } else {
+                    None
+                };
+                let mut view = view;
+                if view.incremental_head_view() && log::history_cache_safe(&r, &common_dir)? {
+                    let head = match local {
+                        Some(local) => local.head,
+                        None => read::load_refs(&r)?.head.oid(),
                     };
-                    LocalRows {
-                        unstaged: s.entries.iter().filter(tracked).any(|e| e.has_unstaged()),
-                        staged: s.entries.iter().filter(tracked).any(|e| e.has_staged()),
-                        head: s.branch.oid,
+                    sink.send(Payload::LogHead(head));
+                    if let Some(head) = head {
+                        // Pin HEAD for the lifetime of this stream, retaining base tips.
+                        view.refs = std::iter::once(head)
+                            .chain(log::existing_commits(&r, &base))
+                            .map(|oid| oid.to_hex())
+                            .collect::<Vec<_>>()
+                            .join(" ");
                     }
+                }
+                log::stream_log(&r, &view, &base, local, cut_after, cancel.flag(), |b| {
+                    sink.send(Payload::LogBatch {
+                        commits: b.commits,
+                        graph: b.graph,
+                        cuts: b.cuts,
+                    })
                 })
-            } else {
-                None
-            };
-            let res = log::stream_log(&r, &view, &base, local, cut_after, cancel.flag(), |b| {
-                sink.send(Payload::LogBatch {
-                    commits: b.commits,
-                    graph: b.graph,
-                    cuts: b.cuts,
-                })
-            });
+            })();
             sink.send(Payload::LogDone(res));
         });
     }
 
     pub fn on_log_batch(&mut self, commits: Vec<Commit>, graph: Vec<GraphRow>, cuts: Vec<Cut>) {
         let h = &mut self.hist;
+        if h.replace_pending {
+            h.commits.clear();
+            h.graph.clear();
+            h.cut_target.clear();
+            h.cut_rows.clear();
+            h.index.clear();
+            h.sel = None;
+            h.local_rows = 0;
+            h.local_flags = (false, false);
+            h.total = 0;
+            h.replace_pending = false;
+        }
         for c in cuts {
             h.cut_target.insert((c.row, c.lane), c.target);
             h.cut_rows.entry(c.target).or_default().push(c.row);
@@ -583,6 +842,9 @@ impl App {
         self.hist.loading = false;
         match r {
             Ok(_) => {
+                if self.hist.replace_pending {
+                    self.on_log_batch(Vec::new(), Vec::new(), Vec::new());
+                }
                 if let Some(p) = self.hist.pending_select.take()
                     && !HistoryState::is_pseudo(&p)
                 {
@@ -698,20 +960,23 @@ impl App {
         }
         h.rebuild_diff();
         if !HistoryState::is_pseudo(&c.oid) && h.compare.is_none() {
-            let r = self.runner.clone();
-            let oid = c.oid;
-            self.req.details = self
-                .workers
-                .read(self.generation, move || Payload::Details {
-                    oid,
-                    details: read::commit_details(&r, &oid),
-                    related: read::related(&r, &oid),
-                });
+            self.queue_commit_details(c.oid);
         }
         self.reload_diff();
         if self.hist.tree_mode {
             self.load_tree();
         }
+    }
+
+    fn queue_commit_details(&mut self, oid: Oid) {
+        let r = self.runner.clone();
+        self.req.details = self
+            .workers
+            .read(self.generation, move || Payload::Details {
+                oid,
+                details: read::commit_details(&r, &oid),
+                related: read::related(&r, &oid),
+            });
     }
 
     /// Shows an annotated tag's tagger/date/message in the details pane,
@@ -1222,6 +1487,7 @@ impl App {
             A::Update | A::Reload => {
                 if *a == A::Reload {
                     self.capture_base_tips();
+                    self.hist.loaded_view = None;
                 }
                 self.refresh_all(None);
                 self.mark_working();

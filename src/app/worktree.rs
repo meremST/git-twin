@@ -384,7 +384,11 @@ impl App {
             && (flags != self.hist.local_flags || head_changed)
         {
             if self.hist.local_flags != flags {
-                self.load_history(None);
+                self.update_local_history(crate::git::log::LocalRows {
+                    unstaged: flags.0,
+                    staged: flags.1,
+                    head: self.wt.snapshot.as_ref().and_then(|s| s.head),
+                });
             }
         } else if let Some(o) = self.hist.selected_oid()
             && super::history::HistoryState::is_pseudo(&o)

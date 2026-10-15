@@ -50,6 +50,8 @@ pub enum After {
 }
 
 pub enum Payload {
+    LogHead(Option<Oid>),
+    HistoryUpdate(Result<Option<HistoryUpdate>, GitError>),
     LogBatch {
         commits: Vec<Commit>,
         graph: Vec<GraphRow>,
@@ -96,6 +98,12 @@ pub enum Payload {
         full: Vec<u8>,
         result: Result<Option<crate::git::read::TagDetails>, GitError>,
     },
+}
+
+pub struct HistoryUpdate {
+    pub head: Option<Oid>,
+    pub local: Option<crate::git::log::LocalRows>,
+    pub extension: Option<Vec<Commit>>,
 }
 
 pub struct Msg {

@@ -75,10 +75,21 @@ fn app(dir: &std::path::Path, read_only: bool) -> App {
 }
 
 fn settle(app: &mut App) {
+    settle_log_batches(app);
+}
+
+fn settle_log_batches(app: &mut App) -> usize {
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut idle = Instant::now();
+    let mut batches = 0;
     loop {
         while let Ok(msg) = app.workers.rx.try_recv() {
+            if matches!(
+                &msg.payload,
+                git_twin::app::worker::Payload::LogBatch { .. }
+            ) {
+                batches += 1;
+            }
             app.on_msg(msg);
         }
         app.tick();
@@ -94,6 +105,608 @@ fn settle(app: &mut App) {
             app.status.0
         );
         std::thread::sleep(Duration::from_millis(5));
+    }
+    batches
+}
+
+fn assert_history_graph(app: &App) {
+    use git_twin::domain::graph::GraphBuilder;
+    let mut builder = GraphBuilder::with_cut_after(app.cfg.graph_cut_after as usize);
+    let graph: Vec<_> = app
+        .hist
+        .commits
+        .iter()
+        .map(|c| builder.push(c.oid, &c.parents))
+        .collect();
+    assert_eq!(app.hist.graph, graph);
+    let cuts: std::collections::HashMap<_, _> = builder
+        .take_cuts()
+        .into_iter()
+        .map(|c| ((c.row, c.lane), c.target))
+        .collect();
+    assert_eq!(app.hist.cut_target, cuts);
+    for (i, commit) in app.hist.commits.iter().enumerate() {
+        assert_eq!(app.hist.index.get(&commit.oid), Some(&i));
+    }
+}
+
+#[test]
+fn history_local_rows_do_not_reload_commits() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    let request = app.req.log;
+    let initial = app.hist.commits.last().unwrap().oid;
+    let subject = app.hist.commits.last().unwrap().subject.as_ptr();
+    app.select_oid(initial, false);
+    settle(&mut app);
+    for args in [
+        vec!["reset", "-q", "HEAD", "--", "staged.txt"],
+        vec!["add", "hello.txt"],
+        vec!["reset", "--hard", "-q", "HEAD"],
+    ] {
+        git(dir.path(), &args);
+        app.rescan();
+        assert_eq!(settle_log_batches(&mut app), 0);
+        assert_eq!(
+            app.req.log, request,
+            "status changes must not restart the log"
+        );
+        assert_eq!(app.hist.selected_oid(), Some(initial));
+        assert_eq!(app.hist.commits.last().unwrap().subject.as_ptr(), subject);
+        assert_history_graph(&app);
+    }
+    assert_eq!(app.hist.local_rows, 0);
+}
+
+#[test]
+fn history_commit_and_cherry_pick_reuse_loaded_suffix() {
+    use git_twin::{app::worker::After, domain::oid::Oid, git::ops};
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    git(dir.path(), &["checkout", "-qb", "source"]);
+    fs::write(dir.path().join("picked.txt"), "picked\n").unwrap();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "To pick"]);
+    let source = Oid::from_hex(git(dir.path(), &["rev-parse", "HEAD"]).trim()).unwrap();
+    git(dir.path(), &["checkout", "-q", "main"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    let selected = app.hist.selected_oid();
+    let subject = app.hist.commits.last().unwrap().subject.as_ptr();
+
+    git(
+        dir.path(),
+        &["commit", "--allow-empty", "-qm", "New commit"],
+    );
+    app.refresh_all(None);
+    assert_eq!(
+        app.hist.selected_oid(),
+        selected,
+        "keep the old view while updating"
+    );
+    assert_eq!(settle_log_batches(&mut app), 0);
+    assert_eq!(&*app.hist.commits[0].subject, "New commit");
+    assert_eq!(app.hist.selected_oid(), selected);
+    assert!(
+        app.hist
+            .diff
+            .lines
+            .iter()
+            .any(|line| line.text.starts_with("Child:") && line.text.contains("New commit"))
+    );
+    assert_history_graph(&app);
+
+    app.run_op(
+        "Cherry-pick",
+        Box::new(move |r| ops::cherry_pick(r, &source, None)),
+        After::Refresh,
+        Some(app.head()),
+    );
+    assert_eq!(settle_log_batches(&mut app), 0);
+    assert_eq!(&*app.hist.commits[0].subject, "To pick");
+    assert_eq!(app.hist.commits.last().unwrap().subject.as_ptr(), subject);
+    assert_eq!(app.hist.selected_oid(), selected);
+    assert_history_graph(&app);
+}
+
+#[test]
+fn history_reset_keeps_base_but_reload_discards_it() {
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    let old_head = app.head().unwrap();
+    assert!(
+        app.hist
+            .related
+            .as_ref()
+            .unwrap()
+            .branches
+            .iter()
+            .any(|b| b == "main")
+    );
+    git(dir.path(), &["reset", "--hard", "-q", "HEAD~1"]);
+    app.refresh_all(None);
+    assert_eq!(settle_log_batches(&mut app), 0);
+    assert!(app.hist.index.contains_key(&old_head));
+    assert_ne!(app.head(), Some(old_head));
+    assert!(
+        !app.hist
+            .related
+            .as_ref()
+            .unwrap()
+            .branches
+            .iter()
+            .any(|b| b == "main")
+    );
+    assert_history_graph(&app);
+
+    app.dispatch(Action::Reload);
+    assert!(
+        app.hist.index.contains_key(&old_head),
+        "keep the old list until data arrives"
+    );
+    assert!(settle_log_batches(&mut app) > 0);
+    assert!(!app.hist.index.contains_key(&old_head));
+    assert_history_graph(&app);
+}
+
+#[test]
+fn history_rewritten_tip_and_filtered_views_use_full_reload() {
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    git(dir.path(), &["commit", "--allow-empty", "-qm", "Temporary"]);
+    app.refresh_all(None);
+    assert_eq!(settle_log_batches(&mut app), 0);
+    let temporary = app.head().unwrap();
+    git(dir.path(), &["reset", "--hard", "-q", "HEAD~1"]);
+    app.refresh_all(None);
+    assert!(settle_log_batches(&mut app) > 0);
+    assert!(!app.hist.index.contains_key(&temporary));
+    assert_history_graph(&app);
+
+    app.hist.views[0].max_count = "1".into();
+    app.load_history(None);
+    settle(&mut app);
+    git(dir.path(), &["commit", "--allow-empty", "-qm", "Filtered"]);
+    app.refresh_all(None);
+    assert!(settle_log_batches(&mut app) > 0);
+    assert_eq!(app.hist.commits.len(), 1);
+    assert_eq!(&*app.hist.commits[0].subject, "Filtered");
+    assert_history_graph(&app);
+}
+
+#[test]
+fn history_incremental_graph_preserves_merge_lanes_and_cut_targets() {
+    let dir = fixture();
+    git(dir.path(), &["reset", "--hard", "-q", "HEAD"]);
+    git(dir.path(), &["branch", "side"]);
+    for _ in 0..8 {
+        git(dir.path(), &["commit", "--allow-empty", "-qm", "Main"]);
+    }
+    git(dir.path(), &["checkout", "-q", "side"]);
+    git(dir.path(), &["commit", "--allow-empty", "-qm", "Side"]);
+    git(dir.path(), &["checkout", "-q", "main"]);
+    git(dir.path(), &["merge", "--no-ff", "-qm", "Merge", "side"]);
+    let mut app = app(dir.path(), false);
+    app.cfg.graph_cut_after = 1;
+    app.start();
+    settle(&mut app);
+    assert!(
+        !app.hist.cut_target.is_empty(),
+        "fixture must exercise cut edges"
+    );
+    assert_history_graph(&app);
+    let old_len = app.hist.commits.len();
+    git(
+        dir.path(),
+        &["commit", "--allow-empty", "-qm", "After merge"],
+    );
+    app.refresh_all(None);
+    assert_eq!(settle_log_batches(&mut app), 0);
+    assert_eq!(app.hist.commits.len(), old_len + 1);
+    assert_history_graph(&app);
+
+    fs::write(dir.path().join("hello.txt"), "local\n").unwrap();
+    app.rescan();
+    assert_eq!(settle_log_batches(&mut app), 0);
+    assert_history_graph(&app);
+    git(dir.path(), &["add", "hello.txt"]);
+    app.rescan();
+    assert_eq!(settle_log_batches(&mut app), 0);
+    assert_history_graph(&app);
+}
+
+#[test]
+fn history_soft_and_mixed_resets_rebuild_local_edges_when_needed() {
+    for mode in ["--soft", "--mixed"] {
+        let dir = fixture();
+        git(dir.path(), &["add", "."]);
+        git(dir.path(), &["commit", "-qm", "Second"]);
+        let mut app = app(dir.path(), false);
+        app.start();
+        settle(&mut app);
+        let old_head = app.head().unwrap();
+        git(dir.path(), &["reset", mode, "-q", "HEAD~1"]);
+        app.refresh_all(None);
+        settle(&mut app);
+        assert!(app.hist.index.contains_key(&old_head));
+        assert_eq!(
+            app.hist.local_flags,
+            if mode == "--soft" {
+                (false, true)
+            } else {
+                (true, false)
+            }
+        );
+        assert_eq!(app.hist.commits[0].parents.as_ref(), &[app.head().unwrap()]);
+        assert_history_graph(&app);
+    }
+}
+
+#[test]
+fn history_new_merge_and_all_refs_do_not_use_linear_extension() {
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    git(dir.path(), &["checkout", "-qb", "side", "HEAD~1"]);
+    git(dir.path(), &["commit", "--allow-empty", "-qm", "Side"]);
+    git(dir.path(), &["checkout", "-q", "main"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    git(dir.path(), &["merge", "--no-ff", "-qm", "Merge", "side"]);
+    app.refresh_all(None);
+    assert!(settle_log_batches(&mut app) > 0);
+    assert_eq!(app.hist.commits[0].parents.len(), 2);
+    assert_history_graph(&app);
+
+    app.hist.views[0].all_refs = true;
+    app.load_history(None);
+    settle(&mut app);
+    git(dir.path(), &["commit", "--allow-empty", "-qm", "All refs"]);
+    app.refresh_all(None);
+    assert!(settle_log_batches(&mut app) > 0);
+    assert_history_graph(&app);
+}
+
+#[test]
+fn history_full_refresh_keeps_old_rows_until_replacement_and_ignores_stale_results() {
+    use git_twin::app::worker::{Msg, Payload};
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    let old: Vec<_> = app.hist.commits.iter().map(|c| c.oid).collect();
+    let old_request = app.req.log;
+    app.load_history(None);
+    assert_eq!(
+        app.hist.commits.iter().map(|c| c.oid).collect::<Vec<_>>(),
+        old
+    );
+    app.on_msg(Msg {
+        id: old_request,
+        generation: app.generation,
+        payload: Payload::HistoryUpdate(Ok(None)),
+    });
+    let request = app.req.log;
+    settle(&mut app);
+    assert_eq!(
+        app.req.log, request,
+        "stale result must not restart the log"
+    );
+    assert_history_graph(&app);
+
+    app.hist.views[0].message = "no matching commit".into();
+    git(dir.path(), &["reset", "--hard", "-q", "HEAD"]);
+    app.load_history(None);
+    settle(&mut app);
+    assert!(app.hist.commits.is_empty());
+    assert!(app.hist.graph.is_empty());
+    assert!(app.hist.index.is_empty());
+}
+
+#[test]
+fn history_replacements_invalidate_the_cached_ancestry() {
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    git(dir.path(), &["replace", "HEAD", "HEAD~1"]);
+    app.refresh_all(None);
+    assert!(settle_log_batches(&mut app) > 0);
+    assert_eq!(
+        &*app.hist.commits[app.hist.local_rows].subject,
+        "Initial greeting"
+    );
+    assert_history_graph(&app);
+    git(dir.path(), &["replace", "-d", "HEAD"]);
+    app.refresh_all(None);
+    assert!(settle_log_batches(&mut app) > 0);
+    assert_eq!(&*app.hist.commits[0].subject, "Second");
+}
+
+#[test]
+fn history_linear_probe_is_bounded_and_rejects_rewrites() {
+    use git_twin::git::log::linear_extension;
+    use std::sync::atomic::AtomicBool;
+    let dir = fixture();
+    let app = app(dir.path(), false);
+    let oid = |rev| {
+        git_twin::domain::oid::Oid::from_hex(git(dir.path(), &["rev-parse", rev]).trim()).unwrap()
+    };
+    let old = oid("HEAD");
+    let cancel = AtomicBool::new(false);
+    assert_eq!(
+        linear_extension(&app.runner, old, old, &cancel)
+            .unwrap()
+            .unwrap()
+            .len(),
+        0
+    );
+    for _ in 0..64 {
+        git(dir.path(), &["commit", "--allow-empty", "-qm", "Extension"]);
+    }
+    let new = oid("HEAD");
+    assert_eq!(
+        linear_extension(&app.runner, old, new, &cancel)
+            .unwrap()
+            .unwrap()
+            .len(),
+        64
+    );
+    git(
+        dir.path(),
+        &["commit", "--allow-empty", "-qm", "Beyond limit"],
+    );
+    assert!(
+        linear_extension(&app.runner, old, oid("HEAD"), &cancel)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        linear_extension(&app.runner, new, old, &cancel)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn history_shallow_boundary_changes_force_a_reload() {
+    let source = fixture();
+    git(source.path(), &["add", "."]);
+    git(source.path(), &["commit", "-qm", "Second"]);
+    let parent = tempfile::tempdir().unwrap();
+    git(
+        parent.path(),
+        &[
+            "clone",
+            "-q",
+            "--depth=1",
+            &format!("file://{}", source.path().display()),
+            "shallow",
+        ],
+    );
+    let path = parent.path().join("shallow");
+    let mut app = app(&path, false);
+    app.start();
+    settle(&mut app);
+    assert_eq!(app.hist.commits.len(), 1);
+    git(&path, &["fetch", "-q", "--unshallow"]);
+    app.refresh_all(None);
+    assert!(settle_log_batches(&mut app) > 0);
+    assert_eq!(app.hist.commits.len(), 2);
+    assert_history_graph(&app);
+}
+
+#[test]
+fn operation_success_waits_until_view_results_are_applied() {
+    use git_twin::{
+        app::worker::{After, Msg, Payload},
+        domain::diff::Diff,
+    };
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.req.diff = u64::MAX;
+    app.on_msg(Msg {
+        id: 0,
+        generation: app.generation,
+        payload: Payload::Op {
+            label: "Revert".into(),
+            result: Ok("done".into()),
+            after: After::Nothing,
+        },
+    });
+    app.tick();
+    assert!(app.status.0.contains("updating view"));
+    assert!(!app.log.iter().any(|entry| entry.text == "Revert: done"));
+    assert!(!render(&mut app, 120, 40).contains("Revert: done"));
+    assert!(app.working());
+    app.on_msg(Msg {
+        id: u64::MAX - 1,
+        generation: app.generation,
+        payload: Payload::CommitDiff(Ok(Diff::default())),
+    });
+    app.tick();
+    assert!(
+        app.status.0.contains("updating view"),
+        "stale results cannot finish the refresh"
+    );
+    app.on_msg(Msg {
+        id: u64::MAX,
+        generation: app.generation,
+        payload: Payload::CommitDiff(Ok(Diff::default())),
+    });
+    app.tick();
+    assert_eq!(app.status.0, "Revert: done");
+}
+
+#[test]
+fn operation_refresh_error_is_not_overwritten_by_success() {
+    use git_twin::{
+        app::worker::{After, Msg, Payload},
+        git::GitError,
+    };
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.req.diff = u64::MAX;
+    app.on_msg(Msg {
+        id: 0,
+        generation: app.generation,
+        payload: Payload::Op {
+            label: "Revert".into(),
+            result: Ok("done".into()),
+            after: After::Nothing,
+        },
+    });
+    app.on_msg(Msg {
+        id: u64::MAX,
+        generation: app.generation,
+        payload: Payload::CommitDiff(Err(GitError::new("diff", "Cannot read updated diff"))),
+    });
+    app.tick();
+    assert_eq!(app.status.1, StatusTone::Error);
+    assert!(app.status.0.contains("Cannot read updated diff"));
+    assert!(!app.log.iter().any(|entry| entry.text == "Revert: done"));
+    assert!(!app.busy());
+}
+
+#[test]
+fn operation_revert_reports_completion_after_refresh() {
+    use git_twin::{
+        app::worker::{After, Payload},
+        git::ops,
+    };
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    let old = app.head().unwrap();
+    app.run_op(
+        "Revert",
+        Box::new(move |r| ops::revert_commit(r, &old, None).map(|_| "done".into())),
+        After::Refresh,
+        Some(Some(old)),
+    );
+    assert!(app.status.0.contains("in progress"));
+    let message = app
+        .workers
+        .rx
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap();
+    assert!(matches!(&message.payload, Payload::Op { .. }));
+    app.on_msg(message);
+    assert!(app.hist.loading);
+    assert!(app.status.0.contains("updating view"));
+    app.tick();
+    assert!(!app.log.iter().any(|entry| entry.text == "Revert: done"));
+    settle(&mut app);
+    assert_eq!(app.status.0, "Revert: done");
+    assert_ne!(app.head(), Some(old));
+    assert!(app.hist.commits[0].subject.starts_with("Revert"));
+    assert_history_graph(&app);
+}
+
+#[test]
+fn operation_reset_finishes_when_active_view_is_updated() {
+    use git_twin::{
+        app::worker::{After, Payload},
+        domain::oid::Oid,
+        git::ops::{self, ResetMode},
+    };
+    for (view, full_reload) in [
+        (ViewKind::History, false),
+        (ViewKind::History, true),
+        (ViewKind::Worktree, false),
+    ] {
+        let dir = fixture();
+        git(dir.path(), &["add", "."]);
+        git(dir.path(), &["commit", "-qm", "Second"]);
+        let target = Oid::from_hex(git(dir.path(), &["rev-parse", "HEAD~1"]).trim()).unwrap();
+        let mut app = app(dir.path(), false);
+        app.hist.views[0].all_refs = full_reload;
+        app.start();
+        settle(&mut app);
+        app.select_oid(target, false);
+        settle(&mut app);
+        app.switch_view(view);
+        let old = app.head();
+        app.run_op(
+            "Reset",
+            Box::new(move |r| ops::reset(r, ResetMode::Hard, &target).map(|_| "done".into())),
+            After::Refresh,
+            Some(old),
+        );
+        let mut deferred = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while app.status.0 != "Reset: done" {
+            if let Ok(message) = app.workers.rx.recv_timeout(Duration::from_millis(10)) {
+                let secondary = match view {
+                    ViewKind::History => matches!(
+                        &message.payload,
+                        Payload::Details { .. } | Payload::Status(_) | Payload::LogDone(_)
+                    ),
+                    ViewKind::Worktree => matches!(
+                        &message.payload,
+                        Payload::HistoryUpdate(_) | Payload::LogBatch { .. } | Payload::LogDone(_)
+                    ),
+                };
+                if secondary {
+                    deferred.push(message);
+                } else {
+                    app.on_msg(message);
+                }
+            }
+            app.tick();
+            assert!(
+                Instant::now() < deadline,
+                "reset waited for secondary work: {}",
+                app.status.0
+            );
+        }
+        assert_eq!(app.head(), Some(target));
+        match view {
+            ViewKind::History => {
+                assert!(app.hist.view_ready());
+                assert_eq!(app.hist.selected_oid(), Some(target));
+                assert!(app.wt.loading, "hidden status is deliberately not applied");
+                if full_reload {
+                    assert!(
+                        app.hist.loading,
+                        "remaining log completion must not block success"
+                    );
+                }
+            }
+            ViewKind::Worktree => {
+                assert_eq!(app.wt.snapshot.as_ref().unwrap().head, Some(target));
+                assert!(
+                    app.hist.loading,
+                    "hidden history is deliberately not applied"
+                );
+            }
+        }
+        for message in deferred {
+            app.on_msg(message);
+        }
+        settle(&mut app);
     }
 }
 

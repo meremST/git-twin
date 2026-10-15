@@ -48,7 +48,7 @@ pub struct GraphRow {
     pub cells: Box<[LaneCell]>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Lane {
     oid: Oid,
     color: u8,
@@ -92,6 +92,17 @@ fn connect(cells: &mut [LaneCell], a: usize, b: usize, color: u8) {
 }
 
 impl GraphBuilder {
+    /// Whether an unchanged suffix can reuse its layout after a prefix edit.
+    /// Absolute row numbers only affect the positions reported by `take_cuts`.
+    pub fn same_continuation(&self, other: &Self) -> bool {
+        self.lanes == other.lanes
+            && self.next_color == other.next_color
+            && self.cut_after == other.cut_after
+            && self.parked == other.parked
+            && self.just_cut == other.just_cut
+            && self.prev == other.prev
+    }
+
     pub fn new() -> GraphBuilder {
         GraphBuilder::default()
     }

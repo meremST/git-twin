@@ -99,6 +99,16 @@ pub fn split_args(s: &str) -> Result<Vec<String>, String> {
 }
 
 impl ViewSpec {
+    pub fn incremental_head_view(&self) -> bool {
+        let mut view = self.clone();
+        view.name.clear();
+        view.remember = false;
+        if view.refs.trim() == "HEAD" {
+            view.refs.clear();
+        }
+        view == ViewSpec::default()
+    }
+
     pub fn default_view() -> ViewSpec {
         ViewSpec {
             name: "All files".into(),
@@ -280,10 +290,105 @@ fn parse_record(f: &[Vec<u8>; 5], interner: &mut Interner) -> Option<Commit> {
 }
 
 /// Pseudo commits at the top of the list (gitk "local changes" rows).
+#[derive(Clone, Copy)]
 pub struct LocalRows {
     pub unstaged: bool,
     pub staged: bool,
     pub head: Option<Oid>,
+}
+
+pub fn local_commits(local: Option<LocalRows>) -> Vec<Commit> {
+    let mut commits = Vec::new();
+    if let Some(l) = local {
+        let mut push = |oid, parent: Option<Oid>, subject: &str| {
+            commits.push(Commit {
+                oid,
+                parents: parent.into_iter().collect(),
+                author: "".into(),
+                date: "".into(),
+                subject: subject.into(),
+            });
+        };
+        if l.unstaged {
+            push(
+                null_unstaged(),
+                if l.staged {
+                    Some(null_staged())
+                } else {
+                    l.head
+                },
+                "Local uncommitted changes, not checked in to index",
+            );
+        }
+        if l.staged {
+            push(
+                null_staged(),
+                l.head,
+                "Local changes checked in to index but not committed",
+            );
+        }
+    }
+    commits
+}
+
+/// Replacements, grafts and shallow boundaries can change ancestry without
+/// changing commit ids, so those repositories must re-read their history.
+pub fn history_cache_safe(runner: &Runner, common_dir: &std::path::Path) -> Result<bool, GitError> {
+    if common_dir.join("shallow").exists() || common_dir.join("info/grafts").exists() {
+        return Ok(false);
+    }
+    let replacements = runner.read(&[
+        os("for-each-ref"),
+        os("--count=1"),
+        os("--format=%(refname)"),
+        os("refs/replace"),
+    ])?;
+    Ok(replacements.is_empty())
+}
+
+/// Bounded fast path: only a short, single-parent extension of the old tip.
+/// Merges, rewrites and longer extensions use the regular history loader.
+pub fn linear_extension(
+    runner: &Runner,
+    old: Oid,
+    new: Oid,
+    cancel: &AtomicBool,
+) -> Result<Option<Vec<Commit>>, GitError> {
+    if old == new {
+        return Ok(Some(Vec::new()));
+    }
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(None);
+    }
+    let output = runner.read(&[
+        os("log"),
+        os("--no-color"),
+        os("--first-parent"),
+        os("--max-count=64"),
+        os("-z"),
+        os(LOG_FORMAT),
+        os(LOCAL_DATE),
+        os("--end-of-options"),
+        os(new.to_hex()),
+        os("--"),
+    ])?;
+    let fields: Vec<_> = output.split(|b| *b == 0).collect();
+    let mut interner = Interner::default();
+    let mut commits = Vec::new();
+    for fields in fields.chunks_exact(5) {
+        let fields = std::array::from_fn(|i| fields[i].to_vec());
+        let commit = parse_record(&fields, &mut interner)
+            .ok_or_else(|| GitError::new("git log", "invalid incremental history record"))?;
+        if commit.parents.len() != 1 {
+            return Ok(None);
+        }
+        let reached = commit.parents[0] == old;
+        commits.push(commit);
+        if reached {
+            return Ok(Some(commits));
+        }
+    }
+    Ok(None)
 }
 
 /// Keeps the base tips that still resolve to a commit (they may have been
@@ -334,38 +439,9 @@ pub fn stream_log(
         graph: Vec::new(),
         cuts: Vec::new(),
     };
-    if let Some(l) = local {
-        let mut push_fake = |oid: Oid, parent: Option<Oid>, subject: &str| {
-            let parents: Vec<Oid> = parent.into_iter().collect();
-            batch.graph.push(graph.push(oid, &parents));
-            batch.commits.push(Commit {
-                oid,
-                parents: parents.into_boxed_slice(),
-                author: interner.intern(""),
-                date: "".into(),
-                subject: subject.into(),
-            });
-        };
-        let staged_parent = l.head;
-        if l.unstaged {
-            let parent = if l.staged {
-                Some(null_staged())
-            } else {
-                staged_parent
-            };
-            push_fake(
-                null_unstaged(),
-                parent,
-                "Local uncommitted changes, not checked in to index",
-            );
-        }
-        if l.staged {
-            push_fake(
-                null_staged(),
-                staged_parent,
-                "Local changes checked in to index but not committed",
-            );
-        }
+    for commit in local_commits(local) {
+        batch.graph.push(graph.push(commit.oid, &commit.parents));
+        batch.commits.push(commit);
     }
     let mut child = runner.spawn_stream(&args, Opts::default())?;
     let mut stderr = child.stderr.take();
@@ -385,6 +461,10 @@ pub fn stream_log(
     let mut first = true;
     let mut stopped = false;
     loop {
+        if cancel.load(Ordering::Relaxed) {
+            stopped = true;
+            break;
+        }
         buf.clear();
         let n = reader
             .read_until(0, &mut buf)

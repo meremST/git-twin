@@ -133,3 +133,33 @@ Aucune etape ne bloque la boucle principale sur une commande Git : les lectures
 passent par le pool de workers, les mutations par un writer serialise, et les
 operations necessitant un terminal (editeur, merge/diff externe, push avec
 prompt) suspendent la TUI via `Handoff`.
+
+## Actualisation de l'historique
+
+La vue HEAD sans filtres peut reutiliser un historique charge completement.
+Une sonde limitee a 64 commits detecte les extensions lineaires (commit,
+cherry-pick, revert simples). Seuls les nouveaux commits sont ajoutes au cache ;
+le suffixe du graphe est conserve si l'etat du `GraphBuilder` au raccord est identique.
+Les index et positions des coupures sont decales sans recalculer ce suffixe.
+Les changements de lignes locales utilisent le meme raccord, sans relire
+les commits lorsque HEAD est inchange.
+
+Un reset vers un commit deja charge peut conserver la liste si l'ancien HEAD
+fait partie des pointes de base conservees par la vue. Sinon, comme pour les
+merges nouveaux, les extensions plus longues, les filtres ou un raccord de
+graphe incompatible, l'application relit l'historique. Les depots shallow,
+les grafts et les references de remplacement desactivent la reutilisation :
+l'ascendance peut y changer sans changement des identifiants.
+
+Pendant une relecture complete, l'ancienne liste reste affichee jusqu'au
+premier lot de remplacement. Les identifiants de requete rejettent les
+resultats devenus obsoletes. Shift-F5 force toujours une relecture complete
+et recapture les pointes de base ; F5 peut utiliser le chemin incremental.
+
+Le message de succes d'une mutation attend l'actualisation de la vue active :
+references, liste et diff affiche. Les panneaux masques, les metadonnees
+complementaires et la suite de l'ancien historique peuvent continuer a charger
+en arriere-plan. Dans l'historique, la selection attendue doit etre disponible
+dans les nouveaux lots avant d'annoncer la fin. La barre indique entre-temps
+que la vue est en cours d'actualisation. Une erreur de rafraichissement annule
+le message de succes differe.

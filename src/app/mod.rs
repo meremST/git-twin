@@ -150,6 +150,8 @@ pub struct App {
     /// keeps showing "Working" until the work completes and at least a
     /// minimal duration has passed (avoids a flicker on fast refreshes).
     pub pending_busy_status: Option<Instant>,
+    pending_successes: Vec<String>,
+    applied: Requests,
     /// True while a diff search runs in the background (not counted by `busy`).
     pub searching: bool,
     pub workers: Workers,
@@ -233,6 +235,8 @@ impl App {
                 .collect(),
             status: (String::new(), StatusTone::Info),
             pending_busy_status: None,
+            pending_successes: Vec::new(),
+            applied: Requests::default(),
             log: VecDeque::new(),
             searching: false,
             workers: Workers::new(4),
@@ -280,6 +284,9 @@ impl App {
     /// Sets the message shown in the bar. Info messages stay until replaced;
     /// error messages are also dropped on the next user action.
     pub fn set_status(&mut self, s: impl Into<String>, tone: StatusTone) {
+        if tone == StatusTone::Error {
+            self.pending_successes.clear();
+        }
         let text = s.into();
         if !text.is_empty() {
             if self.log.len() == MAX_LOG {
@@ -336,6 +343,38 @@ impl App {
     /// before a worker is queued. `tick` keeps it visible for at least 500ms.
     pub fn mark_working(&mut self) {
         self.pending_busy_status = Some(Instant::now());
+    }
+
+    fn defer_success(&mut self, label: &str, message: String) {
+        self.pending_successes.push(message);
+        self.set_status(format!("{label}: updating view..."), StatusTone::Info);
+        self.mark_working();
+    }
+
+    fn view_is_current(&self) -> bool {
+        let applied = |requested, completed| requested == 0 || requested == completed;
+        !self.workers.writing()
+            && applied(self.req.refs, self.applied.refs)
+            && match self.view {
+                ViewKind::History => {
+                    self.hist.view_ready()
+                        && self.hist.sel_changed_at.is_none()
+                        && applied(self.req.diff, self.applied.diff)
+                }
+                ViewKind::Worktree => {
+                    !self.wt.loading
+                        && applied(self.req.status, self.applied.status)
+                        && applied(self.req.wtdiff, self.applied.wtdiff)
+                }
+            }
+    }
+
+    fn report_refresh_failure<T>(&mut self, result: &Result<T, GitError>) {
+        if !self.pending_successes.is_empty()
+            && let Err(error) = result
+        {
+            self.set_status(format!("View refresh failed: {error}"), StatusTone::Error);
+        }
     }
 
     /// True while the bar should show "Working" instead of "Ready".
@@ -403,7 +442,7 @@ impl App {
         self.generation += 1;
         self.load_refs();
         let keep = select.or_else(|| self.hist.selected_oid());
-        self.load_history(keep);
+        self.update_history(keep);
         if !self.is_bare() {
             self.rescan();
         }
@@ -442,7 +481,9 @@ impl App {
         }
         let r = self.runner.clone();
         let label_s = label.to_string();
-        self.workers.write(self.generation, label, move || {
+        self.set_status(format!("{label}: in progress..."), StatusTone::Info);
+        self.mark_working();
+        let id = self.workers.write(self.generation, label, move || {
             if let Some(exp) = expect_head {
                 let now = crate::git::read::load_refs(&r).ok().and_then(|rs| rs.head.oid());
                 if now != exp {
@@ -463,6 +504,12 @@ impl App {
                 after,
             }
         });
+        if id == 0 {
+            self.set_status(
+                format!("{label}: cannot queue operation."),
+                StatusTone::Error,
+            );
+        }
     }
 
     pub fn run_pending(&mut self, p: Pending) {
@@ -556,13 +603,13 @@ impl App {
         match (h, result) {
             (Handoff::Editor, Ok(_)) => {}
             (Handoff::Commit { .. }, Ok(true)) => {
+                self.defer_success("Commit", "Commit created.".into());
                 self.on_committed();
-                self.set_status("Commit created.", StatusTone::Info);
             }
             (Handoff::Git { label, .. } | Handoff::Shell { label, .. }, Ok(true)) => {
-                self.set_status(format!("{label}: finished successfully."), StatusTone::Info);
+                self.defer_success(label, format!("{label}: finished successfully."));
             }
-            (_, Ok(true)) => self.set_status("Command finished successfully.", StatusTone::Info),
+            (_, Ok(true)) => self.defer_success("Command", "Command finished successfully.".into()),
             (_, Ok(false)) => self.set_status(
                 "Command failed (see the terminal output).",
                 StatusTone::Error,
@@ -643,6 +690,11 @@ impl App {
         if now.duration_since(self.last_draft_save) > Duration::from_secs(2) {
             self.save_draft();
         }
+        if !self.pending_successes.is_empty() && self.view_is_current() {
+            for message in std::mem::take(&mut self.pending_successes) {
+                self.set_status(message, StatusTone::Info);
+            }
+        }
         let active = self.busy() || self.searching;
         if active && self.pending_busy_status.is_none() {
             self.pending_busy_status = Some(now);
@@ -658,6 +710,16 @@ impl App {
     pub fn on_msg(&mut self, m: worker::Msg) {
         let fresh = m.generation == self.generation;
         match m.payload {
+            Payload::LogHead(head) => {
+                if m.id == self.req.log {
+                    self.hist.log_head = head;
+                }
+            }
+            Payload::HistoryUpdate(result) => {
+                if m.id == self.req.log {
+                    self.on_history_update(result);
+                }
+            }
             Payload::LogBatch {
                 commits,
                 graph,
@@ -673,6 +735,9 @@ impl App {
                 }
             }
             Payload::Refs(r) => {
+                if m.id == self.req.refs {
+                    self.applied.refs = m.id;
+                }
                 if m.id == self.req.refs && fresh {
                     match r {
                         Ok(rs) => {
@@ -696,6 +761,8 @@ impl App {
             }
             Payload::CommitDiff(r) => {
                 if m.id == self.req.diff {
+                    self.report_refresh_failure(&r);
+                    self.applied.diff = m.id;
                     self.on_commit_diff(r);
                 }
             }
@@ -706,6 +773,7 @@ impl App {
             }
             Payload::Blob { path, blob } => {
                 if m.id == self.req.blob {
+                    self.report_refresh_failure(&blob);
                     self.on_blob(path, blob);
                 }
             }
@@ -727,11 +795,14 @@ impl App {
             }
             Payload::Status(r) => {
                 if m.id == self.req.status {
+                    self.applied.status = m.id;
                     self.on_status(r);
                 }
             }
             Payload::WtDiff(r) => {
                 if m.id == self.req.wtdiff {
+                    self.report_refresh_failure(&r);
+                    self.applied.wtdiff = m.id;
                     self.on_wt_diff(r);
                 }
             }
@@ -792,14 +863,12 @@ impl App {
         match result {
             Ok(msg) => {
                 let first = msg.lines().last().unwrap_or("").to_string();
-                if first.is_empty() {
-                    self.set_status(
-                        format!("{label}: completed successfully (no output)."),
-                        StatusTone::Info,
-                    );
+                let success = if first.is_empty() {
+                    format!("{label}: completed successfully (no output).")
                 } else {
-                    self.set_status(format!("{label}: {first}"), StatusTone::Info);
-                }
+                    format!("{label}: {first}")
+                };
+                self.defer_success(&label, success);
                 match after {
                     After::Nothing => {}
                     After::RefsOnly => self.load_refs(),
@@ -1073,7 +1142,10 @@ impl App {
     }
 
     pub fn busy(&self) -> bool {
-        self.hist.loading || self.wt.loading || self.workers.busy()
+        self.hist.loading
+            || self.wt.loading
+            || self.workers.busy()
+            || !self.pending_successes.is_empty()
     }
 }
 
