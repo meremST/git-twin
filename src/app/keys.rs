@@ -296,6 +296,11 @@ impl App {
             C::Up | C::Down if shift && focus == HFocus::Find => return false,
             C::Up | C::Down | C::PageUp | C::PageDown | C::F(_) => return false,
             C::Char('q' | 'w' | 'f' | 'g' | 's' | 'r') if ctrl => return false,
+            // Delete clears the whole SHA1 field to make searching quick.
+            C::Delete if focus == HFocus::Sha => {
+                self.hist.sha.clear();
+                return true;
+            }
             C::Char('c') if ctrl => {
                 let t = match focus {
                     HFocus::Sha => self.hist.sha.text.clone(),

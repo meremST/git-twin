@@ -400,6 +400,12 @@ impl App {
                         chk("Tree", "", Action::SetTreeMode(true), h.tree_mode),
                     ],
                 ));
+                v.push(chk(
+                    "Compact refs",
+                    "",
+                    Action::ToggleCompactRefs,
+                    h.compact_refs,
+                ));
                 v.push(e("Maximize pane", "F11", Action::ToggleMaximize));
                 v.push(en(
                     "Working tree view",
@@ -413,6 +419,7 @@ impl App {
                 e("Command palette", "F12", Action::CommandPalette),
                 MenuItem::Sep,
                 e("About Git Twin (gitt)", "", Action::AboutGitk),
+                e("Messages log", "", Action::ShowMessageLog),
                 e("Key bindings", "F1", Action::KeyBindings),
             ],
         }
@@ -571,6 +578,7 @@ impl App {
                 MenuItem::Sep,
                 e("About Git TUI (git tui)", "", Action::AboutGitGui),
                 e("Show SSH Key", "", Action::ShowSshKey),
+                e("Messages log", "", Action::ShowMessageLog),
                 e("Key bindings", "F1", Action::KeyBindings),
             ],
         }

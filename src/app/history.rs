@@ -84,6 +84,10 @@ pub struct HistoryState {
     pub files: Vec<Vec<u8>>,
     pub tree: Vec<Vec<u8>>,
     pub tree_mode: bool,
+    /// Collapse each commit's refs into one marker per kind.
+    pub compact_refs: bool,
+    /// Commits whose refs were opened by a click while compact.
+    pub expanded_refs: HashSet<Oid>,
     pub file_sel: usize,
     pub file_top: usize,
     pub file_height: usize,
@@ -156,6 +160,8 @@ impl HistoryState {
             files: Vec::new(),
             tree: Vec::new(),
             tree_mode: false,
+            compact_refs: false,
+            expanded_refs: HashSet::new(),
             file_sel: 0,
             file_top: 0,
             file_height: 5,
@@ -1234,6 +1240,11 @@ impl App {
                 }
             }
             A::AboutGitk => self.info("About Git Twin (gitt)", &about_text("gitk")),
+            A::ShowMessageLog => self.show_message_log(),
+            A::ToggleCompactRefs => {
+                self.hist.compact_refs = !self.hist.compact_refs;
+                self.hist.expanded_refs.clear();
+            }
             A::KeyBindings => self.dialogs.push(keybindings_dialog()),
             A::SelectRow(i) => {
                 self.select_row(*i);

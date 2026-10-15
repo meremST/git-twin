@@ -608,53 +608,108 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                 app.hits.push(zone, hit);
             }
         }
-        for reference in app.refs.for_commit(&c.oid) {
-            let color = if app.refs.is_head_ref(reference) {
-                app.theme.head
-            } else {
-                match reference.kind {
-                    RefKind::LocalBranch => app.theme.branch,
-                    RefKind::RemoteBranch => app.theme.remote,
-                    RefKind::Tag => app.theme.tag,
-                    _ => app.theme.meta,
+        let compact = app.hist.compact_refs;
+        let open = compact && app.hist.expanded_refs.contains(&c.oid);
+        if compact && !open {
+            // One marker per kind present; a click opens the full labels.
+            let kinds = [
+                (RefKind::Tag, "T", app.theme.tag),
+                (RefKind::LocalBranch, "B", app.theme.branch),
+                (RefKind::RemoteBranch, "R", app.theme.remote),
+            ];
+            let mut spans = Vec::new();
+            for (kind, letter, color) in kinds {
+                let mut refs = app
+                    .refs
+                    .for_commit(&c.oid)
+                    .filter(|r| r.kind == kind)
+                    .peekable();
+                if refs.peek().is_none() {
+                    continue;
                 }
-            };
-            let icons = &app.theme.icons;
-            let icon = icons.reference(reference.kind);
-            let spans = if app.theme.ref_pills() {
-                let cap = Style::default()
-                    .fg(color)
-                    .bg(style.bg.unwrap_or(app.theme.bg));
-                vec![
-                    Span::styled(icons.pill_left, cap),
-                    Span::styled(
-                        format!("{icon} {}", reference.short),
-                        Style::default()
-                            .fg(app.theme.bg)
-                            .bg(color)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(icons.pill_right, cap),
-                    Span::styled(" ", style),
-                ]
-            } else if icons.nerd {
-                vec![Span::styled(
-                    format!("{icon} {} ", reference.short),
-                    tint(color).add_modifier(Modifier::BOLD),
-                )]
-            } else {
-                vec![Span::styled(
-                    format!("[{}] ", reference.short),
-                    tint(color).add_modifier(Modifier::BOLD),
-                )]
-            };
-            let label = Line::from(spans);
-            let w = label.width().min(usize::from(author_x.saturating_sub(x))) as u16;
-            let zone = Rect::new(x, rr.y, w, 1);
-            f.render_widget(Paragraph::new(label), zone);
-            app.hits
-                .push(zone, Hit::RefLabel(i, reference.full.clone()));
-            x += w;
+                let color = if refs.any(|r| app.refs.is_head_ref(r)) {
+                    app.theme.head
+                } else {
+                    color
+                };
+                let icons = &app.theme.icons;
+                let t = if icons.nerd {
+                    // The cloud glyph is drawn wider than the others and needs more room.
+                    let pad = if kind == RefKind::RemoteBranch {
+                        "  "
+                    } else {
+                        " "
+                    };
+                    format!("{}{pad}", icons.reference(kind))
+                } else {
+                    format!("[{letter}] ")
+                };
+                spans.push(Span::styled(t, tint(color).add_modifier(Modifier::BOLD)));
+            }
+            if !spans.is_empty() {
+                let label = Line::from(spans);
+                let w = label.width().min(usize::from(author_x.saturating_sub(x))) as u16;
+                let zone = Rect::new(x, rr.y, w, 1);
+                f.render_widget(Paragraph::new(label), zone);
+                app.hits.push(zone, Hit::RefToggle(i));
+                x += w;
+            }
+        } else {
+            if open {
+                let t = if app.theme.icons.ascii { "< " } else { "‹ " };
+                let zone = Rect::new(x, rr.y, 2, 1);
+                text(f, zone, t.to_string(), app.theme.dimmed());
+                app.hits.push(zone, Hit::RefToggle(i));
+                x += 2;
+            }
+            for reference in app.refs.for_commit(&c.oid) {
+                let color = if app.refs.is_head_ref(reference) {
+                    app.theme.head
+                } else {
+                    match reference.kind {
+                        RefKind::LocalBranch => app.theme.branch,
+                        RefKind::RemoteBranch => app.theme.remote,
+                        RefKind::Tag => app.theme.tag,
+                        _ => app.theme.meta,
+                    }
+                };
+                let icons = &app.theme.icons;
+                let icon = icons.reference(reference.kind);
+                let spans = if app.theme.ref_pills() {
+                    let cap = Style::default()
+                        .fg(color)
+                        .bg(style.bg.unwrap_or(app.theme.bg));
+                    vec![
+                        Span::styled(icons.pill_left, cap),
+                        Span::styled(
+                            format!("{icon} {}", reference.short),
+                            Style::default()
+                                .fg(app.theme.bg)
+                                .bg(color)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(icons.pill_right, cap),
+                        Span::styled(" ", style),
+                    ]
+                } else if icons.nerd {
+                    vec![Span::styled(
+                        format!("{icon} {} ", reference.short),
+                        tint(color).add_modifier(Modifier::BOLD),
+                    )]
+                } else {
+                    vec![Span::styled(
+                        format!("[{}] ", reference.short),
+                        tint(color).add_modifier(Modifier::BOLD),
+                    )]
+                };
+                let label = Line::from(spans);
+                let w = label.width().min(usize::from(author_x.saturating_sub(x))) as u16;
+                let zone = Rect::new(x, rr.y, w, 1);
+                f.render_widget(Paragraph::new(label), zone);
+                app.hits
+                    .push(zone, Hit::RefLabel(i, reference.full.clone()));
+                x += w;
+            }
         }
         let bold = app
             .hist
@@ -704,6 +759,20 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             },
             app.theme.dimmed(),
         );
+    }
+    // Checkbox on the bottom border, right-aligned.
+    let icons = &app.theme.icons;
+    let mark = if app.hist.compact_refs {
+        icons.toggle_on
+    } else {
+        icons.toggle_off
+    };
+    let label = format!(" {mark} Compact refs ");
+    let w = (label.width() as u16).min(r.width.saturating_sub(2));
+    if r.height > 1 && w > 0 {
+        let zone = Rect::new(r.right().saturating_sub(w + 1), r.bottom() - 1, w, 1);
+        text(f, zone, label, app.theme.dimmed());
+        app.hits.push(zone, Hit::Button(Action::ToggleCompactRefs));
     }
 }
 

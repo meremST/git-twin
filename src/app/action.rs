@@ -41,6 +41,8 @@ pub enum Action {
     SelectView(usize),
     AboutGitk,
     KeyBindings,
+    ShowMessageLog,
+    ToggleCompactRefs,
     CommandPalette,
 
     // ---- gitk: navigation
