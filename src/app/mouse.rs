@@ -165,10 +165,10 @@ impl App {
             Hit::ResumeArrow { node, .. } => self.follow_resume(node),
             Hit::RefToggle(i) => {
                 self.hist.focus = HFocus::List;
-                if let Some(oid) = self.hist.commits.get(i).map(|c| c.oid) {
-                    if !self.hist.expanded_refs.remove(&oid) {
-                        self.hist.expanded_refs.insert(oid);
-                    }
+                if let Some(oid) = self.hist.commits.get(i).map(|c| c.oid)
+                    && !self.hist.expanded_refs.remove(&oid)
+                {
+                    self.hist.expanded_refs.insert(oid);
                 }
             }
             Hit::RefLabel(i, full) => {
