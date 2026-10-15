@@ -1,5 +1,20 @@
 # Notes de version
 
+## Non publie
+
+### Nouveautes
+
+- Le mode « Compact refs » est memorise dans l'etat (`state.toml`) et
+  restaure au lancement.
+- Comme gitk, l'historique garde le sommet de depart (HEAD au lancement) apres
+  un checkout, cherry-pick, etc., en plus de la branche courante. `F5`
+  (Update) conserve cet etat ; `Shift-F5` (Reload) le remet a zero.
+
+### Changements
+
+- Les checkouts de branche ou de commit relisent l'historique pour y inclure
+  la nouvelle branche courante.
+
 ## 0.3.1 — 2026-10-15
 
 ### Nouveautes

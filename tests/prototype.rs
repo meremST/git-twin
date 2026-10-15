@@ -1480,6 +1480,43 @@ fn checkout_moves_head_marker_but_keeps_history_rows() {
 }
 
 #[test]
+fn history_keeps_starting_head_after_checkout_until_reload() {
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Second on main"]);
+    git(dir.path(), &["checkout", "-q", "-b", "side", "HEAD~1"]);
+    git(
+        dir.path(),
+        &["commit", "-q", "--allow-empty", "-m", "Only on side"],
+    );
+    git(dir.path(), &["checkout", "-q", "main"]);
+    let main = git(dir.path(), &["rev-parse", "main"]).trim().to_string();
+    let side = git(dir.path(), &["rev-parse", "side"]).trim().to_string();
+    let has = |app: &App, oid: &str| app.hist.commits.iter().any(|c| c.oid.to_hex() == oid);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    assert!(has(&app, &main) && !has(&app, &side));
+
+    app.dispatch(Action::CheckoutRef(b"refs/heads/side".to_vec()));
+    settle(&mut app);
+    settle(&mut app);
+    assert!(has(&app, &main), "starting branch stays visible");
+    assert!(has(&app, &side));
+
+    app.dispatch(Action::Update);
+    settle(&mut app);
+    settle(&mut app);
+    assert!(has(&app, &main), "update keeps the starting branch");
+
+    app.dispatch(Action::Reload);
+    settle(&mut app);
+    settle(&mut app);
+    assert!(!has(&app, &main), "reload resets to the current branch");
+    assert!(has(&app, &side));
+}
+
+#[test]
 fn reset_dialog_lists_every_mode() {
     let dir = fixture();
     let mut app = app(dir.path(), false);

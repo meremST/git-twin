@@ -126,6 +126,12 @@ impl ViewSpec {
 
     /// Revision-limiting arguments (without format, order handled here too).
     pub fn rev_args(&self) -> Result<(Vec<OsString>, Vec<OsString>), String> {
+        self.rev_args_with(&[])
+    }
+
+    /// Like `rev_args`, also following `base` (gitk keeps the heads a view
+    /// started from) when the view shows HEAD.
+    pub fn rev_args_with(&self, base: &[Oid]) -> Result<(Vec<OsString>, Vec<OsString>), String> {
         let mut opts: Vec<OsString> = Vec::new();
         let mut revs: Vec<OsString> = Vec::new();
         opts.push(os(if self.date_order {
@@ -220,12 +226,21 @@ impl ViewSpec {
         if no_rev_selection {
             revs.push(os("HEAD"));
         }
+        if !self.all_refs && revs.iter().any(|r| r == "HEAD") {
+            for o in base {
+                revs.push(os(o.to_hex()));
+            }
+        }
         Ok((opts, revs))
     }
 
     /// Full argument vector for `git log` (format excluded).
     pub fn log_args(&self) -> Result<Vec<OsString>, String> {
-        let (opts, revs) = self.rev_args()?;
+        self.log_args_with(&[])
+    }
+
+    pub fn log_args_with(&self, base: &[Oid]) -> Result<Vec<OsString>, String> {
+        let (opts, revs) = self.rev_args_with(base)?;
         let mut a = opts;
         a.push(os("--end-of-options"));
         a.extend(revs);
@@ -271,11 +286,30 @@ pub struct LocalRows {
     pub head: Option<Oid>,
 }
 
+/// Keeps the base tips that still resolve to a commit (they may have been
+/// pruned since they were recorded, which would make `git log` fail).
+pub fn existing_commits(runner: &Runner, base: &[Oid]) -> Vec<Oid> {
+    base.iter()
+        .copied()
+        .filter(|o| {
+            runner
+                .read(&[
+                    os("rev-parse"),
+                    os("--verify"),
+                    os("--quiet"),
+                    os(format!("{}^{{commit}}", o.to_hex())),
+                ])
+                .is_ok()
+        })
+        .collect()
+}
+
 /// Streams the history. `sink` receives batches and returns false to stop.
 /// Graph lines idle for more than `cut_after` rows are cut (0 = never).
 pub fn stream_log(
     runner: &Runner,
     view: &ViewSpec,
+    base: &[Oid],
     local: Option<LocalRows>,
     cut_after: usize,
     cancel: &AtomicBool,
@@ -289,7 +323,10 @@ pub fn stream_log(
         os(LOG_FORMAT),
         os(LOCAL_DATE),
     ];
-    args.extend(view.log_args().map_err(|e| GitError::new("git log", e))?);
+    args.extend(
+        view.log_args_with(&existing_commits(runner, base))
+            .map_err(|e| GitError::new("git log", e))?,
+    );
     let mut graph = GraphBuilder::with_cut_after(cut_after);
     let mut interner = Interner::default();
     let mut batch = LogBatch {
@@ -436,6 +473,27 @@ mod tests {
         );
         assert!(split_args("'open").is_err());
         assert_eq!(split_args("  ").unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn base_tips_follow_only_views_showing_head() {
+        let base = [Oid::from_hex(&"a".repeat(40)).unwrap()];
+        let mut v = ViewSpec::default_view();
+        let a = v.log_args_with(&base).unwrap();
+        assert!(a.contains(&os("HEAD")) && a.contains(&os("a".repeat(40))));
+        v.refs = "feature".into();
+        assert!(
+            !v.log_args_with(&base)
+                .unwrap()
+                .contains(&os("a".repeat(40)))
+        );
+        v.all_refs = true;
+        v.refs = "HEAD".into();
+        assert!(
+            !v.log_args_with(&base)
+                .unwrap()
+                .contains(&os("a".repeat(40)))
+        );
     }
 
     #[test]

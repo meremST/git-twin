@@ -88,6 +88,9 @@ pub struct HistoryState {
     pub compact_refs: bool,
     /// Commits whose refs were opened by a click while compact.
     pub expanded_refs: HashSet<Oid>,
+    /// Commits HEAD pointed to when the session started or was last
+    /// reloaded; the history keeps showing them after checkouts, like gitk.
+    pub base_tips: Vec<Oid>,
     pub file_sel: usize,
     pub file_top: usize,
     pub file_height: usize,
@@ -122,7 +125,7 @@ pub struct TagInfoPanel {
 }
 
 impl HistoryState {
-    pub fn new(cfg: &Config, _state: &State) -> HistoryState {
+    pub fn new(cfg: &Config, state: &State) -> HistoryState {
         HistoryState {
             views: vec![ViewSpec::default_view()],
             cur_view: 0,
@@ -160,8 +163,9 @@ impl HistoryState {
             files: Vec::new(),
             tree: Vec::new(),
             tree_mode: false,
-            compact_refs: false,
+            compact_refs: state.compact_refs,
             expanded_refs: HashSet::new(),
+            base_tips: Vec::new(),
             file_sel: 0,
             file_top: 0,
             file_height: 5,
@@ -494,6 +498,7 @@ impl App {
         h.pending_select = keep;
         h.total = 0;
         let view = h.view().clone();
+        let base = h.base_tips.clone();
         let cancel = h.cancel.clone();
         let with_local = !self.repo.is_bare() && view.includes_head();
         let cut_after = self.cfg.graph_cut_after as usize;
@@ -517,7 +522,7 @@ impl App {
             } else {
                 None
             };
-            let res = log::stream_log(&r, &view, local, cut_after, cancel.flag(), |b| {
+            let res = log::stream_log(&r, &view, &base, local, cut_after, cancel.flag(), |b| {
                 sink.send(Payload::LogBatch {
                     commits: b.commits,
                     graph: b.graph,
@@ -1045,10 +1050,17 @@ impl App {
             field: h.find_field,
         };
         let view = h.view().clone();
+        let base = h.base_tips.clone();
         let r = self.runner.clone();
         self.searching = true;
         self.req.find = self.workers.stream(self.generation, move |sink| {
-            sink.send(Payload::Find(read::find(&r, &view, &spec, cancel.flag())));
+            sink.send(Payload::Find(read::find(
+                &r,
+                &view,
+                &base,
+                &spec,
+                cancel.flag(),
+            )));
         });
     }
 
@@ -1208,6 +1220,9 @@ impl App {
         use Action as A;
         match a {
             A::Update | A::Reload => {
+                if *a == A::Reload {
+                    self.capture_base_tips();
+                }
                 self.refresh_all(None);
                 self.mark_working();
             }
@@ -1244,6 +1259,8 @@ impl App {
             A::ToggleCompactRefs => {
                 self.hist.compact_refs = !self.hist.compact_refs;
                 self.hist.expanded_refs.clear();
+                self.state.compact_refs = self.hist.compact_refs;
+                self.save_state();
             }
             A::KeyBindings => self.dialogs.push(keybindings_dialog()),
             A::SelectRow(i) => {
@@ -1531,7 +1548,7 @@ impl App {
                     self.run_pending(Pending::Op {
                         label: "Checkout".into(),
                         f: Box::new(move |r| ops::checkout_detach(r, &o)),
-                        after: After::RefsOnly,
+                        after: After::Refresh,
                         expect_head: Some(head),
                     });
                 }
@@ -1702,7 +1719,7 @@ impl App {
         self.run_pending(Pending::Op {
             label,
             f,
-            after: After::RefsOnly,
+            after: After::Refresh,
             expect_head: Some(head),
         });
     }

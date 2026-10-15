@@ -22,7 +22,7 @@ use crate::domain::oid::Oid;
 use crate::domain::refs::RefSet;
 use crate::git::read::GuiTool;
 use crate::git::repo::{RepoInfo, RepoState};
-use crate::git::{GitError, Runner};
+use crate::git::{GitError, Runner, runner::os};
 use crate::ui::hit::{HitMap, PaneId};
 use crate::ui::theme::Theme;
 
@@ -267,6 +267,7 @@ impl App {
 
     /// Initial loading.
     pub fn start(&mut self) {
+        self.capture_base_tips();
         self.refresh_all(None);
         if self.read_only {
             self.set_status(
@@ -409,6 +410,21 @@ impl App {
         self.repo_state = crate::git::repo::repo_state(&self.repo);
         self.guitools = crate::git::read::guitools(&self.runner);
         self.remotes = crate::git::read::remotes(&self.runner).unwrap_or_default();
+    }
+
+    /// Remembers where HEAD is now as the history's base (startup, reload).
+    pub fn capture_base_tips(&mut self) {
+        let head = self
+            .runner
+            .read(&[
+                os("rev-parse"),
+                os("--verify"),
+                os("--quiet"),
+                os("HEAD^{commit}"),
+            ])
+            .ok()
+            .and_then(|o| Oid::from_hex_bytes(o.trim_ascii()));
+        self.hist.base_tips = head.into_iter().collect();
     }
 
     pub fn load_refs(&mut self) {

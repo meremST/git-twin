@@ -250,6 +250,8 @@ pub struct State {
     pub splits: Splits,
     /// gitk views marked "Remember this view".
     pub views: Vec<ViewSpec>,
+    /// Compact refs display in the history list.
+    pub compact_refs: bool,
 }
 
 impl State {
@@ -395,6 +397,7 @@ mod tests {
     fn state_roundtrip() {
         let mut s = State {
             last_view: Some(ViewKind::Worktree),
+            compact_refs: true,
             ..Default::default()
         };
         s.views.push(ViewSpec {

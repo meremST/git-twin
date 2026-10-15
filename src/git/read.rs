@@ -721,10 +721,13 @@ pub struct FindSpec {
 pub fn find(
     r: &Runner,
     view: &ViewSpec,
+    base: &[Oid],
     spec: &FindSpec,
     cancel: &AtomicBool,
 ) -> Result<HashSet<Oid>, GitError> {
-    let (opts, revs) = view.rev_args().map_err(|e| GitError::new("git log", e))?;
+    let (opts, revs) = view
+        .rev_args_with(&super::log::existing_commits(r, base))
+        .map_err(|e| GitError::new("git log", e))?;
     let mut a = vec![os("log"), os("--no-color"), os("-z")];
     let containing = spec.kind == FindType::Containing;
     if containing {
