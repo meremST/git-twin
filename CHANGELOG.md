@@ -1,31 +1,21 @@
 # Notes de version
 
-## Non publie
+## 0.3.1 — 2026-10-15
 
 ### Nouveautes
-
 - Le mode « Compact refs » est memorise dans l'etat (`state.toml`) et
   restaure au lancement.
 - Comme gitk, l'historique garde le sommet de depart (HEAD au lancement) apres
   un checkout, cherry-pick, etc., en plus de la branche courante. `F5`
   (Update) conserve cet etat ; `Shift-F5` (Reload) le remet a zero.
-
-### Changements
-
-- Les checkouts de branche ou de commit relisent l'historique pour y inclure
-  la nouvelle branche courante.
-
-## 0.3.1 — 2026-10-15
-
-### Nouveautes
-
 - Mode « Compact refs » (menu View ou case en bas a droite de l'historique) :
   un marqueur par type de ref (`[T]`, `[B]`, `[R]`, ou icones en mode Nerd) ;
   un clic deplie les noms du commit, un clic sur la fleche les replie.
 - « Messages log » dans le menu Help (donc dans la palette de commandes).
 
 ### Changements
-
+- Les checkouts de branche ou de commit relisent l'historique pour y inclure
+  la nouvelle branche courante.
 - `Suppr` dans le champ SHA1 efface tout le champ.
 
 ## 0.3.0 — 2026-10-12
