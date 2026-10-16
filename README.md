@@ -11,6 +11,8 @@ indexing by file/block/lines, and commit editing with a keyboard and mouse
 interface. Full parity with gitk/git gui is not claimed: see the
 [known limitations](docs/limitations.md), especially for advanced operations.
 
+![Git Twin screenshot](Screenshot.png)
+
 ## Linux installation
 
 **Without Rust**: once the release is published, download the archive
