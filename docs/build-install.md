@@ -25,23 +25,24 @@ These binaries are **not static**: Alpine Linux (musl), systems
 with an old glibc and ARM machines must use a native build,
 with no support guarantee until validated on those platforms.
 
-Once the version is published, open the **Releases page of the official
-repository** and download both files into the same directory:
+Once the version is published, open the
+[official Releases page](https://github.com/meremST/git-twin/releases)
+and download both files into the same directory:
 
 ```text
-git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz
-git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz.sha256
+git-twin-1.0.0-x86_64-unknown-linux-gnu.tar.gz
+git-twin-1.0.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
-No public URL is configured yet in this local repository. Do not
-use a guessed download URL or a package with the same name.
+Use only releases from `meremST/git-twin`, not a package with the same name.
+Draft releases and private repositories are not accessible to the public.
 
 From the download directory:
 
 ```sh
-sha256sum --check git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz.sha256
-tar -xzf git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz
-cd git-twin-0.3.1-x86_64-unknown-linux-gnu
+sha256sum --check git-twin-1.0.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf git-twin-1.0.0-x86_64-unknown-linux-gnu.tar.gz
+cd git-twin-1.0.0-x86_64-unknown-linux-gnu
 install -d "$HOME/bin"
 install -m 0755 gitt git-tui "$HOME/bin/"
 export PATH="$HOME/bin:$PATH"
@@ -96,7 +97,7 @@ sh rustup-init.sh
 . "$HOME/.cargo/env"
 ```
 
-Get the sources of the `v0.3.1` tag from the official release (GitHub
+Get the sources of the `v1.0.0` tag from the official release (GitHub
 source archive or repository clone), then open the directory containing
 `Cargo.toml`. Do not copy only `src/`: keep `Cargo.lock` and
 `rust-toolchain.toml`. From that directory:
@@ -123,7 +124,7 @@ Keep the `~/bin` addition to `PATH` in your shell configuration, as
 described in section 1.
 Cargo install builds are optimized in release mode by default.
 `cargo install git-twin` from crates.io is not offered:
-`publish = false` is intentional until this distribution is decided.
+`publish = false` is intentional: v1 is distributed through GitHub only.
 
 To build without installing:
 
@@ -194,18 +195,21 @@ read permissions on the repository.
 Before creating a tag:
 
 1. Update the version in `Cargo.toml` and `Cargo.lock`, the installation
-   examples and `CHANGELOG.md` (date, changes and limitations).
+   examples and the matching version section in `CHANGELOG.md` (date, changes
+   and limitations). Confirm the date before tagging.
 2. Run the checks below, review the licenses and try
    the installed interface on a throwaway repository.
-3. After configuring the official GitHub repository and validating the CI,
-   push the commit then an annotated tag `v0.3.1` matching the Cargo
-   version exactly. Never move a tag that has already been published.
+3. Push the release preparation commit to `meremST/git-twin` and require a
+   successful hosted CI run on that exact commit. Then create and push an
+   annotated tag `v1.0.0` matching the Cargo version exactly.
+   Never move a tag that has already been published.
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
-python3 scripts/package-release.py --tag v0.3.1
+python3 -m unittest discover -s tests -p 'test_*.py'
+python3 scripts/package-release.py --tag v1.0.0
 ```
 
 Building the archive requires Python >= 3.8 (standard library
@@ -214,18 +218,36 @@ only), Linux x86_64 and the pinned toolchain. The script builds with
 of both binaries, collects the licenses of the active dependencies excluding
 test dependencies and produces the archive and its checksum under `target/dist/`
 (or under Cargo's custom target directory).
-A missing license or an inconsistent tag makes the build fail.
+A missing license, an inconsistent tag or missing/empty release notes makes
+the build fail. `target/dist/RELEASE_NOTES.md` contains only the matching
+version's changelog section, not the unreleased or historical entries.
 An archive built on a more recent distribution may require a more recent
 glibc: **distribute the archive from the Ubuntu 22.04 CI**, not a local
 binary of uncontrolled origin.
 
 A `v*` tag push triggers `.github/workflows/release.yml`, which replays
 the whole CI. On success, it creates a **draft release**, never an automatic
-publication, containing the binaries, SHA-256 and release notes.
+publication, containing the archive, SHA-256 and version-specific release notes.
 The maintainer must review the draft, the limitations and the links before
 clicking **Publish release**. A re-run with a draft already created
 fails rather than silently replacing existing files.
 Source archives are provided by GitHub from the tag.
+
+### First public release checklist
+
+- Review the complete repository history and bundled files for material that
+  must not become public, and review the project/dependency licenses.
+- The repository was private during v1 preparation. An owner must explicitly
+  approve and perform the visibility change in GitHub settings; publishing a
+  release in a private repository does not make it publicly accessible.
+- After the final commit passes hosted CI, create the tag deliberately:
+  `git tag -a v1.0.0 -m "Git Twin v1.0.0"` then
+  `git push origin v1.0.0`. These are publication steps, not local checks.
+- Review the generated draft and its two assets, confirm it is not marked as
+  a prerelease, and publish it as the latest release. Leave the older 0.x
+  drafts unpublished.
+- From a signed-out browser, verify the repository, release, source archive,
+  binary archive, checksum and documentation links are accessible.
 
 ## 5. Troubleshooting
 

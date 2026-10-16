@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
@@ -15,6 +16,20 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGET = "x86_64-unknown-linux-gnu"
+
+
+def release_notes(changelog, version):
+    sections = []
+    for section in re.split(r"(?m)^## ", changelog)[1:]:
+        heading, _, body = section.partition("\n")
+        if heading.split(maxsplit=1)[:1] == [version]:
+            sections.append((heading, body))
+    if len(sections) != 1:
+        raise ValueError(f"expected exactly one changelog section for {version}")
+    heading, body = sections[0]
+    if not body.strip():
+        raise ValueError(f"empty changelog section for {version}")
+    return f"## {heading}\n{body.rstrip()}\n"
 
 
 def main():
@@ -34,6 +49,7 @@ def main():
     version = packages[root_id]["version"]
     if args.tag is not None and args.tag != f"v{version}":
         parser.error(f"tag {args.tag!r} does not match Cargo version v{version}")
+    notes = release_notes((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), version)
 
     build_output = subprocess.check_output([
         "cargo", "build", "--locked", "--release", "--bins", "--target", TARGET,
@@ -62,7 +78,8 @@ def main():
         bundle.mkdir()
         for binary in ("gitt", "git-tui"):
             shutil.copy2(binaries / binary, bundle / binary)
-        for document in ("README.md", "LICENSE", "CHANGELOG.md", "design.md", "status.md"):
+        for document in ("README.md", "Screenshot.png", "LICENSE", "CHANGELOG.md",
+                         "design.md", "status.md"):
             shutil.copy2(ROOT / document, bundle / document)
         shutil.copytree(ROOT / "docs", bundle / "docs")
         (bundle / "scripts").mkdir()
@@ -98,8 +115,11 @@ def main():
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     checksum = dist / f"{archive.name}.sha256"
     checksum.write_text(f"{digest}  {archive.name}\n", encoding="ascii")
+    notes_file = dist / "RELEASE_NOTES.md"
+    notes_file.write_text(notes, encoding="utf-8")
     print(archive)
     print(checksum)
+    print(notes_file)
 
 
 if __name__ == "__main__":

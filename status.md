@@ -1,7 +1,7 @@
 # Git Twin — development status
 
-Last update: 2026-10-16, v1 operation scenarios and explicit parity exclusions.
-Spec: `design.md`. Version 0.3.1 is prepared, not published; full parity is
+Last update: 2026-10-16, first public release preparation.
+Spec: `design.md`. Version 1.0.0 is prepared, not published; full parity is
 not a release claim.
 
 ## TL;DR
@@ -18,7 +18,7 @@ not a release claim.
 | Integration / PTY tests | `tests/{prototype,file_browser,operations}.rs` | 77 scenarios including Patch/diff synchronization, partial operations, conflicts, recovery and terminal handoffs |
 | Docs | README, limitations, parity inventory, architecture, build/install and testing guides | ✅ |
 | CI | `.github/workflows/{ci,release}.yml` | Strict checks, Linux archive/install jobs and draft release; new scenarios await a hosted run after push |
-| Repo | Official GitHub remote configured | Tags and draft releases exist; no public release yet |
+| Repo | `https://github.com/meremST/git-twin` | Private during preparation; 0.x drafts exist, no public release yet |
 
 `src/lib.rs` exports all five layers. The suite now includes the application,
 config and UI rather than only domain/Git code.
@@ -49,16 +49,18 @@ PTYs and terminals that do not answer terminal queries.
   installs and Cargo installs (`--cargo`), preserving user data. Included in
   release archives and exercised by isolated tests and archive-install CI.
 - Linux x86_64 GNU packaging with both launchers, docs, dependency licenses and
-  SHA-256. `scripts/package-release.py --tag v0.3.1` rejects version mismatches.
+  SHA-256. `scripts/package-release.py --tag v1.0.0` rejects version mismatches
+  and extracts the version-specific notes for the draft release.
 - CI for formatting, strict Clippy, tests, archive building on Ubuntu 22.04,
   and installation on Ubuntu 22.04/24.04. Tag pushes create a draft only after
   all checks pass; publication remains a maintainer decision.
 - Rust formatting baseline and compiler-assisted Clippy cleanups, without
   intentional changes to application behavior.
-- `CHANGELOG.md` added. crates.io publishing stays disabled; no official
-  repository URL is invented while a remote is not configured.
+- `CHANGELOG.md` includes the first public release notes; installation examples
+  and Cargo metadata point to the official repository. crates.io stays disabled.
 - Pending publication work: run hosted CI on the final v1 candidate,
-  review release notes/licenses, then tag and review the generated draft.
+  review release notes/licenses and repository history, then tag and review the
+  generated draft. An owner must approve making the repository public.
 
 ## Earlier completed work (session continuation)
 

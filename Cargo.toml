@@ -1,11 +1,12 @@
 [package]
 name = "git-twin"
-version = "0.3.1"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.93"
 description = "Terminal Git client with history and worktree views inspired by gitk and git gui"
 license = "Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/meremST/git-twin"
 publish = false
 autobins = false
 default-run = "gitt"

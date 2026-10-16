@@ -9,7 +9,7 @@ covered.
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
 cargo test --locked
-python3 tests/test_uninstall.py
+python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
 As of October 16, 2026: **89 unit tests** (library, spread across `src/`)
@@ -167,7 +167,7 @@ the toolchain from `rust-toolchain.toml`, the following checks on Ubuntu 22.04:
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
-python3 tests/test_uninstall.py
+python3 -m unittest discover -s tests -p 'test_*.py'
 python3 scripts/package-release.py
 ```
 
@@ -176,6 +176,8 @@ pass locally, without any global lint disabling.
 The script builds both executables in release mode for
 `x86_64-unknown-linux-gnu`, checks their versions and builds the archive with
 documentation, licenses and SHA-256.
+It also extracts `RELEASE_NOTES.md` from the matching changelog section;
+the release workflow uses those notes and attaches only the archive and checksum.
 
 Two install jobs consume **the same archive** on Ubuntu 22.04
 and 24.04: SHA-256 verification, extraction, installation into `~/bin`,
@@ -190,6 +192,10 @@ and verify that both binaries are gone.
 directories: manual removal, symbolic links, preservation of other
 files and of data, missing binaries, rejection of directories and invalid
 arguments, forwarding of arguments to Cargo and propagation of its errors.
+
+`tests/test_package_release.py` checks exact version selection for release notes,
+preservation of subsections, and rejection of missing, duplicate or empty
+version sections without building binaries or contacting GitHub.
 
 The `release.yml` workflow reuses the CI before creating a draft release
 on a `v*` tag. A tag that differs from the Cargo version is rejected. See the

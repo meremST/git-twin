@@ -6,7 +6,8 @@ Terminal Git client for Linux, with a **History** view inspired by gitk and a
 the Worktree view, via the **`git-tui`** executable. Both commands give access
 to both views; `--view` replaces their initial view.
 
-Version **0.3.1** provides history with graph, branches and tags, diffs,
+Version **1.0.0**, prepared as the first public release, provides history with
+graph, branches and tags, diffs,
 indexing by file/block/lines, and commit editing with a keyboard and mouse
 interface. Full parity with gitk/git gui is not claimed: see the
 [known limitations](docs/limitations.md), especially for advanced operations.
@@ -16,8 +17,9 @@ interface. Full parity with gitk/git gui is not claimed: see the
 ## Linux installation
 
 **Without Rust**: once the release is published, download the archive
-`git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256` file from
-the repository's Releases page. The Linux binary targets **x86_64 with glibc
+`git-twin-1.0.0-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256` file from
+the [official Releases page](https://github.com/meremST/git-twin/releases).
+The Linux binary targets **x86_64 with glibc
 2.35 or newer** (for example Ubuntu 22.04/24.04, Debian 12).
 It is not suitable for Alpine/musl or ARM.
 See the [installation guide](docs/build-install.md) to verify the archive,

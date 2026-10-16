@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.0.0 — 2026-10-16
+
+First public release of Git Twin. The 0.x entries below describe internal
+preparation versions, not earlier public releases.
+
+### Highlights
+
+- Two entry points for the same terminal Git client: `gitt` opens History,
+  `git tui` / `git-tui` opens Worktree; F6 switches between them.
+- History graph, branches, tags, search, diffs, all-ref and path filtering,
+  compact refs and a syntax-highlighted file viewer.
+- Stage/unstage by file, hunk or lines; discard with confirmation and undo;
+  commit/amend, saved message drafts, stash and conflict-resolution actions.
+- Keyboard and mouse navigation, menus, F12 command palette, resizable panes,
+  compact layout, configurable themes and optional Nerd Font icons.
+- Read-only mode, local `doctor` diagnostics and external editor integration.
+
 ### Changes
 
 - History's Patch list follows navigation in Details / Diff: scrolling tracks
@@ -17,12 +34,35 @@
 - Keep the TUI alive when Ctrl-C or Ctrl-\\ interrupts a terminal handoff,
   so Git/editor failure can be reported and the draft retained.
 
-### V1 preparation
+### Reliability
 
 - Add 22 isolated real-repository regression scenarios for Git mutations,
   failures/recovery and terminal handoffs; see `docs/testing.md`.
 - Mark the 37 remaining `specified` parity entries as `not implemented for v1`,
   without changing the statuses of existing implementations.
+
+### Distribution and compatibility
+
+- Linux x86_64 GNU archive containing `gitt`, `git-tui`, documentation,
+  project/dependency licenses and an uninstall script, with a SHA-256 checksum.
+- Requires glibc >= 2.35, `libgcc_s.so.1`, Git >= 2.25 and an interactive
+  UTF-8 terminal (79 x 24 minimum, 120 x 35 recommended).
+- Source builds use Rust 1.93.1 and locked dependencies. Distribution is via
+  GitHub archives and sources, not crates.io.
+- Existing 0.x installations can replace both binaries; the `git-twin`
+  configuration, state and draft paths are unchanged.
+- Download from the [official release page](https://github.com/meremST/git-twin/releases/tag/v1.0.0)
+  and follow the [installation guide](https://github.com/meremST/git-twin/blob/v1.0.0/docs/build-install.md).
+
+### Known limitations
+
+Full gitk/git gui parity is not claimed; 37 parity entries are explicitly
+outside v1. No prebuilt macOS, Windows, ARM or musl binaries are provided.
+The Git 2.25 minimum is checked at launch but has not been tested directly.
+Large-history performance, successful signing with real keys/pinentry,
+remote authentication and arbitrary external hooks/tools are not fully
+validated. See the [v1 limitations](https://github.com/meremST/git-twin/blob/v1.0.0/docs/limitations.md)
+and [test coverage](https://github.com/meremST/git-twin/blob/v1.0.0/docs/testing.md).
 
 ## 0.3.1 — 2026-10-15
 
@@ -103,7 +143,7 @@ a refined Worktree interface.
 
 Same as 0.1.0: see [docs/limitations.md](docs/limitations.md).
 
-## 0.1.0 — first release in preparation
+## 0.1.0 — internal release preparation
 
 First Linux x86_64 distribution of Git Twin, a terminal Git client inspired
 by gitk and git gui.
