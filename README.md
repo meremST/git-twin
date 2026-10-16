@@ -1,31 +1,30 @@
 # Git Twin
 
-Client Git pour terminal Linux, avec une vue **History** inspiree de
-gitk et une vue **Worktree** inspiree de git gui.
-**`gitt`** lance Git Twin en vue History ; **`git tui`** lance Git TUI en vue
-Worktree, via l'executable **`git-tui`**. Les deux commandes donnent acces aux
-deux vues ; `--view` remplace leur vue initiale.
+Terminal Git client for Linux, with a **History** view inspired by gitk and a
+**Worktree** view inspired by git gui.
+**`gitt`** starts Git Twin in the History view; **`git tui`** starts Git TUI in
+the Worktree view, via the **`git-tui`** executable. Both commands give access
+to both views; `--view` replaces their initial view.
 
-La version **0.3.1** propose l'historique avec graphe, branches et tags,
-les diffs, l'indexation par fichier/bloc/lignes et l'edition des commits dans
-une interface clavier et souris. La parite complete avec gitk/git gui n'est pas
-revendiquee : consulter les [limites connues](docs/limitations.md), notamment
-pour les operations avancees.
+Version **0.3.1** provides history with graph, branches and tags, diffs,
+indexing by file/block/lines, and commit editing with a keyboard and mouse
+interface. Full parity with gitk/git gui is not claimed: see the
+[known limitations](docs/limitations.md), especially for advanced operations.
 
-## Installation Linux
+## Linux installation
 
-**Sans Rust** : une fois la release publiee, telecharger l'archive
-`git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz` et son fichier `.sha256`
-depuis la page Releases du depot. Le binaire cible Linux **x86_64 avec glibc
-2.35 ou plus recente** (Ubuntu 22.04/24.04, Debian 12, par exemple).
-Il ne convient pas a Alpine/musl ni a ARM.
-Voir le [guide d'installation](docs/build-install.md) pour verifier l'archive,
-installer les deux commandes dans `~/bin` sans droits administrateur et
-configurer `PATH`.
+**Without Rust**: once the release is published, download the archive
+`git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256` file from
+the repository's Releases page. The Linux binary targets **x86_64 with glibc
+2.35 or newer** (for example Ubuntu 22.04/24.04, Debian 12).
+It is not suitable for Alpine/musl or ARM.
+See the [installation guide](docs/build-install.md) to verify the archive,
+install both commands into `~/bin` without administrator rights, and configure
+`PATH`.
 
-**Depuis les sources** : installer Git, un compilateur C et
-[Rust via rustup](https://rustup.rs/), puis executer depuis les sources de la
-version choisie :
+**From source**: install Git, a C compiler and
+[Rust via rustup](https://rustup.rs/), then run from the sources of the chosen
+version:
 
 ```sh
 cargo install --path . --locked --root "$HOME"
@@ -34,161 +33,161 @@ gitt --version
 git tui doctor
 ```
 
-Les binaires sont installes dans `~/bin/gitt` et `~/bin/git-tui`.
-Conserver l'ajout de `~/bin` au `PATH` dans la configuration de votre shell.
+The binaries are installed to `~/bin/gitt` and `~/bin/git-tui`.
+Keep `~/bin` in `PATH` in your shell configuration.
 
-La toolchain de compilation est fixee a **Rust 1.93.1** par
-`rust-toolchain.toml`. Rust n'est pas necessaire pour utiliser les binaires.
-Git doit etre dans `PATH` ; le programme refuse Git < 2.25, mais ce plancher
-reste a valider sur cette version. Les essais locaux utilisent Git 2.43.
-La distribution initiale se fait par archives et sources, pas par crates.io.
+The build toolchain is pinned to **Rust 1.93.1** by `rust-toolchain.toml`.
+Rust is not needed to use the binaries. Git must be in `PATH`; the program
+refuses Git < 2.25, but this floor still has to be validated on that version.
+Local tests use Git 2.43. The initial distribution is through archives and
+sources, not crates.io.
 
-### Desinstallation
+### Uninstallation
 
-Depuis les sources ou l'archive extraite, sans `sudo` :
-
-```sh
-sh scripts/uninstall.sh --cargo  # installation avec Cargo dans ~/bin
-sh scripts/uninstall.sh          # alternative : installation manuelle dans ~/bin
-```
-
-Choisir la commande correspondant a l'installation. La configuration, les
-brouillons et les depots sont conserves.
-
-## Premier lancement
+From the sources or the extracted archive, without `sudo`:
 
 ```sh
-# Commencer sans autoriser de modification du depot.
-gitt --repo /chemin/vers/depot --read-only
-
-# Ouvrir le worktree pour indexer et committer.
-git tui --repo /chemin/vers/depot
+sh scripts/uninstall.sh --cargo  # installed with Cargo into ~/bin
+sh scripts/uninstall.sh          # alternative: manual installation into ~/bin
 ```
 
-Sans `--repo`, le repertoire courant est utilise. L'application ne cree pas
-de depot si le chemin fourni n'en contient pas. Git Twin utilise votre Git,
-votre configuration, vos hooks et vos outils externes : n'ouvrez que des
-depots de confiance. Le mode lecture seule n'est pas un bac a sable.
+Choose the command matching your installation. Configuration, drafts and
+repositories are kept.
 
-Taille conseillee : **120 x 35** cellules. Taille minimale : **79 x 24**.
-Entre ces tailles, le mode compact affiche un panneau a la fois, avec des onglets
-cliquables et navigation par Tab. `F11` agrandit/restaure le panneau actif.
-En dessous de la taille minimale, les actions sont bloquees : agrandir le
-terminal pour traiter une confirmation ou une erreur avant de quitter.
+## First launch
 
-## Utilisation
+```sh
+# Start without allowing any repository modification.
+gitt --repo /path/to/repo --read-only
 
-Dans le panneau **Details**, la ligne **Tags** affiche uniquement les tags
-(legers ou annotes) qui pointent sur le commit selectionne. Elle est masquee
-si ce commit ne porte aucun tag. **Follows** et **Precedes** indiquent
-separement les tags voisins dans l'historique.
+# Open the worktree to index and commit.
+git tui --repo /path/to/repo
+```
 
-| Commande | Effet |
+Without `--repo`, the current directory is used. The application does not
+create a repository if the given path does not contain one. Git Twin uses your
+Git, your configuration, your hooks and your external tools: only open
+trusted repositories. Read-only mode is not a sandbox.
+
+Recommended size: **120 x 35** cells. Minimum size: **79 x 24**.
+Between these sizes, compact mode shows one panel at a time, with clickable tabs
+and Tab navigation. `F11` maximizes/restores the active panel.
+Below the minimum size, actions are blocked: enlarge the terminal to handle a
+confirmation or an error before quitting.
+
+## Usage
+
+In the **Details** panel, the **Tags** line shows only the tags (lightweight or
+annotated) pointing at the selected commit. It is hidden if that commit has no
+tag. **Follows** and **Precedes** separately indicate the neighboring tags in
+the history.
+
+| Command | Effect |
 | --- | --- |
-| `F6` | Basculer entre History et Worktree |
-| `Tab` / `Shift-Tab` | Changer de panneau ou de champ |
-| `F10` / `Alt` + lettre du menu | Ouvrir les menus |
-| `Shift-F10` / clic droit | Menu contextuel |
-| `F1` | Aide clavier |
-| `F12` | Palette de commandes (recherche floue, commandes récentes en premier, indisponibles affichées en gris) |
-| `F11` | Agrandir / restaurer le panneau actif |
-| `Ctrl-Q` / `Ctrl-W` | Confirmer si le message est non vide, sauvegarder le brouillon et quitter |
-| Glisser dans un diff / `Shift-Gauche/Droite` | Selectionner du texte precis pour la copie |
-| `Shift-Haut/Bas` dans un diff | Selectionner des lignes entieres pour l'indexation |
-| Molette / `Alt-PageUp/PageDown` dans un formulaire | Faire defiler sans changer le champ actif |
-| Clic sur un nom de fichier | Selectionner et afficher le diff |
-| Clic sur la lettre d'etat du fichier | Indexer / desindexer |
-| `s` dans le diff Worktree | Indexer / desindexer le bloc ou les lignes selectionnees |
-| `r` dans le diff Worktree | Annuler les changements, apres confirmation |
-| `Alt-4` dans Worktree | Saisir le message de commit |
-| `Alt-Enter` dans Worktree | Creer le commit |
+| `F6` | Switch between History and Worktree |
+| `Tab` / `Shift-Tab` | Change panel or field |
+| `F10` / `Alt` + menu letter | Open menus |
+| `Shift-F10` / right click | Context menu |
+| `F1` | Keyboard help |
+| `F12` | Command palette (fuzzy search, recent commands first, unavailable commands shown in gray) |
+| `F11` | Maximize / restore the active panel |
+| `Ctrl-Q` / `Ctrl-W` | Confirm if the message is non-empty, save the draft and quit |
+| Drag in a diff / `Shift-Left/Right` | Select precise text for copying |
+| `Shift-Up/Down` in a diff | Select whole lines for indexing |
+| Wheel / `Alt-PageUp/PageDown` in a form | Scroll without changing the active field |
+| Click on a file name | Select and display the diff |
+| Click on the file status letter | Stage / unstage |
+| `s` in the Worktree diff | Stage / unstage the selected block or lines |
+| `r` in the Worktree diff | Discard changes, after confirmation |
+| `Alt-4` in Worktree | Enter the commit message |
+| `Alt-Enter` in Worktree | Create the commit |
 
-Glisser les separateurs pour redimensionner ; utiliser la molette pour faire
-defiler le panneau survole. Le mode `--read-only` bloque aussi fetch, push et
-les outils externes susceptibles de modifier le depot. La selection fine est
-reservee a la copie : pour indexer ou annuler, utiliser la selection de lignes.
-L'editeur affiche un guide a `commit_width` colonnes sans remplacer le texte.
-Une erreur de sauvegarde est affichee ; un echec de sauvegarde a la sortie
-garde l'application ouverte et le brouillon en memoire.
+Drag the separators to resize; use the wheel to scroll the panel under the
+pointer. `--read-only` mode also blocks fetch, push and external tools that may
+modify the repository. Fine selection is reserved for copying: to index or
+discard, use line selection.
+The editor shows a guide at `commit_width` columns without replacing the text.
+A save error is displayed; if saving fails on exit, the application stays open
+and the draft remains in memory.
 
 ```sh
 gitt --help
 git tui -h
 gitt doctor
-gitt --repo /chemin/vers/depot --no-mouse --icons ascii
-gitt --repo /chemin/vers/depot --all
-gitt chemin/fichier.c
+gitt --repo /path/to/repo --no-mouse --icons ascii
+gitt --repo /path/to/repo --all
+gitt path/file.c
 gitt --all -- src/ docs/
-git tui --repo /chemin/vers/depot --theme light --colors 256
-git tui --repo /chemin/vers/depot --theme dark --color-scheme gruvbox
-git tui --repo /chemin/vers/depot --theme terminal
+git tui --repo /path/to/repo --theme light --colors 256
+git tui --repo /path/to/repo --theme dark --color-scheme gruvbox
+git tui --repo /path/to/repo --theme terminal
 ```
 
-`--all` affiche l'historique de toutes les refs (branches, tags, remotes),
-comme `gitk --all`, au lieu de se limiter a HEAD. Comme `gitk chemin...`,
-des chemins en argument (relatifs au repertoire courant, eventuellement apres
-`--`) limitent l'historique aux commits qui les modifient ; les diffs et les
-lignes de modifications locales sont filtres de la meme facon. Le theme `terminal`
-utilise les couleurs par defaut et ANSI du terminal :
-l'interface suit la palette configuree par l'utilisateur dans son
-emulateur, plutot que d'imposer `dark`/`light`.
-Il conserve le fond du terminal, avec un accent jaune ANSI pour le focus et
-des boutons sans aplats. Le commit selectionne inverse le fond et la couleur
-de base du texte sur toute la ligne, avec du gras lorsque le panneau a le focus.
-Sur cette ligne, les textes colores utilisent des variantes sombres de la meme
-famille (vert fonce, bleu fonce, etc.), adaptees a un fond inverse clair.
-Cette palette dediee utilise du RGB ou 256 couleurs selon `--colors` ; en mode
-16 couleurs, les couleurs ANSI d'origine sont conservees. Les autres selections
-conservent leurs couleurs sur un fond bleu (actif) ou gris (inactif).
+`--all` shows the history of all refs (branches, tags, remotes), like
+`gitk --all`, instead of being limited to HEAD. As with `gitk path...`, paths
+given as arguments (relative to the current directory, optionally after `--`)
+limit the history to commits that modify them; diffs and local change lines are
+filtered the same way. The `terminal` theme uses the terminal's default and
+ANSI colors: the interface follows the palette the user configured in their
+emulator, instead of forcing `dark`/`light`.
+It keeps the terminal background, with a yellow ANSI accent for focus and
+buttons without solid fills. The selected commit inverts the background and
+base text color across the whole line, with bold when the panel has focus.
+On that line, colored texts use dark variants of the same family (dark green,
+dark blue, etc.), suited to a light inverted background.
+This dedicated palette uses RGB or 256 colors depending on `--colors`; in
+16-color mode, the original ANSI colors are kept. Other selections keep their
+colors on a blue (active) or gray (inactive) background.
 
-`--help`, `--version` et `doctor` fonctionnent sans depot ni terminal interactif.
-`doctor` n'effectue aucun appel reseau.
-Pour l'aide via Git, utiliser `git tui -h` ou `git-tui --help` :
-`git tui --help` est intercepte par Git et cherche une page man non fournie.
+`--help`, `--version` and `doctor` work without a repository or an interactive
+terminal. `doctor` makes no network calls.
+For help via Git, use `git tui -h` or `git-tui --help`:
+`git tui --help` is intercepted by Git and looks for a man page that is not
+provided.
 
-Les preferences sont stockees sous `$XDG_CONFIG_HOME/git-twin`, l'etat et les
-brouillons sous `$XDG_STATE_HOME/git-twin`, avec les replis XDG habituels.
-Dans **Edit > Preferences**, `Theme` choisit le mode `dark`, `light` ou
-`terminal`. Pour `dark` et `light`, le menu deroulant `Color scheme` propose
-`default` (les couleurs existantes) et `gruvbox` : Gruvbox Dark en mode sombre,
-Gruvbox Light en mode clair. Ouvrir le menu avec Entree, Espace ou un clic,
-choisir avec les fleches puis Entree, ou cliquer sur un coloris ; Echap ferme
-le menu sans changer la selection. Le bouton `OK` applique et enregistre les
-preferences ; `Cancel` abandonne les modifications.
-Le mode `terminal` masque ce menu et conserve le coloris pour le retour a
-`dark` ou `light`. Dans `config.toml`, ces choix correspondent a
-`theme = "dark"` et `color_scheme = "gruvbox"` ; sans `color_scheme`,
-le coloris `default` est conserve. `--color-scheme default|gruvbox` permet
-aussi de choisir le coloris au lancement, sans effet en mode `terminal`.
-Le coloris Gruvbox conserve les fonds chauds de
-[Gruvbox](https://github.com/morhetz/gruvbox), avec des accents adoucis et des
-fonds de diff inspires de [Gruvbox Material](https://github.com/sainnhe/gruvbox-material).
-Le focus et HEAD sont dores, les branches vert sauge, les remotes bleu-vert
-et les tags mauves ; les accents clairs sont assombris pour rester lisibles
-sur les selections. L'onglet actif et le menu ouvert sont surlignes en dore
-plein. Le rendu le plus fidele utilise `--colors truecolor`.
-Le presse-papiers OSC 52 est optionnel et desactive par defaut.
+Preferences are stored under `$XDG_CONFIG_HOME/git-twin`, state and drafts
+under `$XDG_STATE_HOME/git-twin`, with the usual XDG fallbacks.
+In **Edit > Preferences**, `Theme` selects the `dark`, `light` or `terminal`
+mode. For `dark` and `light`, the `Color scheme` drop-down offers `default`
+(the existing colors) and `gruvbox`: Gruvbox Dark in dark mode, Gruvbox Light
+in light mode. Open the menu with Enter, Space or a click, choose with the
+arrow keys then Enter, or click a color scheme; Escape closes the menu without
+changing the selection. The `OK` button applies and saves the preferences;
+`Cancel` discards the changes.
+The `terminal` mode hides this menu and keeps the color scheme for returning to
+`dark` or `light`. In `config.toml`, these choices correspond to
+`theme = "dark"` and `color_scheme = "gruvbox"`; without `color_scheme`, the
+`default` color scheme is kept. `--color-scheme default|gruvbox` also lets you
+choose the color scheme at launch, with no effect in `terminal` mode.
+The Gruvbox color scheme keeps the warm backgrounds of
+[Gruvbox](https://github.com/morhetz/gruvbox), with softened accents and diff
+backgrounds inspired by [Gruvbox Material](https://github.com/sainnhe/gruvbox-material).
+Focus and HEAD are golden, branches sage green, remotes teal-blue and tags
+mauve; light accents are darkened to remain readable on selections. The active
+tab and the open menu are highlighted in solid gold. The most faithful rendering
+uses `--colors truecolor`.
+OSC 52 clipboard support is optional and disabled by default.
 
-Sur les historiques tres ramifies (`gitt --all` sur le noyau Linux par
-exemple), deux preferences gardent le graphe lisible :
-`graph_max_lanes` (20 par defaut, 0 = autant que la place le permet) limite
-le nombre de colonnes dessinees ; au-dela, un `…` les resume et le sujet reste
-visible. `graph_cut_after` (50 par defaut, 0 = jamais) coupe, comme gitk, les
-lignes restees inactives plus de N commits : la ligne se termine en
-pointilles gras `┇` et reprend en pointilles juste au-dessus du commit parent
-(dans une colonne libre raccordee par `─╯` si la place est prise), ce qui
-libere la colonne (`v` / `^` en ASCII). Un clic sur le pointille de fin mene
-au commit parent ; un clic sur celui de reprise remonte a la coupure (clics
-repetes : coupure suivante quand plusieurs lignes menent au meme parent).
+On very branchy histories (for example `gitt --all` on the Linux kernel), two
+preferences keep the graph readable:
+`graph_max_lanes` (20 by default, 0 = as many as the space allows) limits the
+number of drawn columns; beyond that, a `…` summarizes them and the subject
+remains visible. `graph_cut_after` (50 by default, 0 = never) cuts, as gitk
+does, lines that have been inactive for more than N commits: the line ends in
+a bold dashed `┇` and resumes as a dashed line just above the parent commit
+(in a free column connected by `─╯` if the space is taken), which frees the
+column (`v` / `^` in ASCII). A click on the ending dash leads to the parent
+commit; a click on the resuming dash goes back up to the cut (repeated clicks:
+next cut when several lines lead to the same parent).
 
-Le clic droit sur un fichier propose « Open in editor » (panneau patch de
-History et Worktree). La commande est lancee sans terminal avec le chemin du
-fichier ajoute ; elle se regle par `editor` dans la configuration ou dans
-Preferences (`code` par defaut, vide = desactive). Les editeurs terminaux
-(vi, vim, nvim, nano, hx, micro, kak, joe, emacs -nw) prennent le terminal le
-temps de l'edition, comme les outils de la fenetre Tools.
+Right-clicking a file offers “Open in editor” (History and Worktree patch
+panels). The command is launched without a terminal with the file path
+appended; it is set by `editor` in the configuration or in Preferences (`code`
+by default, empty = disabled). Terminal editors (vi, vim, nvim, nano, hx, micro,
+kak, joe, emacs -nw) take over the terminal while editing, like the tools in the
+Tools window.
 
-## Developpement
+## Development
 
 ```sh
 cargo fmt --all -- --check
@@ -197,17 +196,17 @@ cargo test --locked
 cargo run --locked --example preview -- --demo
 ```
 
-L'apercu `--demo` utilise un depot temporaire sans modifier vos depots.
-Les tests utilisent des depots temporaires et un pseudo-terminal.
-Voir [status.md](status.md) pour les travaux restants,
-[design.md](design.md) pour la specification,
-[docs/architecture.md](docs/architecture.md) pour l'organisation des couches,
-[docs/build-install.md](docs/build-install.md) pour la compilation,
-l'installation et la desinstallation detaillees,
-[docs/testing.md](docs/testing.md) pour la suite et la CI,
-[CHANGELOG.md](CHANGELOG.md) pour les notes de version, et
-[docs/limitations.md](docs/limitations.md) pour les adaptations et limites.
+The `--demo` preview uses a temporary repository and does not modify your
+repositories. Tests use temporary repositories and a pseudo-terminal.
+See [status.md](status.md) for remaining work,
+[design.md](design.md) for the specification,
+[docs/architecture.md](docs/architecture.md) for the organization of layers,
+[docs/build-install.md](docs/build-install.md) for detailed build, installation
+and uninstallation,
+[docs/testing.md](docs/testing.md) for the test suite and CI,
+[CHANGELOG.md](CHANGELOG.md) for release notes, and
+[docs/limitations.md](docs/limitations.md) for adaptations and limitations.
 
-## Licence
+## License
 
-Apache-2.0, voir [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE).
