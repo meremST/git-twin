@@ -2534,3 +2534,21 @@ fn hovering_a_menu_item_highlights_it() {
     });
     assert_eq!(app.menu.as_ref().unwrap().levels[0].sel, idx);
 }
+
+#[test]
+fn tab_moves_focus_out_of_history_text_entries() {
+    use git_twin::app::history::HFocus;
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.hist.focus = HFocus::List;
+    let order = [HFocus::Sha, HFocus::Find, HFocus::Search, HFocus::Diff];
+    for expected in order {
+        app.on_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        assert_eq!(
+            app.hist.focus, expected,
+            "Tab must leave the previous field"
+        );
+    }
+}

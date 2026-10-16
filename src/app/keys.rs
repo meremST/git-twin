@@ -132,7 +132,7 @@ impl App {
             C::F(6) => Action::ToggleView,
             C::Tab if ctrl => Action::ToggleView,
             C::F(11) => Action::ToggleMaximize,
-            C::Tab if !self.in_text_field() || self.view == ViewKind::Worktree => Action::FocusNext,
+            C::Tab => Action::FocusNext,
             C::BackTab => Action::FocusPrev,
             C::Esc if self.maximized.is_some() => Action::ToggleMaximize,
             C::Menu => {
@@ -153,15 +153,6 @@ impl App {
         };
         self.dispatch(a);
         true
-    }
-
-    fn in_text_field(&self) -> bool {
-        match self.view {
-            ViewKind::History => {
-                matches!(self.hist.focus, HFocus::Sha | HFocus::Find | HFocus::Search)
-            }
-            ViewKind::Worktree => self.wt.focus == WFocus::Message,
-        }
     }
 
     /// Shift-F10 / Menu key: context menu for the focused element.
