@@ -47,6 +47,8 @@ pub enum After {
     OfferForceDelete(Vec<u8>),
     /// Record undo information for git gui "Undo Last Revert".
     Reverted(Vec<u8>),
+    /// Clear undo information only after its patch was successfully restored.
+    RevertUndone(Vec<u8>),
 }
 
 pub enum Payload {

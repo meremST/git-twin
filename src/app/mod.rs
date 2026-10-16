@@ -601,7 +601,7 @@ impl App {
     /// Called by the main loop after a hand-off finished.
     pub fn after_handoff(&mut self, h: &Handoff, result: Result<bool, String>) {
         match (h, result) {
-            (Handoff::Editor, Ok(_)) => {}
+            (Handoff::Editor, Ok(true)) => {}
             (Handoff::Commit { .. }, Ok(true)) => {
                 self.defer_success("Commit", "Commit created.".into());
                 self.on_committed();
@@ -884,6 +884,13 @@ impl App {
                     }
                     After::Reverted(patch) => {
                         self.wt.last_revert = Some(patch);
+                        self.generation += 1;
+                        self.rescan();
+                    }
+                    After::RevertUndone(patch) => {
+                        if self.wt.last_revert.as_ref() == Some(&patch) {
+                            self.wt.last_revert = None;
+                        }
                         self.generation += 1;
                         self.rescan();
                     }

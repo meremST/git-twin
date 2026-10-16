@@ -119,6 +119,54 @@ fn restore_terminal() {
     let _ = terminal::disable_raw_mode();
 }
 
+struct HandoffSignals {
+    previous: Vec<(libc::c_int, libc::sigaction)>,
+}
+
+impl HandoffSignals {
+    fn enter() -> io::Result<Self> {
+        extern "C" fn keep_tui_alive(_: libc::c_int) {}
+
+        let mut guard = Self {
+            previous: Vec::new(),
+        };
+        for signal in [libc::SIGINT, libc::SIGQUIT] {
+            // A caught (not ignored) signal resets to its default on exec:
+            // Ctrl-C interrupts Git/the editor, but not the waiting TUI.
+            let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+            action.sa_sigaction = keep_tui_alive as *const () as usize;
+            action.sa_flags = libc::SA_RESTART;
+            let mut previous = std::mem::MaybeUninit::uninit();
+            // Both pointers refer to valid sigaction storage.
+            if unsafe {
+                libc::sigemptyset(&mut action.sa_mask);
+                libc::sigaction(signal, &action, previous.as_mut_ptr())
+            } != 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            guard
+                .previous
+                .push((signal, unsafe { previous.assume_init() }));
+        }
+        Ok(guard)
+    }
+}
+
+impl Drop for HandoffSignals {
+    fn drop(&mut self) {
+        for (signal, previous) in self.previous.iter().rev() {
+            // Restore the dispositions saved before the terminal handoff.
+            if unsafe { libc::sigaction(*signal, previous, std::ptr::null_mut()) } != 0 {
+                eprintln!(
+                    "Cannot restore signal {signal}: {}",
+                    io::Error::last_os_error()
+                );
+            }
+        }
+    }
+}
+
 pub fn main(default_view: ViewKind, name: &'static str) {
     if let Err(e) = run(default_view, name) {
         eprintln!("{name}: {}", sanitize(&e));
@@ -235,6 +283,7 @@ fn event_loop(app: &mut App, warning: Option<String>) -> io::Result<()> {
             terminal.backend_mut().flush()?;
         }
         if let Some(handoff) = app.handoff.take() {
+            let signals = HandoffSignals::enter()?;
             drop(guard);
             let result = run_handoff(app, &handoff);
             if let Err(e) = &result {
@@ -244,6 +293,7 @@ fn event_loop(app: &mut App, warning: Option<String>) -> io::Result<()> {
             let mut line = String::new();
             io::stdin().read_line(&mut line)?;
             guard = TerminalGuard::enter(app.mouse_enabled)?;
+            drop(signals);
             terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
             app.after_handoff(&handoff, result);
             continue;

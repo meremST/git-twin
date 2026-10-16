@@ -1083,11 +1083,12 @@ impl App {
             A::RevertHunk(i) => self.partial(Some(*i), true),
             A::RevertLines => self.partial(None, true),
             A::UndoLastRevert => {
-                if let Some(p) = self.wt.last_revert.take() {
+                if let Some(p) = self.wt.last_revert.clone() {
+                    let undone = p.clone();
                     self.run_op(
                         "Undo last revert",
                         Box::new(move |r| ops::apply_patch(r, &p, false, false, false)),
-                        After::Rescan,
+                        After::RevertUndone(undone),
                         None,
                     );
                 } else {
