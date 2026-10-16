@@ -210,6 +210,7 @@ impl App {
             C::Char(c @ '1'..='9') if ctrl => Action::GotoParent(c as usize - '0' as usize),
             C::Left | C::Right if shift && focus == HFocus::Diff => {
                 self.hist.diff.text_move(k.code == C::Right);
+                self.hist.sync_file_selection(self.hist.diff.cursor);
                 return;
             }
             C::Up if shift && focus != HFocus::Diff => Action::FindPrev,
@@ -230,11 +231,13 @@ impl App {
             C::Up if focus == HFocus::Diff => {
                 let c = self.hist.diff.cursor.saturating_sub(1);
                 self.hist.diff.set_cursor(c, shift);
+                self.hist.sync_file_selection(self.hist.diff.cursor);
                 return;
             }
             C::Down if focus == HFocus::Diff => {
                 let c = self.hist.diff.cursor + 1;
                 self.hist.diff.set_cursor(c, shift);
+                self.hist.sync_file_selection(self.hist.diff.cursor);
                 return;
             }
             C::Char('c') if focus == HFocus::Diff => Action::Copy,

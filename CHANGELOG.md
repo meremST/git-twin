@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changes
+
+- History's Patch list follows navigation in Details / Diff: scrolling tracks
+  the top visible line, while cursor movement, clicks and search track the
+  active line. The highlighted file is kept visible; Tree selection is unchanged.
+
 ### Fixes
 
 - Keep "Undo Last Revert" available when applying its patch fails or a

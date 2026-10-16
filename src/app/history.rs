@@ -269,6 +269,22 @@ impl HistoryState {
         self.file_top = (self.file_top as isize + delta).clamp(0, max as isize) as usize;
     }
 
+    fn reveal_file_selection(&mut self) {
+        let h = self.file_height.max(1);
+        if self.file_sel < self.file_top {
+            self.file_top = self.file_sel;
+        } else if self.file_sel >= self.file_top + h {
+            self.file_top = self.file_sel + 1 - h;
+        }
+    }
+
+    pub fn sync_file_selection(&mut self, line: usize) {
+        if !self.tree_mode {
+            self.file_sel = self.diff.file_at(line).map(|f| f + 1).unwrap_or(0);
+            self.reveal_file_selection();
+        }
+    }
+
     pub fn children_of(&self, oid: &Oid) -> Vec<Oid> {
         self.commits
             .iter()
@@ -450,6 +466,7 @@ impl HistoryState {
         };
         let d = self.cur_diff.clone();
         self.diff.set(prefix, d, &o);
+        self.sync_file_selection(self.diff.top);
     }
 
     fn push_nav(&mut self, oid: Oid) {
@@ -1388,6 +1405,7 @@ impl App {
                     self.hist.diff.anchor = None;
                     self.hist.diff.text_selection = None;
                     self.hist.diff.ensure_visible(hit);
+                    self.hist.sync_file_selection(hit);
                 }
             }
             Err(e) => self.set_status(e, StatusTone::Error),
@@ -1401,12 +1419,7 @@ impl App {
         }
         let i = i.min(n - 1);
         self.hist.file_sel = i;
-        let fh = self.hist.file_height.max(1);
-        if i < self.hist.file_top {
-            self.hist.file_top = i;
-        } else if i >= self.hist.file_top + fh {
-            self.hist.file_top = i + 1 - fh;
-        }
+        self.hist.reveal_file_selection();
         if self.hist.tree_mode {
             let (Some(path), Some(mut oid)) = (self.hist.file_path(i), self.hist.selected_oid())
             else {
@@ -1610,20 +1623,30 @@ impl App {
                 self.hist.find_field = FindField::ALL[(i + 1) % FindField::ALL.len()];
                 self.find_changed();
             }
-            A::DiffScroll(d) => self.hist.diff.scroll(*d),
+            A::DiffScroll(d) => {
+                self.hist.diff.scroll(*d);
+                self.hist.sync_file_selection(self.hist.diff.top);
+            }
             A::DiffPage(d) => {
                 let h = self.hist.diff.height.max(2) as isize - 1;
                 self.hist.diff.scroll(d * h);
+                self.hist.sync_file_selection(self.hist.diff.top);
             }
-            A::DiffTop => self.hist.diff.top = 0,
-            A::DiffBottom => self.hist.diff.top = self.hist.diff.max_top(),
+            A::DiffTop => {
+                self.hist.diff.top = 0;
+                self.hist.sync_file_selection(self.hist.diff.top);
+            }
+            A::DiffBottom => {
+                self.hist.diff.top = self.hist.diff.max_top();
+                self.hist.sync_file_selection(self.hist.diff.top);
+            }
             A::DiffNextFile => {
                 self.hist.diff.next_file();
-                self.sync_file_sel();
+                self.hist.sync_file_selection(self.hist.diff.top);
             }
             A::DiffPrevFile => {
                 self.hist.diff.prev_file();
-                self.sync_file_sel();
+                self.hist.sync_file_selection(self.hist.diff.top);
             }
             A::DiffSearchNext | A::DiffSearchPrev => {
                 let fwd = *a == A::DiffSearchNext;
@@ -1631,6 +1654,8 @@ impl App {
                     self.hist.focus = HFocus::Search;
                 } else if !self.hist.diff.search_step(fwd) {
                     self.set_status("Search: no match in the diff.", StatusTone::Info);
+                } else {
+                    self.hist.sync_file_selection(self.hist.diff.cursor);
                 }
             }
             A::FocusDiffSearch => self.hist.focus = HFocus::Search,
@@ -1859,13 +1884,6 @@ impl App {
             _ => return false,
         }
         true
-    }
-
-    fn sync_file_sel(&mut self) {
-        if !self.hist.tree_mode {
-            let top = self.hist.diff.top;
-            self.hist.file_sel = self.hist.diff.file_at(top).map(|f| f + 1).unwrap_or(0);
-        }
     }
 
     fn cherry_pick_row(&mut self, row: usize) {

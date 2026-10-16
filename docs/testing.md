@@ -13,7 +13,7 @@ python3 tests/test_uninstall.py
 ```
 
 As of October 16, 2026: **89 unit tests** (library, spread across `src/`)
-and **74 integration tests**: 51 in `tests/prototype.rs`, 1 in
+and **77 integration tests**: 54 in `tests/prototype.rs`, 1 in
 `tests/file_browser.rs`, and 22 in `tests/operations.rs`.
 The integration tests create real temporary repositories and launch
 pseudo-terminals.
@@ -86,6 +86,12 @@ The scenarios need no network access:
   recovery after failure.
 - `terminal_commit_selection_preserves_color_families`: selecting a
   commit preserves the terminal theme's color families in the rendering.
+- `history_patch_selection_follows_scrolling_and_remains_visible`,
+  `history_patch_selection_follows_cursor_mouse_and_search_hits`,
+  `history_patch_sync_handles_rebuilds_without_changing_tree_selection`:
+  Patch highlighting and list visibility follow scrolling, line navigation,
+  clicks, dragging and search; diff rebuilds remain synchronized and Tree
+  selection is preserved.
 
 ## V1 operation regression scenarios (`tests/operations.rs`)
 

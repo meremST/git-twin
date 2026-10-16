@@ -729,6 +729,224 @@ fn render(app: &mut App, width: u16, height: u16) -> String {
         .join("\n")
 }
 
+fn patch_navigation_fixture() -> (tempfile::TempDir, App) {
+    let dir = fixture();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Prepare worktree"]);
+    for i in 0..40 {
+        fs::write(
+            dir.path().join(format!("patch-{i:02}.txt")),
+            format!("marker {i:02}\nsecond line\nthird line\n"),
+        )
+        .unwrap();
+    }
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-qm", "Many files"]);
+    let mut app = app(dir.path(), true);
+    app.start();
+    settle(&mut app);
+    render(&mut app, 120, 50);
+    assert_eq!(app.hist.files.len(), 40);
+    (dir, app)
+}
+
+#[test]
+fn history_patch_selection_follows_scrolling_and_remains_visible() {
+    use git_twin::ui::hit::PaneId;
+
+    let (_dir, mut app) = patch_navigation_fixture();
+    let target = app.hist.diff.file_starts[30];
+    app.dispatch(Action::DiffScroll(target as isize));
+    assert_eq!(app.hist.file_sel, 31);
+    assert!(app.hist.file_top > 0);
+    assert!(app.hist.file_sel >= app.hist.file_top);
+    assert!(app.hist.file_sel < app.hist.file_top + app.hist.file_height);
+    let top = app.hist.diff.top;
+    let mut terminal = Terminal::new(TestBackend::new(120, 50)).unwrap();
+    terminal.draw(|f| ui::draw(f, &mut app)).unwrap();
+    let row = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, hit)| *hit == Hit::HFileRow(31))
+        .unwrap()
+        .0;
+    let cell = &terminal.backend().buffer()[(row.x, row.y)];
+    let selected = app.theme.base().patch(app.theme.selected(false));
+    assert_eq!(Some(cell.fg), selected.fg);
+    assert_eq!(Some(cell.bg), selected.bg);
+    assert_eq!(
+        app.hist.diff.top, top,
+        "revealing Patch must not scroll the diff"
+    );
+
+    app.dispatch(Action::DiffPrevFile);
+    assert_eq!(app.hist.file_sel, 30);
+    app.dispatch(Action::DiffNextFile);
+    assert_eq!(app.hist.file_sel, 31);
+    app.dispatch(Action::DiffTop);
+    assert_eq!((app.hist.file_sel, app.hist.file_top), (0, 0));
+    let pane = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, hit)| *hit == Hit::Pane(PaneId::HDiff))
+        .unwrap()
+        .0;
+    let wheel = |kind| MouseEvent {
+        kind,
+        column: pane.x + 1,
+        row: pane.y + 1,
+        modifiers: KeyModifiers::NONE,
+    };
+    let second = app.hist.diff.file_starts[1];
+    while app.hist.diff.top < second {
+        app.on_mouse(wheel(MouseEventKind::ScrollDown));
+    }
+    assert_eq!(app.hist.file_sel, 2);
+    app.on_mouse(wheel(MouseEventKind::ScrollUp));
+    assert_eq!(app.hist.file_sel, 1);
+    app.on_mouse(wheel(MouseEventKind::ScrollRight));
+    assert_eq!(
+        app.hist.file_sel, 1,
+        "horizontal scroll must not change the file"
+    );
+
+    app.dispatch(Action::DiffPage(1));
+    assert_eq!(
+        app.hist.file_sel,
+        app.hist.diff.file_at(app.hist.diff.top).unwrap() + 1
+    );
+    app.dispatch(Action::DiffPage(-1));
+    assert_eq!(
+        app.hist.file_sel,
+        app.hist.diff.file_at(app.hist.diff.top).unwrap() + 1
+    );
+    app.dispatch(Action::DiffBottom);
+    assert_eq!(
+        app.hist.file_sel,
+        app.hist.diff.file_at(app.hist.diff.top).unwrap() + 1
+    );
+    app.dispatch(Action::DiffTop);
+    assert_eq!(app.hist.file_sel, 0);
+}
+
+#[test]
+fn history_patch_selection_follows_cursor_mouse_and_search_hits() {
+    use git_twin::{app::history::HFocus, ui::hit::PaneId};
+
+    let (_dir, mut app) = patch_navigation_fixture();
+    app.dispatch(Action::SelectFileRow(1));
+    let second = app.hist.diff.file_starts[1];
+    app.hist.focus = HFocus::Diff;
+    app.hist.diff.set_cursor(second - 1, false);
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    assert_eq!(app.hist.file_sel, 2);
+    assert!(
+        app.hist.diff.top < second,
+        "the cursor, not the top line, determines the active file"
+    );
+    app.on_key(KeyEvent::new(KeyCode::Up, KeyModifiers::SHIFT));
+    assert_eq!(app.hist.file_sel, 1);
+    let end = app.hist.diff.lines[second - 1].text.chars().count();
+    app.hist.diff.text_click(second - 1, end, false);
+    app.on_key(KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT));
+    assert_eq!(app.hist.file_sel, 2);
+
+    app.dispatch(Action::SelectFileRow(1));
+    render(&mut app, 120, 50);
+    let row = app
+        .hits
+        .zones
+        .iter()
+        .find(|(_, hit)| *hit == Hit::DiffLine(PaneId::HDiff, second))
+        .unwrap()
+        .0;
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: row.x,
+        row: row.y,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert_eq!(app.hist.file_sel, 2);
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::Drag(MouseButton::Left),
+        column: row.x,
+        row: row.y - 3,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert_eq!(app.hist.file_sel, 1);
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::Up(MouseButton::Left),
+        column: row.x,
+        row: row.y - 3,
+        modifiers: KeyModifiers::NONE,
+    });
+
+    app.hist.search.set("marker 17");
+    app.search_changed();
+    assert_eq!(app.hist.file_sel, 18);
+    assert!(app.hist.file_sel < app.hist.file_top + app.hist.file_height);
+    app.hist.search.set("marker");
+    app.search_changed();
+    app.dispatch(Action::DiffSearchNext);
+    let current = app.hist.diff.file_at(app.hist.diff.cursor).unwrap() + 1;
+    assert_eq!(app.hist.file_sel, current);
+    app.dispatch(Action::DiffSearchPrev);
+    assert_eq!(app.hist.file_sel, current - 1);
+}
+
+#[test]
+fn history_patch_sync_handles_rebuilds_without_changing_tree_selection() {
+    use git_twin::app::diffview::Show;
+
+    let (_dir, mut app) = patch_navigation_fixture();
+    app.dispatch(Action::SelectFileRow(18));
+    app.dispatch(Action::SetShow(Show::Old));
+    assert_eq!(
+        app.hist.file_sel,
+        app.hist.diff.file_at(app.hist.diff.top).unwrap() + 1
+    );
+    app.dispatch(Action::SetShow(Show::Diff));
+    assert_eq!(
+        app.hist.file_sel,
+        app.hist.diff.file_at(app.hist.diff.top).unwrap() + 1
+    );
+    app.dispatch(Action::SetTreeMode(true));
+    settle(&mut app);
+    app.dispatch(Action::SelectFileRow(10));
+    settle(&mut app);
+    let selected = app.hist.file_sel;
+    let file_top = app.hist.file_top;
+    for action in [
+        Action::DiffScroll(3),
+        Action::DiffPage(1),
+        Action::DiffTop,
+        Action::DiffBottom,
+        Action::DiffNextFile,
+        Action::DiffPrevFile,
+    ] {
+        app.dispatch(action);
+        assert_eq!((app.hist.file_sel, app.hist.file_top), (selected, file_top));
+    }
+    app.hist.search.set("line");
+    app.search_changed();
+    app.dispatch(Action::DiffSearchNext);
+    assert_eq!((app.hist.file_sel, app.hist.file_top), (selected, file_top));
+    app.dispatch(Action::SetTreeMode(false));
+    app.dispatch(Action::SelectFileRow(0));
+    assert_eq!((app.hist.file_sel, app.hist.diff.top), (0, 0));
+    let initial = app
+        .hist
+        .commits
+        .iter()
+        .position(|c| c.subject.as_ref() == "Initial greeting")
+        .unwrap();
+    app.select_row(initial);
+    settle(&mut app);
+    assert_eq!(app.hist.file_sel, 0);
+}
+
 #[test]
 fn details_tags_only_show_tags_on_selected_commit() {
     let dir = fixture();

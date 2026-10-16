@@ -216,6 +216,9 @@ impl App {
                 } else {
                     dv.text_click(idx, col, false);
                 }
+                if p == PaneId::HDiff {
+                    self.hist.sync_file_selection(idx);
+                }
                 if let Some(rect) = self.pane_rect(p) {
                     self.drag = Some(Drag::DiffSel(p, rect));
                 }
@@ -362,6 +365,7 @@ impl App {
                 if !self.hist.diff.is_selected(idx) && self.hist.diff.text_range().is_none() {
                     self.hist.diff.set_cursor(idx, false);
                 }
+                self.hist.sync_file_selection(idx);
                 Ctx::HDiff(idx)
             }
             Hit::WtFile(l, i, _) => {
@@ -430,6 +434,9 @@ impl App {
                         dv.set_cursor(idx, true);
                     }
                 }
+                if p == PaneId::HDiff {
+                    self.hist.sync_file_selection(idx);
+                }
             }
             Drag::MsgSel(r) => {
                 let h = usize::from(r.height);
@@ -458,7 +465,7 @@ impl App {
             PaneId::HList => self.hist.scroll(d),
             PaneId::HFiles => self.hist.scroll_files(d),
             PaneId::HDiff if horizontal => self.hist.diff.scroll_h(d * 2),
-            PaneId::HDiff => self.hist.diff.scroll(d),
+            PaneId::HDiff => self.dispatch(Action::DiffScroll(d)),
             PaneId::WUnstaged => self.wt.scroll_list(FileList::Unstaged, d),
             PaneId::WStaged => self.wt.scroll_list(FileList::Staged, d),
             PaneId::WDiff if horizontal => self.wt.diff.scroll_h(d * 2),

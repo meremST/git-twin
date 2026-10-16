@@ -105,7 +105,11 @@ the history.
 | `Alt-Enter` in Worktree | Create the commit |
 
 Drag the separators to resize; use the wheel to scroll the panel under the
-pointer. `--read-only` mode also blocks fetch, push and external tools that may
+pointer. In History, the Patch list highlights the file at the top of the diff
+when scrolling, or the file under the cursor/search hit when navigating lines.
+The highlighted file stays visible in the list; the commit header selects
+Comments. This synchronization does not change Tree selection.
+`--read-only` mode also blocks fetch, push and external tools that may
 modify the repository. Fine selection is reserved for copying: to index or
 discard, use line selection.
 The editor shows a guide at `commit_width` columns without replacing the text.

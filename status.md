@@ -15,7 +15,7 @@ not a release claim.
 | App interactions | `src/app/{worktree,forms,menu,keys,mouse}.rs` | Implemented; deterministic mutation/failure scenarios added, real external environments remain to be validated |
 | UI | `src/ui/{mod,theme,hit,overlays}.rs` | Both views, graph, diffs, message editor, menus, dialogs and hit zones |
 | Binaries | `src/main.rs`, `src/bin/git-tui.rs`, shared `src/cli.rs` | `gitt` defaults to History; `git tui` defaults to Worktree; About dialogs updated |
-| Integration / PTY tests | `tests/{prototype,file_browser,operations}.rs` | 74 scenarios including partial operations, conflicts, recovery and terminal handoffs |
+| Integration / PTY tests | `tests/{prototype,file_browser,operations}.rs` | 77 scenarios including Patch/diff synchronization, partial operations, conflicts, recovery and terminal handoffs |
 | Docs | README, limitations, parity inventory, architecture, build/install and testing guides | ✅ |
 | CI | `.github/workflows/{ci,release}.yml` | Strict checks, Linux archive/install jobs and draft release; new scenarios await a hosted run after push |
 | Repo | Official GitHub remote configured | Tags and draft releases exist; no public release yet |
@@ -91,7 +91,7 @@ PTYs and terminals that do not answer terminal queries.
 - `gitt` / `git-tui` binaries and `git tui` integration; `--view` still overrides
   the entry point's default. Existing XDG paths are retained.
 
-Current suite: 89 library tests and 74 integration tests, including both
+Current suite: 89 library tests and 77 integration tests, including both
 entry points in a PTY, Unicode rendering, persistence failure/recovery and
 compact/form interaction checks.
 
