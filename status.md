@@ -1,6 +1,6 @@
 # Git Twin — development status
 
-Last update: 2026-10-16, parity inventory refreshed (origin, View dialog, Ctrl-click, Undo Last Revert).
+Last update: 2026-10-16, v1 operation scenarios and explicit parity exclusions.
 Spec: `design.md`. Version 0.3.1 is prepared, not published; full parity is
 not a release claim.
 
@@ -12,13 +12,13 @@ not a release claim.
 | Git adapter (git CLI) | `src/git/` | ✅ compiled, 5 unit tests pass |
 | Config | `src/config/mod.rs` | Compiled; config/state unit tests |
 | App core | `src/app/{mod,action,dialog,diffview,input,worker,history}.rs` | Compiled and connected to the event loop |
-| App interactions | `src/app/{worktree,forms,menu,keys,mouse}.rs` | Implemented; advanced operation scenarios still need coverage |
+| App interactions | `src/app/{worktree,forms,menu,keys,mouse}.rs` | Implemented; deterministic mutation/failure scenarios added, real external environments remain to be validated |
 | UI | `src/ui/{mod,theme,hit,overlays}.rs` | Both views, graph, diffs, message editor, menus, dialogs and hit zones |
 | Binaries | `src/main.rs`, `src/bin/git-tui.rs`, shared `src/cli.rs` | `gitt` defaults to History; `git tui` defaults to Worktree; About dialogs updated |
-| Integration / PTY tests | `tests/prototype.rs` | Rendering/resizing, stage, read-only, commit, overlays, CLI and PTY smoke tests |
+| Integration / PTY tests | `tests/{prototype,file_browser,operations}.rs` | 74 scenarios including partial operations, conflicts, recovery and terminal handoffs |
 | Docs | README, limitations, parity inventory, architecture, build/install and testing guides | ✅ |
-| CI | `.github/workflows/{ci,release}.yml` | Strict checks, Linux archive/install jobs and draft release; hosted run pending |
-| Repo | Local Git repository, no remote configured | No tag, push or publication performed |
+| CI | `.github/workflows/{ci,release}.yml` | Strict checks, Linux archive/install jobs and draft release; new scenarios await a hosted run after push |
+| Repo | Official GitHub remote configured | Tags and draft releases exist; no public release yet |
 
 `src/lib.rs` exports all five layers. The suite now includes the application,
 config and UI rather than only domain/Git code.
@@ -57,7 +57,7 @@ PTYs and terminals that do not answer terminal queries.
   intentional changes to application behavior.
 - `CHANGELOG.md` added. crates.io publishing stays disabled; no official
   repository URL is invented while a remote is not configured.
-- Pending publication work: configure the official remote, run hosted CI,
+- Pending publication work: run hosted CI on the final v1 candidate,
   review release notes/licenses, then tag and review the generated draft.
 
 ## Earlier completed work (session continuation)
@@ -91,21 +91,34 @@ PTYs and terminals that do not answer terminal queries.
 - `gitt` / `git-tui` binaries and `git tui` integration; `--view` still overrides
   the entry point's default. Existing XDG paths are retained.
 
-Current suite: 71 library tests and 14 integration tests, including both
+Current suite: 89 library tests and 74 integration tests, including both
 entry points in a PTY, Unicode rendering, persistence failure/recovery and
 compact/form interaction checks.
 
+## V1 operation scenarios
+
+`tests/operations.rs` adds 22 isolated scenarios covering partial staging and
+discard/undo, commit/amend, rejected hooks/signing, conflicts and continue/abort,
+index locks, stale patches, unusual names, binary/renamed/new/deleted files,
+missing final newlines, truncated diffs, read-only refusal and terminal handoffs.
+See `docs/testing.md` for exact coverage and remaining external-environment gaps.
+
+The scenarios exposed and fixed lost undo information after failure, silent
+external-editor failures and termination of the TUI on Ctrl-C during a handoff.
+The 37 remaining `specified` rows in `docs/parity.md` are explicitly marked
+`not implemented for v1`; other statuses are unchanged.
+
 ## Next priorities
 
-1. Extend integration coverage to partial staging/reverting, amend, conflicts,
-   unusual filenames, editor/signing handoffs and failure recovery, and to the
-   new tag-info-on-click flow (currently only exercised by unit tests).
-2. Further exercise the new interactions against real repositories and
-   terminals, especially external edits and concurrent Git operations.
-3. Validate remaining parity entries against the graphical references. Only
-   promote a row to verified when its specific behavior is covered.
-4. Execute the new workflows on the official GitHub repository before
-   publishing the first release; local checks do not replace hosted runs.
+1. Validate successful signing, real pinentry, remote authentication and
+   external tools; add the dedicated tag-info-on-click integration flow.
+2. Further exercise the interactions against real repositories and terminals,
+   beyond the deterministic concurrency and failure cases covered.
+3. Validate the in-scope implemented parity entries against the graphical
+   references. Only promote a row when its specific behavior is covered;
+   the 37 excluded entries are not v1 implementation requirements.
+4. Execute the workflows on the final candidate before publication;
+   local checks do not replace hosted runs.
 5. Benchmark large histories and verify the Git minimum. Validate other
    architectures/platforms before expanding beyond Linux x86_64.
 

@@ -12,10 +12,11 @@ cargo test --locked
 python3 tests/test_uninstall.py
 ```
 
-As of October 7, 2026: **71 unit tests** (library, spread
-across `src/`) and **15 integration tests** (`tests/prototype.rs`), all
-passing locally. The integration tests take about 8 s (they create real temporary
-repositories and launch pseudo-terminals).
+As of October 16, 2026: **89 unit tests** (library, spread across `src/`)
+and **74 integration tests**: 51 in `tests/prototype.rs`, 1 in
+`tests/file_browser.rs`, and 22 in `tests/operations.rs`.
+The integration tests create real temporary repositories and launch
+pseudo-terminals.
 
 ## Unit tests (`src/**/*.rs`, `#[cfg(test)]` modules)
 
@@ -86,19 +87,55 @@ The scenarios need no network access:
 - `terminal_commit_selection_preserves_color_families`: selecting a
   commit preserves the terminal theme's color families in the rendering.
 
+## V1 operation regression scenarios (`tests/operations.rs`)
+
+Run this suite independently with:
+
+```sh
+cargo test --locked --test operations
+```
+
+Every scenario runs in a child test process with temporary HOME/XDG directories,
+isolated Git configuration, a local identity and disabled default hooks/signing.
+Tests install their own hooks, editor or rejecting signer when needed.
+They require neither network access nor signing keys. Assertions inspect the
+actual index, HEAD, file bytes, operation markers, saved drafts and application
+errors, not just whether a command returned successfully.
+
+| Scenario family | Covered behavior |
+| --- | --- |
+| Partial staging | Stage/unstage a hunk, one added line, and selections spanning multiple hunks; preserve all unselected work |
+| Discard and undo | Cancel/confirm hunk and line discard; preserve staged work; undo restores exact content |
+| Failed undo | External edit prevents applying the undo patch; retain undo information and allow retry |
+| Concurrent changes | A stale patch cannot overwrite a changed index or incompatible worktree; refresh after failure |
+| Index lock | Report an existing `index.lock`, preserve it and the work, then retry after its owner removes it |
+| Commit/amend | Rejecting pre-commit and commit-msg hooks preserve HEAD, index, message, draft and amend mode; successful retry clears the draft |
+| Amend history | Root and non-root commits, unchanged parent, unstaging relative to HEAD's parent, preservation of unstaged work and message restoration when leaving amend mode |
+| Signing failure | A rejecting signer exercises automatic terminal handoff, failure preservation and retry for commit/amend; a separate PTY scenario checks terminal restoration |
+| Conflicts | Merge, rebase, cherry-pick, revert and three-way `am`: refuse unresolved commit/continue, confirm staging conflict markers, stage a resolution and continue, or cancel/confirm abort |
+| Merge versions | Use ours/theirs, refuse amend during a merge, and create a two-parent merge commit |
+| Paths and bytes | Spaces, tabs, newlines, escape sequences, invalid UTF-8, leading dash and literal pathspec syntax; binary files, missing final newline and renames represented as deletion/addition |
+| Truncation | A real diff exceeding the production 16 MiB capture limit refuses partial staging/discard without modifying files or index |
+| Destructive actions | Refuse reset when HEAD moved after opening confirmation; confirm whole-file discard and untracked deletion |
+| Read-only | Refuse staging, discard, undo, commit, reset, version selection and fetch without consuming undo information or the draft |
+| Initial commit | Refuse amend on unborn HEAD and an empty commit message; stage/unstage new files, commit, then stage/unstage/restore a deletion |
+| Terminal handoffs | Successful/rejected external editor, rejected signing and Ctrl-C during a waiting commit hook; canonical/raw mode, echo and alternate screen restored, drafts preserved, interrupted commit retry succeeds |
+
+The PTY scenarios launch the real `git-tui` executable and inspect both its
+screen and terminal attributes. The signing fixture deliberately rejects:
+this does **not** validate successful GPG/SSH signing, a real pinentry or
+remote authentication.
+
 ## What is not covered yet
 
 See **Next priorities** in `status.md` for the up-to-date list. In short,
 dedicated integration scenarios are missing for:
 
-- partial staging/reverting across multiple hunks, `amend`,
-  merge conflicts;
-- unusual file names (spaces, newlines, non-UTF-8
-  bytes, escape sequences) beyond what the
-  `domain::sanitize`/`domain::path` tests cover;
-- hand-off to the external editor and commit signing;
-- recovery after failure in the middle of an operation (concurrent lock, hook
-  that rejects, interrupted command);
+- successful signing with real GPG/SSH keys and pinentry;
+- remote authentication and transport failures, complex user hooks and
+  external merge tools;
+- every possible concurrent modification or crash (the scenarios above cover
+  specific stale patches, a moved HEAD, an existing lock and interruption);
 - the new tag click flow (`show_tag_info` / `on_tag_info`,
   `src/app/history.rs`) currently has only manual verification and
   coverage from the existing unit tests on the rest of the module; a
@@ -151,5 +188,6 @@ arguments, forwarding of arguments to Cargo and propagation of its errors.
 The `release.yml` workflow reuses the CI before creating a draft release
 on a `v*` tag. A tag that differs from the Cargo version is rejected. See the
 [release procedure](build-install.md#4-prepare-a-release-maintenance).
-The workflows still need to be run on the official GitHub repository:
-a local run alone does not validate the hosted runners.
+The existing workflows have run on the official repository. These new scenarios
+are included automatically by `cargo test --locked`; their hosted result must
+still be checked after pushing this change.

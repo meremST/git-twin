@@ -1,5 +1,23 @@
 # Release notes
 
+## Unreleased
+
+### Fixes
+
+- Keep "Undo Last Revert" available when applying its patch fails or a
+  read-only guard refuses it; clear it only after successful restoration.
+- Report a failed external commit-message editor instead of leaving the
+  previous success message visible; keep the original message.
+- Keep the TUI alive when Ctrl-C or Ctrl-\\ interrupts a terminal handoff,
+  so Git/editor failure can be reported and the draft retained.
+
+### V1 preparation
+
+- Add 22 isolated real-repository regression scenarios for Git mutations,
+  failures/recovery and terminal handoffs; see `docs/testing.md`.
+- Mark the 37 remaining `specified` parity entries as `not implemented for v1`,
+  without changing the statuses of existing implementations.
+
 ## 0.3.1 — 2026-10-15
 
 ### New features

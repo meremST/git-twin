@@ -2,8 +2,13 @@
 
 - Both views, menus, dialogs and basic interactions are wired up.
   This does not yet amount to a validation of every row of
-  `parity.md`. Advanced operations (conflicts, amend, rebase, external tools,
-  remote transport, signing) still need their integration scenarios.
+  `parity.md`. Its 37 previously specified entries are marked
+  **not implemented for v1**; existing implemented/verified/adaptation statuses
+  are retained. Full reference parity is not promised for v1.
+  Deterministic integration scenarios now cover partial staging/discard,
+  commit/amend, hook/signing failures, conflicts and continue/abort for merge,
+  rebase, cherry-pick, revert and three-way `am`, plus selected recovery cases.
+  They do not validate every advanced operation or external environment.
 - The multi-pane layout targets 120 x 35. Below that, down to 79 x 24,
   compact mode shows one pane at a time. Click the tabs or use
   Tab to reach the other panes; Worktree actions remain visible.
@@ -28,8 +33,11 @@
   may require Shift when mouse capture is active.
   `--no-mouse` leaves events to the terminal.
 - Interactive actions suspend the interface and hand the terminal back to Git
-  or the editor. Their status is re-read on return. Signing,
-  hook and authentication dialogs have not yet been verified end to end.
+  or the editor. Their status is re-read on return. PTY scenarios exercise
+  editor success/failure, a rejecting signer and Ctrl-C during an interactive
+  hook, including terminal restoration and draft preservation.
+  Successful signing with real keys/pinentry, arbitrary user hooks and remote
+  authentication still require validation in their real environments.
 - The gitk command that allows generating commits with an arbitrary shell
   is not implemented. Explicitly configured tools and the Git editor
   run only on user action.
