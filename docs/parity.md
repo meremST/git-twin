@@ -17,8 +17,8 @@ tested: merge/rebase conflict resolution, signing, hooks,
 authentication. The `verified` status means an automated test or a manual test
 by the user.
 
-Breakdown (353 rows): verified 254 ; implemented 47 ; documented adaptation 10 ;
-blocked 0 ; specified 42.
+Breakdown (353 rows): verified 254 ; implemented 51 ; documented adaptation 11 ;
+blocked 0 ; specified 37.
 
 `implemented` statuses that are unverified must not be read as verified. See `limitations.md`.
 
@@ -196,7 +196,7 @@ the simple commit and the launch/toggle/exit in a pseudo-terminal.
 | HIST-CTX-FILE-BLAME-PARENT | gitk 2.43.0 | Context menu file list: Blame parent commit; Source: gitk:2787, gitk:3912 | Right-click file | Patch/tree file (external diff outside Tree) | Launches git gui blame parent_idx file | To define | To define | verified |
 | HIST-CTX-FILE-COPY-PATH | gitk 2.43.0 | Context menu file list: Copy path; Source: gitk:2788 | Right-click file | Patch/tree file (external diff outside Tree) | Copies file path | To define | To define | verified |
 | HIST-CTX-DIFF-LINE-SOURCE | gitk 2.43.0 | Context menu diff: Show origin of this line; Source: gitk:2795, gitk:3944 | Right-click diff line | Line within a file, not a separator | git blame -p -Lline,+1 then selects source commit or shows error if out of view | To define | To define | verified ; gap: no line blame from the diff |
-| HIST-CTX-DIFF-GUI-BLAME-LINE | gitk 2.43.0 | Context menu diff: Run git gui blame on this line; Source: gitk:2796, gitk:3852 | Right-click diff line | Line within a file, not a separator | Launches git gui blame --line=N commit file | To define | To define | specified ; gap: no line blame from the diff |
+| HIST-CTX-DIFF-GUI-BLAME-LINE | gitk 2.43.0 | Context menu diff: Run git gui blame on this line; Source: gitk:2796, gitk:3852 | Right-click diff line | Line within a file, not a separator | Launches git gui blame --line=N commit file | To define | To define | documented adaptation ; "Show origin of this line" (git blame) in a dialog, not git gui blame ; unverified |
 
 ## gitk — Dialogs and options (24 rows)
 
@@ -211,7 +211,7 @@ the simple commit and the launch/toggle/exit in a pseudo-terminal.
 | HIST-DLG-VIEW-LIMIT-SKIP | gitk 2.43.0 | View options Number to show/skip; Source: gitk:4236-4238 | Integer input | View dialog | Encodes --max-count and --skip. | To define | To define | verified |
 | HIST-DLG-VIEW-MISC | gitk 2.43.0 | View options Strict date, left-right, first-parent, simple history; Source: gitk:4239-4243 | Checkbuttons | View dialog | Encodes --date-order, --left-right, --first-parent, --simplify-by-decoration. | To define | To define | verified |
 | HIST-DLG-VIEW-ARGS-PATHS-CMD | gitk 2.43.0 | View options Additional args, files/dirs, command; Source: gitk:4240-4242, gitk:4416-4429 | Multi-line/single-line text input | View dialog | Extra arguments to git log; paths one per line; command to generate more commits. | To define | To define | documented adaptation ; gap: no arbitrary shell command (see docs/limitations.md) |
-| HIST-DLG-VIEW-OK-APPLY-CANCEL | gitk 2.43.0 | Buttons OK / Apply (F5) / Cancel; Source: gitk:4444-4454 | Click, Ctrl-Return, F5, Esc | View dialog | OK applies and closes; Apply reloads without closing; Cancel closes. | To define | To define | specified ; gap: no view dialog |
+| HIST-DLG-VIEW-OK-APPLY-CANCEL | gitk 2.43.0 | Buttons OK / Apply (F5) / Cancel; Source: gitk:4444-4454 | Click, Ctrl-Return, F5, Esc | View dialog | OK applies and closes; Apply reloads without closing; Cancel closes. | To define | To define | implemented ; unverified: OK / Apply (F5) / Cancel |
 | HIST-DLG-PREFS-GENERAL | gitk 2.43.0 | Preferences General; Source: gitk:11643-11715 | Change options | Prefs dialog | Fields max graph width lines/%; Show local changes; Auto-select SHA1 length; Hide remote refs; tab spacing; nearby tags; max refs; limit diffs; per-file encodings; ext diff tool; web browser; themed widgets. | To define | To define | verified ; gap: only theme and editor, not the gitk options |
 | HIST-DLG-PREFS-COLORS | gitk 2.43.0 | Preferences Colors; Source: gitk:11717-11775 | Color buttons | Prefs dialog | Choose Interface, Background, Foreground, diff old/new fg/bg, hunk header, marked line bg, select bg. | To define | To define | verified ; gap: predefined themes (Gruvbox) only, no per-element color |
 | HIST-DLG-PREFS-FONTS | gitk 2.43.0 | Preferences Fonts; Source: gitk:11484-11642, gitk:11778-11785 | Choose font | Prefs dialog | Choose Main font, Diff display font, User interface font; Tk 8.6 native fontchooser otherwise family/size/B/I list. | To define | To define | specified ; gap: no font setting |
@@ -248,7 +248,7 @@ the simple commit and the launch/toggle/exit in a pseudo-terminal.
 | HIST-EDGE-CONFIG-TMP | gitk 2.43.0 | Stale tmp config; Source: gitk:2918-2932 | Save config | gitk-tmp exists for too long | Shows stale config_file_tmp warning and asks for manual removal. | To define | To define | documented adaptation ; gap: config specific to Git Twin, no gitk-tmp |
 | HIST-EDGE-CHERRYPICK-CONFLICT | gitk 2.43.0 | Cherry-pick conflict; Source: gitk:9791-9826 | Cherry-pick commit | Conflict or local changes | Specific messages; offers "Do you wish to run git citool to resolve it?". | To define | To define | implemented ; conflict resolution not tested, no citool ; unverified |
 | HIST-EDGE-REVERT-CONFLICT | gitk 2.43.0 | Revert conflict; Source: gitk:9854-9883 | Revert commit | Conflict or local changes | Specific messages; offers git citool on conflict; "No changes committed" if HEAD unchanged. | To define | To define | implemented ; conflict resolution not tested, no citool ; unverified |
-| HIST-EDGE-BLAME-NOT-IN-VIEW | gitk 2.43.0 | Show origin line; Source: gitk:4035-4065 | Origin line | Source commit out of view | Shows "That line comes from commit ..., which is not in this view". | To define | To define | specified ; gap: no origin line from the diff |
+| HIST-EDGE-BLAME-NOT-IN-VIEW | gitk 2.43.0 | Show origin line; Source: gitk:4035-4065 | Origin line | Source commit out of view | Shows "That line comes from commit ..., which is not in this view". | To define | To define | implemented ; gap: "not in this view" message absent ; unverified |
 
 ## git gui — Main window and panes (15 rows)
 
@@ -366,7 +366,7 @@ the simple commit and the launch/toggle/exit in a pseudo-terminal.
 | GUI-FILELIST-CLICK-ICON-INDEX | git-gui 2.43.0 | Staged list icon column; Source: git-gui:2440-2518 | Left click x column 0 y>1 | Staged file | Unstage via update_indexinfo. | To define | To define | verified |
 | GUI-FILELIST-CLICK-ICON-CONFLICT | git-gui 2.43.0 | Unstaged conflict; Source: git-gui:2492-2497, lib/mergetool.tcl:22 | Left click icon | State U* or *U | Stages the merge resolution; warns if the diff contains unresolved conflicts. | To define | To define | implemented ; unverified |
 | GUI-FILELIST-CLICK-NAME | git-gui 2.43.0 | File lists outside the icon; Source: git-gui:2518-2523 | Left click name | File under pointer | Selects the path and calls show_diff. | To define | To define | verified |
-| GUI-FILELIST-CTRL-CLICK | git-gui 2.43.0 | File lists; Source: git-gui:3984, git-gui:2526-2550 | Ctrl-click | File row | Adds/removes a path from selected_paths without changing the list if same widget. | To define | To define | specified ; gap: no Ctrl-click multi-selection |
+| GUI-FILELIST-CTRL-CLICK | git-gui 2.43.0 | File lists; Source: git-gui:3984, git-gui:2526-2550 | Ctrl-click | File row | Adds/removes a path from selected_paths without changing the list if same widget. | To define | To define | implemented ; unverified |
 | GUI-FILELIST-SHIFT-CLICK | git-gui 2.43.0 | File lists; Source: git-gui:3985, git-gui:2552-2575 | Shift-click | Last click in same list | Selects the range of paths between the last click and the current row. | To define | To define | implemented ; unverified |
 | GUI-FILELIST-UP | git-gui 2.43.0 | File lists; Source: git-gui:3986, git-gui:2440-2488 | Up arrow | Non-empty list | Shows diff of the previous row; keeps last_clicked. | To define | To define | verified |
 | GUI-FILELIST-DOWN | git-gui 2.43.0 | File lists; Source: git-gui:3987, git-gui:2440-2488 | Down arrow | Non-empty list | Shows diff of the next row. | To define | To define | verified |
@@ -385,7 +385,7 @@ the simple commit and the launch/toggle/exit in a pseudo-terminal.
 | GUI-DIFF-CTX-UNSTAGE-LINE | git-gui 2.43.0 | Diff context: Unstage Line(s) From Commit; Source: git-gui:3795-3805, lib/diff.tcl:684-693 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | git apply --reverse --cached | To define | To define | verified |
 | GUI-DIFF-CTX-REVERT-HUNK | git-gui 2.43.0 | Diff context: Revert Hunk; Source: git-gui:3676-3680, lib/diff.tcl:573-638 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | git apply --reverse working tree; saves last_revert | To define | To define | verified |
 | GUI-DIFF-CTX-REVERT-LINE | git-gui 2.43.0 | Diff context: Revert Line(s); Source: git-gui:3681-3685, lib/diff.tcl:664-878 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | git apply --reverse selected range; saves last_revert | To define | To define | verified |
-| GUI-DIFF-CTX-UNDO-REVERT | git-gui 2.43.0 | Diff context: Undo Last Revert; Source: git-gui:3686-3690, lib/diff.tcl:881-908 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | Reapply last_revert via git apply | To define | To define | specified ; gap: no undo of the last revert |
+| GUI-DIFF-CTX-UNDO-REVERT | git-gui 2.43.0 | Diff context: Undo Last Revert; Source: git-gui:3686-3690, lib/diff.tcl:881-908 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | Reapply last_revert via git apply | To define | To define | implemented ; unverified |
 | GUI-DIFF-CTX-LESS-CONTEXT | git-gui 2.43.0 | Diff context: Show Less Context; Source: git-gui:3692-3697, git-gui:2662 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | Decrement gui.diffcontext >1 and reshow_diff | To define | To define | verified |
 | GUI-DIFF-CTX-MORE-CONTEXT | git-gui 2.43.0 | Diff context: Show More Context; Source: git-gui:3692-3697, git-gui:2655 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | Increment gui.diffcontext <99 and reshow_diff | To define | To define | verified |
 | GUI-DIFF-CTX-REFRESH | git-gui 2.43.0 | Diff common: Refresh; Source: git-gui:3621-3624 | Right-click / context menu | Diff/message/path under pointer; states computed by popup_diff_menu | reshow_diff | To define | To define | verified |

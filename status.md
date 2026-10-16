@@ -1,6 +1,6 @@
 # Git Twin — development status
 
-Last update: 2026-10-15, preparing the 0.3.1 release.
+Last update: 2026-10-16, parity inventory refreshed (origin, View dialog, Ctrl-click, Undo Last Revert).
 Spec: `design.md`. Version 0.3.1 is prepared, not published; full parity is
 not a release claim.
 
