@@ -387,7 +387,7 @@ impl Icons {
                 stage: "\u{f067}",
                 sign_off: "\u{f2b5}",
                 push: "\u{f093}",
-                help: "\u{f059}",
+                help: "",
                 pill_left: "\u{e0b6}",
                 pill_right: "\u{e0b4}",
             },

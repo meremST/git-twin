@@ -981,9 +981,11 @@ fn nerd_font_icons_decorate_both_views_without_overlap() {
         "\u{f023} READ ONLY",
         "\u{f060} Back",
         "\u{f002} Find",
+        "F1: help",
     ] {
         assert!(screen.contains(expected), "missing {expected}: {screen}");
     }
+    assert!(!screen.contains("\u{f059} F1: help"), "{screen}");
     assert!(!screen.contains("[main]"), "{screen}");
     app.on_key(KeyEvent::new(KeyCode::F(6), KeyModifiers::NONE));
     let screen = render(&mut app, 120, 35);
