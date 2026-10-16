@@ -1,165 +1,158 @@
 # Architecture
 
-Vue d'ensemble des couches du prototype, de la plus basse (sans dependance
-interne) a la plus haute. `src/lib.rs` les expose toutes :
+Overview of the prototype's layers, from the lowest (no internal dependency)
+to the highest. `src/lib.rs` exposes all of them:
 `pub mod app; pub mod config; pub mod domain; pub mod git; pub mod ui;`.
 
 ```
-main.rs / bin/git-tui.rs   Points d'entree minces, partagent cli.rs
-cli.rs        CLI (clap), terminal (raw mode, alt screen, souris),
-              boucle d'evenements, transfert (handoff) vers un sous-processus
-ui/           Rendu ratatui ; empile les zones cliquables (ui/hit.rs) en dessinant
-app/          Etat + comportement, sans IO terminal ; App::dispatch(Action)
+main.rs / bin/git-tui.rs   Thin entry points, share cli.rs
+cli.rs        CLI (clap), terminal (raw mode, alt screen, mouse),
+              event loop, handoff to a subprocess
+ui/           ratatui rendering; stacks clickable areas (ui/hit.rs) while drawing
+app/          State + behavior, no terminal IO; App::dispatch(Action)
 config/       Config / State (TOML), enums (theme, commit_handoff, stage_untracked...)
-git/          runner (Command sans shell), decouverte de depot, log en flux, lectures, operations
+git/          runner (Command without shell), repo discovery, streamed log, reads, operations
 domain/       oid, sanitize, path, commit, refs, status, diff, patch, graph, textmatch
 ```
 
-Chaque couche ne depend que des couches situees en dessous d'elle dans ce
-schema. `domain/` est pur (aucun IO, aucune dependance Git) ; `git/` encapsule
-tous les appels au binaire `git` (jamais de shell, toujours `--` avant les
-chemins) ; `app/` ne touche jamais au terminal directement ; `ui/` ne modifie
-jamais l'etat, elle le lit et pousse des zones de hit-test.
+Each layer depends only on the layers below it in this diagram. `domain/` is
+pure (no IO, no Git dependency); `git/` encapsulates all calls to the `git`
+binary (never a shell, always `--` before paths); `app/` never touches the
+terminal directly; `ui/` never modifies state, it reads it and pushes
+hit-test areas.
 
-## `domain/` — logique pure, testee unitairement
+## `domain/` — pure logic, unit tested
 
-- `oid` : identifiant de commit (SHA), forme hexadecimale et forme courte.
-- `path` : chemins en octets bruts plus une forme d'affichage (gere les noms
-  non UTF-8 et les caracteres de controle).
-- `sanitize` : retire les sequences de controle/echappement avant tout
-  affichage (defense contre les noms de fichiers ou messages hostiles).
-- `commit`, `refs` : modeles de commit/ref (`GitRef`, `Head`, `RefSet`, `RefKind`).
-- `status` : analyseur du porcelain v2 `-z` (`git status`).
-- `diff` : analyseur de diff unifie ; `patch` : construit des patchs partiels
-  Forward/Reverse pour l'indexation, la desindexation et l'annulation de lignes.
-- `graph` : disposition des voies du graphe de commits (style gitk).
-- `textmatch` : recherche exacte / insensible a la casse / regex.
+- `oid`: commit identifier (SHA), hexadecimal and short forms.
+- `path`: paths as raw bytes plus a display form (handles non-UTF-8 names and
+  control characters).
+- `sanitize`: strips control/escape sequences before any display (defense
+  against hostile file names or messages).
+- `commit`, `refs`: commit/ref models (`GitRef`, `Head`, `RefSet`, `RefKind`).
+- `status`: parser for porcelain v2 `-z` (`git status`).
+- `diff`: unified diff parser; `patch`: builds partial Forward/Reverse patches
+  for staging, unstaging and reverting lines.
+- `graph`: lane layout of the commit graph (gitk style).
+- `textmatch`: exact / case-insensitive / regex search.
 
-## `git/` — adaptateur du binaire `git`, teste unitairement
+## `git/` — adapter for the `git` binary, unit tested
 
-- `runner` : construction d'arguments uniquement (jamais de chaine shell),
-  `--` systematique avant les chemins, durcissement des variables `GIT_*`,
-  annulation (cancellation) et limites de sortie.
-- `repo` : decouverte du depot (`discover`), ne cree jamais de depot ; version
-  minimale `MIN_GIT`.
-- `log` : flux par lots de `git log`, `ViewSpec` (equivalent de la "vue" gitk :
-  refs, branches/tags/remotes, auteur/committer/message, dates, tri...).
-- `read` : lectures seules — status, diffs (travail, index, commit), arbre,
-  blob, refs, recherche (`find`), blame, resolution de commit, details de tag
-  annote (`tag_details`), etc.
-- `ops` : mutations — indexation, application de patch, commit, branche, tag,
-  reset, merge, cherry-pick, revert, checkout, transfert vers un
-  sous-processus (hand-off) pour les commandes necessitant un terminal
-  (editeur, signature, merge/diff externes).
+- `runner`: argument construction only (never a shell string), `--` always
+  before paths, hardening of `GIT_*` variables, cancellation and output limits.
+- `repo`: repo discovery (`discover`), never creates a repo; minimum version
+  `MIN_GIT`.
+- `log`: batched stream of `git log`, `ViewSpec` (equivalent of the gitk
+  "view": refs, branches/tags/remotes, author/committer/message, dates,
+  ordering...).
+- `read`: read-only operations — status, diffs (work tree, index, commit),
+  tree, blob, refs, search (`find`), blame, commit resolution, annotated tag
+  details (`tag_details`), etc.
+- `ops`: mutations — staging, patch application, commit, branch, tag, reset,
+  merge, cherry-pick, revert, checkout, handoff to a subprocess (hand-off) for
+  commands that need a terminal (editor, signing, external merge/diff).
 
-## `app/` — etat et comportement, sans IO terminal
+## `app/` — state and behavior, no terminal IO
 
-- `mod.rs` : structure `App`, `dispatch(Action)`, `on_msg`, `on_op`, `confirm`,
-  `run_op`, `After::*` (ce qu'il faut faire une fois une mutation confirmee cote
-  Git : rafraichir, selectionner un commit, offrir une suppression forcee...).
-- `action.rs` : enum `Action`, une entree par commande gitk / git gui, point de
-  passage commun pour clavier, souris et menus.
-- `worker.rs` : pool de threads d'arriere-plan, messages `Payload::*`, jetons
-  d'annulation ; un seul writer serialise pour les mutations.
-- `dialog.rs` : dialogues Confirm / Form / Info / Text / List, `on_key` ->
+- `mod.rs`: `App` struct, `dispatch(Action)`, `on_msg`, `on_op`, `confirm`,
+  `run_op`, `After::*` (what to do once a mutation is confirmed on the Git
+  side: refresh, select a commit, offer a forced deletion...).
+- `action.rs`: `Action` enum, one entry per gitk / git gui command, common
+  entry point for keyboard, mouse and menus.
+- `worker.rs`: background thread pool, `Payload::*` messages, cancellation
+  tokens; a single serialized writer for mutations.
+- `dialog.rs`: Confirm / Form / Info / Text / List dialogs, `on_key` ->
   `DialogResult`.
-- `diffview.rs` : etat du panneau de diff (curseur, selection, defilement,
-  recherche, selection de hunk).
-- `input.rs` : `LineInput` et `TextArea` (graphemes UTF-8, caracteres larges).
-- `history.rs` (~1700 lignes, comportement gitk) : `HistoryState`, chargement
-  (flux de log + lignes pseudo pour les changements locaux), selection,
-  navigation arriere/avant, saisie de SHA1, recherche (debattue, sur un
-  thread), recherche dans le diff, liste de fichiers Patch/Tree, options de
-  diff, comparaison entre deux commits, informations de tag annote
-  (`TagInfoPanel`, `show_tag_info`, `on_tag_info`), toutes les actions du menu
-  contextuel gitk, `about_text`, `KEYS_HELP`.
-- `worktree.rs` (comportement git gui) : listes Unstaged/Staged, indexation
-  partielle, commit/amend, synchronisation avec l'historique, formulaires et
-  transferts (hand-offs).
-- `forms.rs` : constructeurs de formulaires (preferences, vues, branches,
-  tags, reset...), `on_dialog_result`.
-- `menu.rs`, `keys.rs`, `mouse.rs` : arbres de menus, priorite des evenements
-  clavier (dialogue > menu > vue), zones cliquables (`HitMap`), glisser-deposer
-  des separateurs et de la selection de diff, double-clic.
+- `diffview.rs`: diff panel state (cursor, selection, scrolling, search, hunk
+  selection).
+- `input.rs`: `LineInput` and `TextArea` (UTF-8 graphemes, wide characters).
+- `history.rs` (~1700 lines, gitk behavior): `HistoryState`, loading (log
+  stream + pseudo lines for local changes), selection, back/forward
+  navigation, SHA1 entry, search (debounced, on a thread), search in the
+  diff, Patch/Tree file list, diff options, comparison between two commits,
+  annotated tag information (`TagInfoPanel`, `show_tag_info`, `on_tag_info`),
+  all gitk context menu actions, `about_text`, `KEYS_HELP`.
+- `worktree.rs` (git gui behavior): Unstaged/Staged lists, partial staging,
+  commit/amend, synchronization with the history, forms and hand-offs.
+- `forms.rs`: form builders (preferences, views, branches, tags, reset...),
+  `on_dialog_result`.
+- `menu.rs`, `keys.rs`, `mouse.rs`: menu trees, keyboard event priority
+  (dialog > menu > view), clickable areas (`HitMap`), drag-and-drop of
+  separators and of the diff selection, double-click.
 
-## `ui/` — rendu ratatui
+## `ui/` — ratatui rendering
 
-- `mod.rs` : `draw(frame, &mut App)` ; dispositions History et Worktree,
-  bascule vers un mode compact par onglets en dessous de 120 x 35.
-- `theme.rs` : `Theme::new(&cfg)`. Modes `Dark` et `Light`, avec un coloris
-  `Default` ou `Gruvbox` (`cfg.color_scheme`) adapte au mode (couleurs
-  RGB fixes, degradees en 256/16 couleurs selon le terminal detecte ou force
-  par `--colors`), et `Terminal` (n'utilise que `Color::Reset` et les couleurs
-  ANSI nommees — Red, Green, Blue... — pour que l'interface suive la palette
-  que l'utilisateur a configuree dans son emulateur de terminal, sans imposer
-  de RGB, sauf pour les variantes sombres du texte colore dans le commit
-  selectionne : RGB ou 256 couleurs sur fond inverse clair, couleurs ANSI
-  d'origine en mode 16 couleurs).
-- `hit.rs` : `Hit`, `PaneId`, `SplitId`, `HitMap` (hit-testing souris).
-- `overlays.rs` : menus, dialogues, formulaires.
+- `mod.rs`: `draw(frame, &mut App)`; History and Worktree layouts, switch to
+  a compact tabbed mode below 120 x 35.
+- `theme.rs`: `Theme::new(&cfg)`. `Dark` and `Light` modes, with a `Default`
+  or `Gruvbox` color scheme (`cfg.color_scheme`) adapted to the mode (fixed
+  RGB colors, degraded to 256/16 colors depending on the detected terminal or
+  forced by `--colors`), and `Terminal` (uses only `Color::Reset` and the
+  named ANSI colors — Red, Green, Blue... — so that the interface follows the
+  palette the user configured in their terminal emulator, without imposing
+  RGB, except for the dark variants of colored text in the selected commit:
+  RGB or 256 colors on a light inverse background, original ANSI colors in
+  16-color mode).
+- `hit.rs`: `Hit`, `PaneId`, `SplitId`, `HitMap` (mouse hit-testing).
+- `overlays.rs`: menus, dialogs, forms.
 
-Les separateurs sont des ratios en pour-mille stockes dans `state.splits`.
-En dessous de 79 x 24, un message "trop petit" est affiche a la place de
-l'interface.
+Separators are per-mille ratios stored in `state.splits`. Below 79 x 24, a
+"too small" message is displayed instead of the interface.
 
-## Points d'entree
+## Entry points
 
-- `src/main.rs` -> binaire `gitt` (vue par defaut : History).
-- `src/bin/git-tui.rs` -> binaire `git-tui`, invocable aussi via `git tui`
-  (vue par defaut : Worktree).
-- `src/cli.rs` : logique partagee (clap, terminal, boucle d'evenements,
-  hand-off, `doctor`). `--view` remplace la vue par defaut de chaque point
-  d'entree ; `--all` (comme `gitk --all`) fait porter la vue par defaut sur
-  toutes les refs plutot que sur HEAD seul ; des chemins positionnels (comme
-  `gitk chemin...`) sont convertis par `repo::workdir_pathspec` en chemins
-  relatifs a la racine et limitent la vue par defaut ("Command line").
+- `src/main.rs` -> `gitt` binary (default view: History).
+- `src/bin/git-tui.rs` -> `git-tui` binary, also invocable via `git tui`
+  (default view: Worktree).
+- `src/cli.rs`: shared logic (clap, terminal, event loop, hand-off,
+  `doctor`). `--view` overrides the default view of each entry point;
+  `--all` (like `gitk --all`) makes the default view cover all refs rather
+  than HEAD alone; positional paths (like `gitk path...`) are converted by
+  `repo::workdir_pathspec` into paths relative to the root and restrict the
+  default view ("Command line").
 
-## Flux d'un evenement
+## Event flow
 
-1. `cli.rs` lit un evenement crossterm (clavier/souris/resize) ou un message
-   de worker (`workers.rx`).
-2. `app/keys.rs` ou `app/mouse.rs` le traduit en `Action` (ou appelle
-   directement une methode d'`App` pour les gestes complexes comme le clic
-   sur un tag).
-3. `App::dispatch` ou la methode appelee met a jour l'etat, lance eventuellement
-   un job en arriere-plan (`workers.read` / `workers.write`) qui renvoie un
-   `Payload` via le canal.
-4. `App::on_msg` applique le `Payload` a l'etat (`on_details`, `on_tag_info`,
-   `on_commit_diff`...).
-5. `ui::draw` lit l'etat a chaque tour de boucle et redessine, en poussant les
-   nouvelles zones cliquables.
+1. `cli.rs` reads a crossterm event (keyboard/mouse/resize) or a worker
+   message (`workers.rx`).
+2. `app/keys.rs` or `app/mouse.rs` translates it into an `Action` (or directly
+   calls an `App` method for complex gestures such as clicking on a tag).
+3. `App::dispatch` or the called method updates the state, and possibly
+   launches a background job (`workers.read` / `workers.write`) that returns a
+   `Payload` through the channel.
+4. `App::on_msg` applies the `Payload` to the state (`on_details`,
+   `on_tag_info`, `on_commit_diff`...).
+5. `ui::draw` reads the state on each loop iteration and redraws, pushing the
+   new clickable areas.
 
-Aucune etape ne bloque la boucle principale sur une commande Git : les lectures
-passent par le pool de workers, les mutations par un writer serialise, et les
-operations necessitant un terminal (editeur, merge/diff externe, push avec
-prompt) suspendent la TUI via `Handoff`.
+No step blocks the main loop on a Git command: reads go through the worker
+pool, mutations through a serialized writer, and operations that need a
+terminal (editor, external merge/diff, push with a prompt) suspend the TUI via
+`Handoff`.
 
-## Actualisation de l'historique
+## History refresh
 
-La vue HEAD sans filtres peut reutiliser un historique charge completement.
-Une sonde limitee a 64 commits detecte les extensions lineaires (commit,
-cherry-pick, revert simples). Seuls les nouveaux commits sont ajoutes au cache ;
-le suffixe du graphe est conserve si l'etat du `GraphBuilder` au raccord est identique.
-Les index et positions des coupures sont decales sans recalculer ce suffixe.
-Les changements de lignes locales utilisent le meme raccord, sans relire
-les commits lorsque HEAD est inchange.
+The unfiltered HEAD view can reuse a fully loaded history. A probe limited to
+64 commits detects linear extensions (simple commit, cherry-pick, revert).
+Only the new commits are added to the cache; the graph suffix is kept if the
+`GraphBuilder` state at the junction is identical. The indexes and positions
+of the cut points are shifted without recomputing that suffix. Changes to
+local lines use the same junction, without rereading the commits when HEAD is
+unchanged.
 
-Un reset vers un commit deja charge peut conserver la liste si l'ancien HEAD
-fait partie des pointes de base conservees par la vue. Sinon, comme pour les
-merges nouveaux, les extensions plus longues, les filtres ou un raccord de
-graphe incompatible, l'application relit l'historique. Les depots shallow,
-les grafts et les references de remplacement desactivent la reutilisation :
-l'ascendance peut y changer sans changement des identifiants.
+A reset to an already loaded commit can keep the list if the old HEAD is one
+of the base tips retained by the view. Otherwise, as with new merges, longer
+extensions, filters or an incompatible graph junction, the application
+rereads the history. Shallow repos, grafts and replacement refs disable
+reuse: ancestry can change there without any change of identifiers.
 
-Pendant une relecture complete, l'ancienne liste reste affichee jusqu'au
-premier lot de remplacement. Les identifiants de requete rejettent les
-resultats devenus obsoletes. Shift-F5 force toujours une relecture complete
-et recapture les pointes de base ; F5 peut utiliser le chemin incremental.
+During a full reread, the old list stays displayed until the first
+replacement batch. Request identifiers reject results that have become
+stale. Shift-F5 always forces a full reread and recaptures the base tips; F5
+may use the incremental path.
 
-Le message de succes d'une mutation attend l'actualisation de la vue active :
-references, liste et diff affiche. Les panneaux masques, les metadonnees
-complementaires et la suite de l'ancien historique peuvent continuer a charger
-en arriere-plan. Dans l'historique, la selection attendue doit etre disponible
-dans les nouveaux lots avant d'annoncer la fin. La barre indique entre-temps
-que la vue est en cours d'actualisation. Une erreur de rafraichissement annule
-le message de succes differe.
+A mutation's success message waits for the active view to refresh: refs, list
+and displayed diff. Hidden panels, supplementary metadata and the rest of the
+old history may keep loading in the background. In the history, the expected
+selection must be available in the new batches before the completion is
+announced. Meanwhile, the bar indicates that the view is being refreshed. A
+refresh error cancels the deferred success message.

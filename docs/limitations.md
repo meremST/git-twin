@@ -1,55 +1,55 @@
-# Limites connues de la version 0.3.1
+# Known limitations of version 0.3.1
 
-- Les deux vues, menus, dialogues et interactions de base sont raccordes.
-  Cela ne constitue pas encore une validation de toutes les lignes de
-  `parity.md`. Les operations avancees (conflits, amend, rebase, outils externes,
-  transport distant, signature) doivent recevoir leurs scenarios d'integration.
-- Le rendu multipanneau est vise a 120 x 35. En dessous, jusqu'a 79 x 24,
-  le mode compact montre un panneau a la fois. Cliquer les onglets ou utiliser
-  Tab pour acceder aux autres panneaux ; les actions Worktree restent visibles.
-  Les longs contenus (chemins, sujets) peuvent etre tronques, pas les commandes
-  principales. Les tailles minimales des separateurs preservent les controles.
-- L'editeur dispose d'annulation, selection, collage et edition externe.
-  Le guide de largeur utilise les colonnes d'affichage Unicode, suit le
-  defilement horizontal et ne remplace pas les caracteres du message.
-- Les dialogues utilisent Tab, Shift-Tab, Entree et Echap. Les tres longs
-  formulaires defilent avec la molette ou Alt-PageUp/PageDown/Home/End sans
-  deplacer le focus. Les libelles se replient et les boutons restent accessibles.
-- Ctrl-I/Tab et Ctrl-M/Entree ne sont pas distinguables sur tous les terminaux.
-  Le protocole clavier enrichi est active si le terminal le declare.
-  Les boutons et menus sont les alternatives ; Alt-Enter permet de committer.
-- Un simple clic sur une icone de fichier indexe/desindexe. Un double-clic
-  n'ajoute pas une seconde mutation. Les listes de git gui n'ont pas d'action
-  specifique de double-clic ; ce n'est pas un raccourci pour indexer.
-- La selection fine du diff (glisser ou Shift-Gauche/Droite) sert uniquement
-  a copier. Shift-Haut/Bas selectionne des lignes Git pour indexer/annuler.
-  Une tentative de mutation avec une selection fine est refusee explicitement.
-  La selection native du
-  terminal peut necessiter Shift lorsque la capture souris est active.
-  `--no-mouse` laisse les evenements au terminal.
-- Les actions interactives suspendent l'interface et rendent le terminal a Git
-  ou a l'editeur. Leur statut est relu au retour. Les dialogues de signature,
-  hooks et authentification n'ont pas encore ete verifies de bout en bout.
-- La commande gitk permettant de generer des commits avec un shell arbitraire
-  n'est pas implementee. Les outils configures explicitement et l'editeur Git
-  s'executent seulement sur action utilisateur.
-- L'application demande confirmation avant de quitter avec un message non vide
-  lorsque `confirm_quit` est active. Un echec de sauvegarde empeche la fermeture
-  normale ; le message reste en memoire et la sauvegarde peut etre reessayee.
-  Les erreurs de lecture et de suppression des brouillons sont aussi signalees.
-  L'option explicite de quitter sans sauvegarder abandonne les changements
-  du message en memoire.
-- Le plancher Git 2.25 est verifie au lancement, mais seule la version 2.43 a
-  ete utilisee pour les essais actuels. macOS, gros depots et budgets de
-  performances restent a valider.
-- La distribution binaire cible Linux x86_64 GNU avec glibc >= 2.35 ;
-  les executables ne sont pas statiques. Alpine/musl, ARM et Windows ne font
-  pas partie de cette premiere distribution. Voir le
-  [guide d'installation](build-install.md).
-- Aucune capture des applications graphiques gitk/git gui n'a ete produite.
-  L'exemple `preview` represente le rendu reel de Git Twin via ratatui TestBackend,
-  et non une maquette statique.
+- Both views, menus, dialogs and basic interactions are wired up.
+  This does not yet amount to a validation of every row of
+  `parity.md`. Advanced operations (conflicts, amend, rebase, external tools,
+  remote transport, signing) still need their integration scenarios.
+- The multi-pane layout targets 120 x 35. Below that, down to 79 x 24,
+  compact mode shows one pane at a time. Click the tabs or use
+  Tab to reach the other panes; Worktree actions remain visible.
+  Long content (paths, subjects) may be truncated, but not the main
+  commands. The minimum separator sizes preserve the controls.
+- The editor supports undo, selection, paste and external editing.
+  The width guide uses Unicode display columns, follows horizontal
+  scrolling and does not replace the characters of the message.
+- Dialogs use Tab, Shift-Tab, Enter and Esc. Very long
+  forms scroll with the wheel or Alt-PageUp/PageDown/Home/End without
+  moving focus. Labels wrap and buttons remain reachable.
+- Ctrl-I/Tab and Ctrl-M/Enter cannot be told apart on all terminals.
+  The enhanced keyboard protocol is enabled if the terminal advertises it.
+  Buttons and menus are the alternatives; Alt-Enter commits.
+- A single click on a file icon stages/unstages. A double-click
+  does not add a second mutation. The git gui lists have no specific
+  double-click action; it is not a shortcut for staging.
+- Fine diff selection (drag or Shift-Left/Right) is only for
+  copying. Shift-Up/Down selects Git lines to stage/revert.
+  Attempting a mutation with a fine selection is explicitly refused.
+  Native terminal selection
+  may require Shift when mouse capture is active.
+  `--no-mouse` leaves events to the terminal.
+- Interactive actions suspend the interface and hand the terminal back to Git
+  or the editor. Their status is re-read on return. Signing,
+  hook and authentication dialogs have not yet been verified end to end.
+- The gitk command that allows generating commits with an arbitrary shell
+  is not implemented. Explicitly configured tools and the Git editor
+  run only on user action.
+- The application asks for confirmation before quitting with a non-empty message
+  when `confirm_quit` is enabled. A save failure prevents normal
+  closing; the message stays in memory and the save can be retried.
+  Errors reading and deleting drafts are also reported.
+  The explicit quit-without-saving option discards the in-memory
+  message changes.
+- The Git 2.25 floor is checked at launch, but only version 2.43 has
+  been used for the current trials. macOS, large repositories and performance
+  budgets remain to be validated.
+- The binary distribution targets Linux x86_64 GNU with glibc >= 2.35;
+  the executables are not static. Alpine/musl, ARM and Windows are not
+  part of this first distribution. See the
+  [installation guide](build-install.md).
+- No screenshots of the gitk/git gui graphical applications have been produced.
+  The `preview` example shows the real Git Twin rendering via ratatui TestBackend,
+  not a static mock-up.
 
-Les commandes sont `gitt` (History) et `git tui` (Worktree, executable `git-tui`).
-Le package et les chemins XDG restent nommes `git-twin` pour conserver les
-preferences et brouillons existants.
+The commands are `gitt` (History) and `git tui` (Worktree, executable `git-tui`).
+The package and the XDG paths remain named `git-twin` to keep existing
+preferences and drafts.

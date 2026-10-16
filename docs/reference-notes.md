@@ -1,20 +1,20 @@
-# Git Twin — Notes de reference pour implementation
+# Git Twin — Reference notes for implementation
 
-Ces notes completent `docs/parity.md`. Les libelles sont anglais car releves dans les sources Tcl installees. Toutes les commandes et conditions ci-dessous sont issues des sources citees.
+These notes complement `docs/parity.md`. The labels are in English because they were taken from the installed Tcl sources. All commands and conditions below come from the cited sources.
 
 ## gitk 2.43.0
 
-### Sources et version
+### Sources and version
 
-- Script: `/usr/bin/gitk` (12802 lignes). Pas de `appvers`; `set appname "gitk"`; version effective dans la matrice = version Git/paquet 2.43.0. About: "Gitk - a commit viewer for git" et copyright 2005-2016 (`gitk:3150-3158`, `gitk:12678-12685`).
+- Script: `/usr/bin/gitk` (12802 lines). No `appvers`; `set appname "gitk"`; effective version in the matrix = Git/package version 2.43.0. About: "Gitk - a commit viewer for git" and copyright 2005-2016 (`gitk:3150-3158`, `gitk:12678-12685`).
 
-### Menu tree gitk (Linux)
+### gitk menu tree (Linux)
 
 - **File** (`gitk:2183-2191`)
-  - **Update** — accelerator `F5`, proc `updatecommits`. Relit les commits nouveaux.
-  - **Reload** — accelerator `Shift-F5`, proc `reloadcommits`. Recharge la vue.
-  - **Reread references** — proc `rereadrefs`; relit `git show-ref -d`, `git rev-parse HEAD`, `git symbolic-ref HEAD` (`gitk:1880-1930`, `gitk:11371`).
-  - **List references** — accelerator `F2`, proc `showrefs`; dialogue `Tags and heads` avec filtre glob (`gitk:10135-10230`).
+  - **Update** — accelerator `F5`, proc `updatecommits`. Rereads new commits.
+  - **Reload** — accelerator `Shift-F5`, proc `reloadcommits`. Reloads the view.
+  - **Reread references** — proc `rereadrefs`; rereads `git show-ref -d`, `git rev-parse HEAD`, `git symbolic-ref HEAD` (`gitk:1880-1930`, `gitk:11371`).
+  - **List references** — accelerator `F2`, proc `showrefs`; `Tags and heads` dialog with glob filter (`gitk:10135-10230`).
   - separator
   - **Start git gui** — command `safe_exec_redirect [list git gui] [list &]` (`gitk:2189`).
   - separator
@@ -32,7 +32,7 @@ Ces notes completent `docs/parity.md`. Les libelles sont anglais car releves dan
   - **Key bindings** — proc `keys`.
 - macOS/Aqua conditional: Apple menu gets About, standard Preferences/Quit callbacks are registered, Help keeps Key bindings (`gitk:2212-2224`).
 
-### Layout gitk
+### gitk layout
 
 - Main window uses a vertical panedwindow `.ctop`. Top frame `.tf` holds a horizontal panedwindow with three synchronized canvases: graph `.canv`, subject/refs `.canv2`, metadata `.canv3`, plus one shared vertical scrollbar (`gitk:2236-2285`).
 - Toolbar `.tf.bar`: disabled-looking `SHA1 ID:` label/button becoming `Goto:` when text differs, SHA1 entry width 40, back/forward arrow buttons, `Row` selected number / total count, status label, progressbar (`gitk:2298-2388`).
@@ -44,42 +44,42 @@ Ces notes completent `docs/parity.md`. Les libelles sont anglais car releves dan
 
 | Keys | Action/proc | Source |
 | --- | --- | --- |
-| `Ctrl-Q` | Quitte gitk via doquit | gitk:2690, gitk:3188 |
-| `Ctrl-W` | Ferme fenetre courante; sur . appelle doquit | gitk:2665, gitk:3189 |
-| `Home` | Selectionne premier commit | gitk:2667, gitk:3190 |
-| `End` | Selectionne dernier commit | gitk:2668, gitk:3191 |
-| `Up / p / k` | Commit precedent | gitk:2669, gitk:2686, gitk:3192 |
-| `Down / n / j` | Commit suivant | gitk:2670, gitk:2687, gitk:3193 |
-| `Left / z / h` | Reculer dans historique de navigation | gitk:2673, gitk:2688, gitk:3194 |
-| `Right / x / l` | Avancer dans historique de navigation | gitk:2674, gitk:2689, gitk:3195 |
-| `Ctrl-1..Ctrl-9` | Aller au n-ieme parent du commit courant | gitk:2732-2734, gitk:3196 |
-| `PageUp` | Page precedente dans liste commits | gitk:2675, gitk:3197 |
-| `PageDown` | Page suivante dans liste commits | gitk:2676, gitk:3198 |
-| `Ctrl-Home` | Scroll liste commits au debut | gitk:2677, gitk:3199 |
-| `Ctrl-End` | Scroll liste commits a la fin | gitk:2678, gitk:3200 |
-| `Ctrl-Up` | Scroll liste commits une ligne haut | gitk:2679, gitk:3201 |
-| `Ctrl-Down` | Scroll liste commits une ligne bas | gitk:2680, gitk:3202 |
-| `Ctrl-PageUp` | Scroll liste commits une page haut | gitk:2681, gitk:3203 |
-| `Ctrl-PageDown` | Scroll liste commits une page bas | gitk:2682, gitk:3204 |
-| `Shift-Up` | Trouver hit precedent (later commits) | gitk:2671, gitk:3205 |
-| `Shift-Down` | Trouver hit suivant (earlier commits) | gitk:2672, gitk:3206 |
-| `Delete / Backspace / b` | Scroll diff vers le haut (page ou fichier precedent pour b selon bind prevfile) | gitk:2683-2695, gitk:3207 |
-| `Space` | Scroll diff une page bas | gitk:2685, gitk:3209 |
-| `u` | Scroll diff 18 lignes haut | gitk:2696, gitk:3210 |
-| `d` | Scroll diff 18 lignes bas | gitk:2695, gitk:3211 |
-| `Ctrl-F` | Lance recherche commit | gitk:2691, gitk:3212 |
-| `Ctrl-G / Return` | Hit recherche suivant | gitk:2692, gitk:2700, gitk:3213 |
-| `g` | Focus champ SHA1/Goto | gitk:2697, gitk:3215 |
-| `/ / KP_Divide` | Focus champ Find | gitk:2698-2699, gitk:3216 |
-| `?` | Hit recherche precedent | gitk:2701, gitk:3217 |
-| `f` | Scroll diff au fichier suivant | gitk:2702, gitk:3218 |
-| `Ctrl-S` | Search hit suivant dans diff | gitk:2693, gitk:3219 |
-| `Ctrl-R` | Search hit precedent dans diff | gitk:2694, gitk:3220 |
-| `Ctrl-plus / Ctrl-equal / Ctrl-KP_Add` | Augmente polices | gitk:2707-2709, gitk:3221 |
-| `Ctrl-minus / Ctrl-KP_Subtract` | Diminue polices | gitk:2710-2711, gitk:3223 |
+| `Ctrl-Q` | Quits gitk via doquit | gitk:2690, gitk:3188 |
+| `Ctrl-W` | Closes current window; on . calls doquit | gitk:2665, gitk:3189 |
+| `Home` | Selects first commit | gitk:2667, gitk:3190 |
+| `End` | Selects last commit | gitk:2668, gitk:3191 |
+| `Up / p / k` | Previous commit | gitk:2669, gitk:2686, gitk:3192 |
+| `Down / n / j` | Next commit | gitk:2670, gitk:2687, gitk:3193 |
+| `Left / z / h` | Go back in navigation history | gitk:2673, gitk:2688, gitk:3194 |
+| `Right / x / l` | Go forward in navigation history | gitk:2674, gitk:2689, gitk:3195 |
+| `Ctrl-1..Ctrl-9` | Go to the n-th parent of the current commit | gitk:2732-2734, gitk:3196 |
+| `PageUp` | Previous page in commit list | gitk:2675, gitk:3197 |
+| `PageDown` | Next page in commit list | gitk:2676, gitk:3198 |
+| `Ctrl-Home` | Scroll commit list to the start | gitk:2677, gitk:3199 |
+| `Ctrl-End` | Scroll commit list to the end | gitk:2678, gitk:3200 |
+| `Ctrl-Up` | Scroll commit list up one line | gitk:2679, gitk:3201 |
+| `Ctrl-Down` | Scroll commit list down one line | gitk:2680, gitk:3202 |
+| `Ctrl-PageUp` | Scroll commit list up one page | gitk:2681, gitk:3203 |
+| `Ctrl-PageDown` | Scroll commit list down one page | gitk:2682, gitk:3204 |
+| `Shift-Up` | Find previous hit (later commits) | gitk:2671, gitk:3205 |
+| `Shift-Down` | Find next hit (earlier commits) | gitk:2672, gitk:3206 |
+| `Delete / Backspace / b` | Scroll diff up (page, or previous file for b depending on the prevfile bind) | gitk:2683-2695, gitk:3207 |
+| `Space` | Scroll diff down one page | gitk:2685, gitk:3209 |
+| `u` | Scroll diff up 18 lines | gitk:2696, gitk:3210 |
+| `d` | Scroll diff down 18 lines | gitk:2695, gitk:3211 |
+| `Ctrl-F` | Starts commit search | gitk:2691, gitk:3212 |
+| `Ctrl-G / Return` | Next search hit | gitk:2692, gitk:2700, gitk:3213 |
+| `g` | Focus SHA1/Goto field | gitk:2697, gitk:3215 |
+| `/ / KP_Divide` | Focus Find field | gitk:2698-2699, gitk:3216 |
+| `?` | Previous search hit | gitk:2701, gitk:3217 |
+| `f` | Scroll diff to next file | gitk:2702, gitk:3218 |
+| `Ctrl-S` | Next search hit in diff | gitk:2693, gitk:3219 |
+| `Ctrl-R` | Previous search hit in diff | gitk:2694, gitk:3220 |
+| `Ctrl-plus / Ctrl-equal / Ctrl-KP_Add` | Increase fonts | gitk:2707-2709, gitk:3221 |
+| `Ctrl-minus / Ctrl-KP_Subtract` | Decrease fonts | gitk:2710-2711, gitk:3223 |
 | `F5` | Update | gitk:2703, gitk:3224 |
 | `F2` | List references | gitk:2705 |
-| `Shift-F4 / F4` | Nouvelle vue / editer vue courante | gitk:2706-2707 |
+| `Shift-F4 / F4` | New view / edit current view | gitk:2706-2707 |
 
 ### gitk mouse/context behavior
 
@@ -99,7 +99,7 @@ Ces notes completent `docs/parity.md`. Les libelles sont anglais car releves dan
 ### gitk dialogs and fields
 
 - **View definition** (`gitk:4194-4455`): `View Name`; `Remember this view`; `References (space separated list)`; `Branches & tags`; checkboxes `All refs`, `All (local) branches`, `All tags`, `All remote-tracking branches`; commit info regex fields `Author`, `Committer`, `Commit Message`; checkboxes `Matches all Commit Info criteria`, `Matches no Commit Info criteria`; changes fields radio `Fixed String`/`Regular Expression`, `Search string`; date fields `Since`, `Until`; limits `Number to show`, `Number to skip`; misc `Strictly sort by date`, `Mark branch sides`, `Limit to first parent`, `Simple history`; `Additional arguments to git log`; path text area one per line; command field `Command to generate more commits to include`; buttons `OK`, `Apply (F5)`, `Cancel`. Encoding uses `--all`, `--branches`, `--tags`, `--remotes`, `--author=`, `--committer=`, `--grep=`, `--all-match`, `--invert-grep`, `-S`, `--pickaxe-regex`, `--since/--after`, `--until/--before`, `--max-count`, `--skip`, `--date-order`, `--left-right`, `--first-parent`, `--simplify-by-decoration` (`gitk:4214-4242`).
-- **Preferences** (`gitk:11643-11852`): General options listed in parity; Colors choose via `tk_chooseColor`; Fonts choose via Tk fontchooser or custom list. `OK` may call `redisplay`, `reselectline`, `rereadrefs`, or show/hide local changes depending changed variables.
+- **Preferences** (`gitk:11643-11852`): General options listed in parity; Colors choose via `tk_chooseColor`; Fonts choose via Tk fontchooser or custom list. `OK` may call `redisplay`, `reselectline`, `rereadrefs`, or show/hide local changes depending on changed variables.
 - **Generate patch** (`gitk:9331-9415`): From/To IDs/headlines readonly, `Reverse`, output file default `patchN.patch`, `Generate` runs `diffcmd [old new] -p > file &`.
 - **Create tag** (`gitk:9419-9485`): ID/headline readonly, `Tag name`, optional `Tag message`; empty tag error, duplicate tag error; commands `git tag tag id` or `git tag -a -m msg tag id`.
 - **Write commit to file** (`gitk:9550-9598`): `Command` default `git diff-tree --stdin -p --pretty=email`, output default `commit-<7>`, command `sh -c "echo id | <command>" >file &`.
@@ -118,7 +118,7 @@ Do you wish to run git citool to resolve it?` (`gitk:9791-9826`).
 
 ## git-gui 2.43.0
 
-### Sources et version
+### Sources and version
 
 - Main script `/usr/lib/git-core/git-gui`; modules in `/usr/share/git-gui/lib`. Internal version `set appvers {0.21.0.116.g0730a}` and wrapper `git-gui version 0.21.0.116.g0730a` (`git-gui:3-12`).
 
@@ -144,35 +144,35 @@ Do you wish to run git citool to resolve it?` (`gitk:9791-9826`).
 
 | Keys | Action | Source |
 | --- | --- | --- |
-| `Ctrl-Q` | Quitter via do_quit | git-gui:3052-3054 |
-| `Ctrl-W` | Fermer toplevel ou do_quit pour main window | git-gui:3056-3075 |
-| `Ctrl-N` | Ouvrir Create Branch | git-gui:3947-3950 |
-| `Ctrl-O` | Ouvrir Checkout Branch | git-gui:3951-3952 |
-| `Ctrl-M` | Ouvrir Merge | git-gui:3953-3954 |
+| `Ctrl-Q` | Quit via do_quit | git-gui:3052-3054 |
+| `Ctrl-W` | Close toplevel, or do_quit for the main window | git-gui:3056-3075 |
+| `Ctrl-N` | Open Create Branch | git-gui:3947-3950 |
+| `Ctrl-O` | Open Checkout Branch | git-gui:3951-3952 |
+| `Ctrl-M` | Open Merge | git-gui:3953-3954 |
 | `Ctrl-P` | Push anywhere | git-gui:3957-3959 |
-| `F5 / Ctrl-R` | Rescan et force_first_diff | git-gui:3960-3962 |
-| `Ctrl-S` | Ajouter Signed-off-by | git-gui:3963-3964 |
-| `Ctrl-T` | Toggle stage/unstage selon liste focus | git-gui:3965-3968 |
-| `Ctrl-U` | Toggle stage/unstage selon liste focus | git-gui:3969-3970 |
+| `F5 / Ctrl-R` | Rescan and force_first_diff | git-gui:3960-3962 |
+| `Ctrl-S` | Add Signed-off-by | git-gui:3963-3964 |
+| `Ctrl-T` | Toggle stage/unstage depending on focused list | git-gui:3965-3968 |
+| `Ctrl-U` | Toggle stage/unstage depending on focused list | git-gui:3969-3970 |
 | `Ctrl-J` | Revert selection | git-gui:3971-3972 |
 | `Ctrl-I` | Stage all changed files | git-gui:3973-3974 |
 | `Ctrl-E` | Toggle Amend Last Commit | git-gui:3975-3976 |
-| `Ctrl-minus` | Moins de contexte diff | git-gui:3977-3978 |
-| `Ctrl-plus/Ctrl-equal` | Plus de contexte diff | git-gui:3978-3979 |
+| `Ctrl-minus` | Less diff context | git-gui:3977-3978 |
+| `Ctrl-plus/Ctrl-equal` | More diff context | git-gui:3978-3979 |
 | `Ctrl-Return / Ctrl-KP_Enter` | Commit | git-gui:3980-3981 |
-| `Up/Down dans listes` | Selection/diff precedent/suivant | git-gui:3983-3987 |
+| `Up/Down in lists` | Previous/next selection/diff | git-gui:3983-3987 |
 | `Alt-1` | Focus Unstaged Changes | git-gui:3991 |
 | `Alt-2` | Focus Staged Changes | git-gui:3992 |
 | `Alt-3` | Focus diff | git-gui:3993 |
 | `Alt-4` | Focus message | git-gui:3994 |
-| `Ctrl-T dans message` | Stage selection | git-gui:3902-3905 |
-| `Ctrl-U dans message` | Unstage selection | git-gui:3906-3909 |
-| `Ctrl-J dans message` | Revert selection | git-gui:3910-3911 |
-| `Ctrl-I dans message` | Stage all | git-gui:3912-3914 |
+| `Ctrl-T in message` | Stage selection | git-gui:3902-3905 |
+| `Ctrl-U in message` | Unstage selection | git-gui:3906-3909 |
+| `Ctrl-J in message` | Revert selection | git-gui:3910-3911 |
+| `Ctrl-I in message` | Stage all | git-gui:3912-3914 |
 | `Ctrl-X/C/V/A` | Cut/copy/paste/select all message | git-gui:3915-3926 |
-| `Ctrl-C/Ctrl-X dans diff` | Copie selection; paste bloque | git-gui:3930-3937 |
-| `Ctrl-A dans diff` | Selectionne tout diff | git-gui:3938-3940 |
-| `Ctrl-J dans diff` | Revert selection | git-gui:3941-3942 |
+| `Ctrl-C/Ctrl-X in diff` | Copy selection; paste blocked | git-gui:3930-3937 |
+| `Ctrl-A in diff` | Select entire diff | git-gui:3938-3940 |
+| `Ctrl-J in diff` | Revert selection | git-gui:3941-3942 |
 | `Arrow keys / h j k l / Ctrl-b / Ctrl-f` | Scroll diff horizontal/vertical/page | git-gui:3943-3945 |
 
 ### git-gui file-list click semantics

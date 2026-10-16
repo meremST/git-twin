@@ -1,42 +1,42 @@
-# Installation et distribution Linux
+# Linux installation and distribution
 
-Git Twin fournit deux executables : `gitt` (vue History) et `git-tui`
-(vue Worktree, aussi accessible par `git tui`). Installer les deux.
-La premiere distribution cible Linux x86_64 ; macOS, Windows et ARM ne sont
-pas annonces comme supportes.
+Git Twin provides two executables: `gitt` (History view) and `git-tui`
+(Worktree view, also reachable as `git tui`). Install both.
+The first distribution targets Linux x86_64; macOS, Windows and ARM are
+not announced as supported.
 
-## 1. Installer une archive binaire (sans Rust)
+## 1. Install a binary archive (no Rust)
 
-Prerequis d'execution :
+Runtime prerequisites:
 
-- Linux x86_64, glibc >= 2.35 et bibliotheque d'execution GCC (`libgcc_s.so.1`).
-  Les archives sont construites sous Ubuntu 22.04 ; la CI prevoit leur
-  installation sous Ubuntu 22.04 et 24.04. Debian 12 dispose aussi des
-  bibliotheques requises, mais n'est pas dans cette matrice.
-- Git dans `PATH`. Le programme refuse Git < 2.25 ; ce minimum n'a pas encore
-  ete valide sur une installation reelle. Les essais locaux utilisent Git 2.43.
-- Un terminal interactif UTF-8, au moins 79 x 24 cellules (120 x 35 conseille).
-  Aucune Nerd Font n'est necessaire avec les icones Unicode par defaut.
-  `--icons nerd` (Nerd Fonts v3) ajoute des icones aux vues, panneaux,
-  boutons, etats de fichiers et types de fichiers, et affiche les references
-  sous forme de pastilles colorees ; `unicode` et `ascii` restent textuels.
+- Linux x86_64, glibc >= 2.35 and the GCC runtime library (`libgcc_s.so.1`).
+  The archives are built on Ubuntu 22.04; the CI covers their
+  installation on Ubuntu 22.04 and 24.04. Debian 12 also has the required
+  libraries, but is not in this matrix.
+- Git in `PATH`. The program refuses Git < 2.25; this minimum has not yet
+  been validated on a real installation. Local tests use Git 2.43.
+- An interactive UTF-8 terminal, at least 79 x 24 cells (120 x 35 recommended).
+  No Nerd Font is needed with the default Unicode icons.
+  `--icons nerd` (Nerd Fonts v3) adds icons to views, panels,
+  buttons, file states and file types, and displays references
+  as colored badges; `unicode` and `ascii` remain text-only.
 
-Ces binaires ne sont **pas statiques** : Alpine Linux (musl), les systemes
-avec une ancienne glibc et les machines ARM doivent utiliser une compilation
-native, sans garantie de support avant validation sur ces plateformes.
+These binaries are **not static**: Alpine Linux (musl), systems
+with an old glibc and ARM machines must use a native build,
+with no support guarantee until validated on those platforms.
 
-Une fois la version publiee, ouvrir la page **Releases du depot officiel** et
-telecharger les deux fichiers dans un meme repertoire :
+Once the version is published, open the **Releases page of the official
+repository** and download both files into the same directory:
 
 ```text
 git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz
 git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
-Aucune URL publique n'est encore configuree dans ce depot local. Ne pas
-utiliser une URL de telechargement devinee ou un paquet homonyme.
+No public URL is configured yet in this local repository. Do not
+use a guessed download URL or a package with the same name.
 
-Depuis le repertoire de telechargement :
+From the download directory:
 
 ```sh
 sha256sum --check git-twin-0.3.1-x86_64-unknown-linux-gnu.tar.gz.sha256
@@ -50,29 +50,29 @@ git tui --version
 git tui doctor
 ```
 
-**Arreter si la verification SHA-256 echoue.** La somme detecte une corruption ;
-elle ne constitue pas une signature d'authenticite. Telecharger les deux
-fichiers depuis la meme release officielle via HTTPS.
-L'archive inclut le script `scripts/uninstall.sh`, la documentation, la licence du projet et les licences
-des dependances Cargo de compilation/execution sous `licenses/`.
+**Stop if the SHA-256 verification fails.** The checksum detects corruption;
+it is not a signature of authenticity. Download both
+files from the same official release over HTTPS.
+The archive includes the `scripts/uninstall.sh` script, the documentation, the project license and the licenses
+of the Cargo build/runtime dependencies under `licenses/`.
 
-Rendre l'ajout au `PATH` permanent dans le fichier de demarrage de votre shell
-(`~/.profile` ou `~/.bashrc` pour Bash selon la session, `~/.zshrc` pour Zsh) :
+Make the `PATH` addition permanent in your shell's startup file
+(`~/.profile` or `~/.bashrc` for Bash depending on the session, `~/.zshrc` for Zsh):
 
 ```sh
 export PATH="$HOME/bin:$PATH"
 ```
 
-Ouvrir ensuite un nouveau terminal. Aucun `sudo` n'est necessaire pour cette
-installation. Ne pas melanger cette methode avec une installation Cargo.
+Then open a new terminal. No `sudo` is needed for this
+installation. Do not mix this method with a Cargo installation.
 
-## 2. Compiler et installer depuis les sources
+## 2. Build and install from source
 
-Necessaires : Git, un compilateur/linker C, Rust et Cargo geres par `rustup`.
-Python n'est necessaire que pour fabriquer une archive de distribution,
-pas pour compiler ou executer l'application.
+Required: Git, a C compiler/linker, Rust and Cargo managed by `rustup`.
+Python is only needed to build a distribution archive,
+not to compile or run the application.
 
-Installer les outils systeme avec le gestionnaire de votre distribution :
+Install the system tools with your distribution's package manager:
 
 ```sh
 # Debian / Ubuntu
@@ -86,8 +86,8 @@ sudo dnf install gcc git curl ca-certificates
 sudo pacman -S --needed base-devel git curl ca-certificates
 ```
 
-Installer Rust selon <https://rustup.rs/>. Pour examiner le script avant
-execution :
+Install Rust following <https://rustup.rs/>. To inspect the script before
+running it:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
@@ -96,10 +96,10 @@ sh rustup-init.sh
 . "$HOME/.cargo/env"
 ```
 
-Recuperer les sources du tag `v0.3.1` depuis la release officielle (archive
-source GitHub ou clone du depot), puis ouvrir le repertoire contenant
-`Cargo.toml`. Ne pas copier uniquement `src/` : conserver `Cargo.lock` et
-`rust-toolchain.toml`. Depuis ce repertoire :
+Get the sources of the `v0.3.1` tag from the official release (GitHub
+source archive or repository clone), then open the directory containing
+`Cargo.toml`. Do not copy only `src/`: keep `Cargo.lock` and
+`rust-toolchain.toml`. From that directory:
 
 ```sh
 rustc --version
@@ -109,38 +109,38 @@ gitt --version
 git tui doctor
 ```
 
-`rustup` selectionne et installe automatiquement Rust **1.93.1** avec rustfmt
-et Clippy. Pas de nightly. Le premier telechargement de la toolchain et des
-dependances necessite le reseau ; `--locked` conserve les versions de
-`Cargo.lock`. Ne jamais lancer Cargo avec `sudo`.
+`rustup` automatically selects and installs Rust **1.93.1** with rustfmt
+and Clippy. No nightly. The first download of the toolchain and of the
+dependencies requires network access; `--locked` keeps the versions in
+`Cargo.lock`. Never run Cargo with `sudo`.
 
-L'option `--root "$HOME"` installe les deux commandes dans `~/bin/gitt` et
-`~/bin/git-tui` : Cargo ajoute lui-meme le sous-repertoire `bin` a la racine.
-Elle ne deplace ni Rust ni son cache de dependances. Cargo conserve ses
-metadonnees d'installation dans `~/.crates.toml` et `~/.crates2.json` ;
-utiliser la meme option `--root "$HOME"` pour mettre a jour ou desinstaller.
-Conserver l'ajout de `~/bin` au `PATH` dans la configuration du shell, comme
-indique en section 1.
-Les builds Cargo install sont optimises en mode release par defaut.
-`cargo install git-twin` depuis crates.io n'est pas propose :
-`publish = false` est volontaire tant que cette distribution n'est pas decidee.
+The `--root "$HOME"` option installs both commands to `~/bin/gitt` and
+`~/bin/git-tui`: Cargo itself appends the `bin` subdirectory to the root.
+It moves neither Rust nor its dependency cache. Cargo keeps its installation
+metadata in `~/.crates.toml` and `~/.crates2.json`;
+use the same `--root "$HOME"` option to update or uninstall.
+Keep the `~/bin` addition to `PATH` in your shell configuration, as
+described in section 1.
+Cargo install builds are optimized in release mode by default.
+`cargo install git-twin` from crates.io is not offered:
+`publish = false` is intentional until this distribution is decided.
 
-Pour compiler sans installer :
+To build without installing:
 
 ```sh
 cargo build --locked --release --bins
 ./target/release/gitt --version
 ./target/release/git-tui doctor
-./target/release/gitt --repo /chemin/vers/depot --read-only
+./target/release/gitt --repo /path/to/repo --read-only
 ```
 
-## 3. Mise a jour et desinstallation
+## 3. Update and uninstall
 
-Pour une archive : telecharger la nouvelle version et sa somme, verifier,
-puis remplacer **les deux** executables avec la procedure de la section 1.
-Fermer l'application avant remplacement.
+For an archive: download the new version and its checksum, verify,
+then replace **both** executables using the procedure in section 1.
+Close the application before replacing.
 
-Pour une installation Cargo : recuperer les sources du nouveau tag, puis :
+For a Cargo installation: get the sources of the new tag, then:
 
 ```sh
 cargo install --path . --locked --root "$HOME" --force
@@ -148,58 +148,58 @@ gitt --version
 git tui --version
 ```
 
-Verifier la copie effectivement utilisee avec `command -v gitt` et
-`command -v git-tui`. Un alias Git `tui` peut masquer la sous-commande :
-inspecter `git config --get alias.tui` et lancer `git-tui` directement si besoin.
+Check which copy is actually used with `command -v gitt` and
+`command -v git-tui`. A Git alias `tui` can shadow the subcommand:
+inspect `git config --get alias.tui` and run `git-tui` directly if needed.
 
-Fermer l'application, puis lancer le script depuis la racine des sources ou
-de l'archive extraite, selon la methode d'installation :
+Close the application, then run the script from the source root or
+the extracted archive, depending on the installation method:
 
 ```sh
-# Installation Cargo uniquement
+# Cargo installation only
 sh scripts/uninstall.sh --cargo
 
-# Installation manuelle dans ~/bin uniquement
+# Manual installation in ~/bin only
 sh scripts/uninstall.sh
 ```
 
-Sans option, le script supprime uniquement `~/bin/gitt` et `~/bin/git-tui`
-(y compris les liens symboliques, sans supprimer leur cible). Une commande
-deja absente est signalee sans erreur ; un repertoire a sa place est refuse.
-Utiliser **`--cargo` pour une installation geree par Cargo** : cette option
-execute `cargo uninstall --root "$HOME" git-twin`, afin de mettre aussi a jour
-ses metadonnees. Si Cargo est absent ou echoue, le script signale l'erreur sans
-basculer vers une suppression manuelle. Ne pas utiliser `sudo`.
-`sh scripts/uninstall.sh --help` affiche l'aide.
+Without options, the script removes only `~/bin/gitt` and `~/bin/git-tui`
+(including symbolic links, without removing their target). A command
+that is already absent is reported without error; a directory in its place is refused.
+Use **`--cargo` for a Cargo-managed installation**: this option
+runs `cargo uninstall --root "$HOME" git-twin`, so that its metadata
+is also updated. If Cargo is missing or fails, the script reports the error without
+falling back to manual removal. Do not use `sudo`.
+`sh scripts/uninstall.sh --help` displays the help.
 
-La configuration et les brouillons sont conserves :
+Configuration and drafts are kept:
 
-| Contenu | Chemin par defaut | Variable XDG |
+| Content | Default path | XDG variable |
 | --- | --- | --- |
 | Preferences | `~/.config/git-twin` | `XDG_CONFIG_HOME` |
-| Etat et brouillons | `~/.local/state/git-twin` | `XDG_STATE_HOME` |
+| State and drafts | `~/.local/state/git-twin` | `XDG_STATE_HOME` |
 | Cache | `~/.cache/git-twin` | `XDG_CACHE_HOME` |
 
-Avec une variable XDG absolue non vide, le sous-repertoire `git-twin` est
-utilise sous cette variable. Ne supprimer ces donnees que volontairement,
-apres avoir recupere les brouillons utiles. Aucun depot Git n'est a supprimer.
+With a non-empty absolute XDG variable, the `git-twin` subdirectory is
+used under that variable. Delete this data only deliberately,
+after recovering any useful drafts. No Git repository needs to be deleted.
 
-## 4. Preparer une release (maintenance)
+## 4. Prepare a release (maintenance)
 
-Le workflow `.github/workflows/ci.yml` execute le formatage, Clippy strict,
-les tests unitaires/integration/PTY, puis construit une archive et installe
-les deux commandes sur Ubuntu 22.04 et 24.04. Les pull requests ont uniquement
-des permissions de lecture sur le depot.
+The `.github/workflows/ci.yml` workflow runs formatting, strict Clippy,
+unit/integration/PTY tests, then builds an archive and installs
+both commands on Ubuntu 22.04 and 24.04. Pull requests only have
+read permissions on the repository.
 
-Avant de creer un tag :
+Before creating a tag:
 
-1. Mettre a jour la version dans `Cargo.toml` et `Cargo.lock`, les exemples
-   d'installation et `CHANGELOG.md` (date, changements et limites).
-2. Executer les controles ci-dessous, revoir les licences et essayer
-   l'interface installee sur un depot jetable.
-3. Apres configuration du depot GitHub officiel et validation de la CI,
-   pousser le commit puis un tag annote `v0.3.1` correspondant exactement a la
-   version Cargo. Ne jamais deplacer un tag deja publie.
+1. Update the version in `Cargo.toml` and `Cargo.lock`, the installation
+   examples and `CHANGELOG.md` (date, changes and limitations).
+2. Run the checks below, review the licenses and try
+   the installed interface on a throwaway repository.
+3. After configuring the official GitHub repository and validating the CI,
+   push the commit then an annotated tag `v0.3.1` matching the Cargo
+   version exactly. Never move a tag that has already been published.
 
 ```sh
 cargo fmt --all -- --check
@@ -208,44 +208,44 @@ cargo test --locked
 python3 scripts/package-release.py --tag v0.3.1
 ```
 
-La fabrication de l'archive demande Python >= 3.8 (bibliotheque standard
-uniquement), Linux x86_64 et la toolchain epinglee. Le script compile avec
-`--locked --release --target x86_64-unknown-linux-gnu`, verifie les versions
-des deux binaires, collecte les licences des dependances actives hors
-dependances de test et produit l'archive et sa somme sous `target/dist/`
-(ou sous le repertoire cible personnalise de Cargo).
-Une licence absente ou un tag incoherent fait echouer la fabrication.
-Une archive construite sur une distribution plus recente peut exiger une
-glibc plus recente : **distribuer l'archive de la CI Ubuntu 22.04**, pas un
-binaire local d'origine non controlee.
+Building the archive requires Python >= 3.8 (standard library
+only), Linux x86_64 and the pinned toolchain. The script builds with
+`--locked --release --target x86_64-unknown-linux-gnu`, checks the versions
+of both binaries, collects the licenses of the active dependencies excluding
+test dependencies and produces the archive and its checksum under `target/dist/`
+(or under Cargo's custom target directory).
+A missing license or an inconsistent tag makes the build fail.
+An archive built on a more recent distribution may require a more recent
+glibc: **distribute the archive from the Ubuntu 22.04 CI**, not a local
+binary of uncontrolled origin.
 
-Un push de tag `v*` declenche `.github/workflows/release.yml`, qui rejoue
-toute la CI. Apres succes, il cree une **release en brouillon**, jamais une
-publication automatique, contenant les binaires, SHA-256 et notes de version.
-Le mainteneur doit revoir le brouillon, les limites et les liens avant de
-cliquer sur **Publish release**. Une relance avec un brouillon deja cree
-echoue plutot que de remplacer silencieusement des fichiers existants.
-Les archives de sources sont fournies par GitHub a partir du tag.
+A `v*` tag push triggers `.github/workflows/release.yml`, which replays
+the whole CI. On success, it creates a **draft release**, never an automatic
+publication, containing the binaries, SHA-256 and release notes.
+The maintainer must review the draft, the limitations and the links before
+clicking **Publish release**. A re-run with a draft already created
+fails rather than silently replacing existing files.
+Source archives are provided by GitHub from the tag.
 
-## 5. Depannage
+## 5. Troubleshooting
 
-| Probleme | Verification / resolution |
+| Problem | Check / resolution |
 | --- | --- |
-| `cargo` introuvable | Charger `. "$HOME/.cargo/env"` et verifier `PATH` |
-| Linker `cc` absent | Installer le compilateur/linker systeme |
-| `GLIBC_x.y not found` | Utiliser une distribution compatible ou compiler depuis les sources ; ne pas remplacer manuellement la glibc systeme |
-| `Exec format error` | Verifier `uname -m` : l'archive est pour x86_64, pas ARM |
-| Echec de telechargement | Verifier reseau, proxy et certificats ; ne pas desactiver TLS |
-| Lockfile incompatible | Utiliser la toolchain fixee et les sources completes ; ne pas effacer `Cargo.lock` |
-| Glyphes incorrects | Utiliser un terminal UTF-8 ou `--icons ascii` ; les Nerd Fonts sont optionnelles |
-| Souris indisponible | Tester hors tmux, verifier sa configuration ou utiliser `--no-mouse` |
-| Mauvais binaire lance | Comparer `command -v gitt`, `command -v git-tui` et leurs `--version` |
-| `git: 'tui' is not a git command` | Ajouter le repertoire contenant `git-tui` au `PATH` |
-| `git tui --help` cherche une page man | Git intercepte `--help` ; utiliser `git tui -h` ou `git-tui --help` (aucune page man n'est fournie) |
-| Terminal mal restaure | Apres sortie du processus, executer `stty sane` ou `reset`, puis signaler le bug |
-| Git < 2.25 | Mettre a jour Git ; le minimum est verifie au demarrage |
+| `cargo` not found | Load `. "$HOME/.cargo/env"` and check `PATH` |
+| Linker `cc` missing | Install the system compiler/linker |
+| `GLIBC_x.y not found` | Use a compatible distribution or build from source; do not manually replace the system glibc |
+| `Exec format error` | Check `uname -m`: the archive is for x86_64, not ARM |
+| Download failure | Check network, proxy and certificates; do not disable TLS |
+| Incompatible lockfile | Use the pinned toolchain and the complete sources; do not delete `Cargo.lock` |
+| Incorrect glyphs | Use a UTF-8 terminal or `--icons ascii`; Nerd Fonts are optional |
+| Mouse unavailable | Test outside tmux, check its configuration or use `--no-mouse` |
+| Wrong binary launched | Compare `command -v gitt`, `command -v git-tui` and their `--version` |
+| `git: 'tui' is not a git command` | Add the directory containing `git-tui` to `PATH` |
+| `git tui --help` looks for a man page | Git intercepts `--help`; use `git tui -h` or `git-tui --help` (no man page is provided) |
+| Terminal badly restored | After the process exits, run `stty sane` or `reset`, then report the bug |
+| Git < 2.25 | Update Git; the minimum is checked at startup |
 
-Pour signaler un probleme, joindre la version de Git Twin, la distribution,
-l'architecture, le terminal et la sortie de `gitt doctor`, apres avoir retire
-les chemins ou informations sensibles. `doctor` fonctionne hors depot,
-sans terminal interactif et sans appel reseau.
+To report a problem, attach the Git Twin version, the distribution,
+the architecture, the terminal and the output of `gitt doctor`, after removing
+sensitive paths or information. `doctor` works outside a repository,
+without an interactive terminal and without any network call.
