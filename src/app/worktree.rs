@@ -1197,6 +1197,7 @@ impl App {
             }
             A::Paste => {
                 let c = self.clipboard.clone();
+                self.wt.filter_focus = None;
                 self.wt.focus = WFocus::Message;
                 self.wt.message.insert_str(&c);
             }

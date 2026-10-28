@@ -2340,6 +2340,11 @@ fn worktree_filters_are_independent_and_survive_rescan() {
     let screen = render(&mut app, 79, 24);
     assert!(screen.contains("Filter:"));
     assert!(!screen.contains("other.txt"));
+    app.clipboard = "Draft".into();
+    app.dispatch(Action::Paste);
+    app.on_key(KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE));
+    assert_eq!(app.wt.message.text(), "Draft!");
+    assert_eq!(app.wt.filter_unstaged.text, "HEL*.txt");
 }
 
 #[test]
