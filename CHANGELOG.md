@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.0.1 — 2026-10-28
+
+### Maintenance
+
+- Bump the project version and align installation documentation.
+- No application behavior changes; proposed 1.1 improvements are not included.
+
 ## 1.0.0 — 2026-10-16
 
 First public release of Git Twin. The 0.x entries below describe internal

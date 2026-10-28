@@ -1,8 +1,9 @@
 # Git Twin — development status
 
-Last update: 2026-10-16, first public release preparation.
-Spec: `design.md`. Version 1.0.0 is prepared, not published; full parity is
-not a release claim.
+Last update: 2026-10-28, version bumped to 1.0.1 without behavior changes.
+Spec: `design.md`. The proposed 1.1 improvements are not implemented.
+Release preparation status below is retained from 2026-10-16; full parity
+is not a release claim.
 
 ## TL;DR
 
@@ -49,7 +50,7 @@ PTYs and terminals that do not answer terminal queries.
   installs and Cargo installs (`--cargo`), preserving user data. Included in
   release archives and exercised by isolated tests and archive-install CI.
 - Linux x86_64 GNU packaging with both launchers, docs, dependency licenses and
-  SHA-256. `scripts/package-release.py --tag v1.0.0` rejects version mismatches
+  SHA-256. `scripts/package-release.py --tag v1.0.1` rejects version mismatches
   and extracts the version-specific notes for the draft release.
 - CI for formatting, strict Clippy, tests, archive building on Ubuntu 22.04,
   and installation on Ubuntu 22.04/24.04. Tag pushes create a draft only after
