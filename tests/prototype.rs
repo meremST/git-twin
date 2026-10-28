@@ -2595,6 +2595,23 @@ fn compact_reference_counts_and_category_filters_do_not_change_history() {
 }
 
 #[test]
+fn nerd_compact_refs_render_icon_then_count() {
+    let dir = fixture();
+    git(dir.path(), &["tag", "v1"]);
+    git(dir.path(), &["tag", "v2"]);
+    let mut app = app(dir.path(), false);
+    app.cfg.icons = IconMode::Nerd;
+    app.theme = git_twin::ui::theme::Theme::new(&app.cfg);
+    app.start();
+    settle(&mut app);
+    app.hist.compact_refs = true;
+    let screen = render(&mut app, 200, 50);
+    assert!(screen.contains("\u{f02b}2"), "{screen}");
+    assert!(!screen.contains("\u{f02b}:2"), "{screen}");
+    assert!(!screen.contains("[\u{f02b}"), "{screen}");
+}
+
+#[test]
 fn worktree_filters_limit_selection_and_stage_operations() {
     let dir = fixture();
     fs::write(dir.path().join("other.txt"), "other\n").unwrap();

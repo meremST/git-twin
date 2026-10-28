@@ -552,14 +552,14 @@ fn reference_labels(app: &App, oid: &Oid, row: usize, style: Style) -> Vec<Refer
         if count == 0 {
             continue;
         }
-        let marker = if app.theme.icons.nerd {
-            app.theme.icons.reference(kind)
+        let text = if app.theme.icons.nerd {
+            format!("{}{count} ", app.theme.icons.reference(kind))
         } else {
-            letter
+            format!("[{letter}:{count}] ")
         };
         labels.push(ReferenceLabel {
             text: Line::styled(
-                format!("[{marker}:{count}] "),
+                text,
                 app.theme
                     .commit_tint(style, color)
                     .add_modifier(Modifier::BOLD),
