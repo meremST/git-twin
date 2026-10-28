@@ -20,6 +20,13 @@
 - Dialogs use Tab, Shift-Tab, Enter and Esc. Very long
   forms scroll with the wheel or Alt-PageUp/PageDown/Home/End without
   moving focus. Labels wrap and buttons remain reachable.
+- The F2 reference browser is non-modal but fixed in place; only uncovered
+  History elements can be clicked. Other dialogs remain modal. Switching to
+  Worktree closes the reference browser. Reference category visibility and
+  Worktree path filters are session-only; the existing Compact refs preference
+  is still saved.
+- Worktree filters only change file-list visibility, selection and file
+  actions. They do not narrow commits: committing always uses the entire index.
 - Ctrl-I/Tab and Ctrl-M/Enter cannot be told apart on all terminals.
   The enhanced keyboard protocol is enabled if the terminal advertises it.
   Buttons and menus are the alternatives; Alt-Enter commits.

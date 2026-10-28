@@ -12,9 +12,9 @@ cargo test --locked
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-As of October 16, 2026: **89 unit tests** (library, spread across `src/`)
-and **77 integration tests**: 54 in `tests/prototype.rs`, 1 in
-`tests/file_browser.rs`, and 22 in `tests/operations.rs`.
+As of October 28, 2026: **89 unit tests** (library, spread across `src/`)
+and **86 integration tests**: 62 in `tests/prototype.rs`, 1 in
+`tests/file_browser.rs`, and 23 in `tests/operations.rs`.
 The integration tests create real temporary repositories and launch
 pseudo-terminals.
 
@@ -92,6 +92,18 @@ The scenarios need no network access:
   Patch highlighting and list visibility follow scrolling, line navigation,
   clicks, dragging and search; diff rebuilds remain synchronized and Tree
   selection is preserved.
+- `tag_annotations_preserve_lines_without_terminal_controls`: annotated and
+  lightweight tags, CRLF, blank lines, tabs, escaped control characters and
+  invalid UTF-8 bytes.
+- `worktree_filters_*`: independent path filters, rescans, view changes,
+  narrow layouts, hidden selections, filtered stage/unstage actions and mouse
+  targets, clearing filters, and whole-index commits despite a staged filter.
+- `reference_window_*`: background commit selection, keyboard focus, scrolling,
+  context-menu actions, filter clearing, modal isolation and view switching.
+- `crowded_references_keep_subjects_visible_and_offer_a_scoped_browser` and
+  `compact_reference_counts_and_category_filters_do_not_change_history`:
+  crowded labels in all icon modes at 79/120/200 columns, scoped reference
+  browsing, tag annotations, list refresh, counts and display-only filters.
 
 ## V1 operation regression scenarios (`tests/operations.rs`)
 
@@ -141,12 +153,7 @@ dedicated integration scenarios are missing for:
 - remote authentication and transport failures, complex user hooks and
   external merge tools;
 - every possible concurrent modification or crash (the scenarios above cover
-  specific stale patches, a moved HEAD, an existing lock and interruption);
-- the new tag click flow (`show_tag_info` / `on_tag_info`,
-  `src/app/history.rs`) currently has only manual verification and
-  coverage from the existing unit tests on the rest of the module; a
-  dedicated integration test (annotated and lightweight tag, on a temporary
-  repository) remains to be written.
+  specific stale patches, a moved HEAD, an existing lock and interruption).
 
 ## What cannot be tested here
 

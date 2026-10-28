@@ -86,6 +86,32 @@ annotated) pointing at the selected commit. It is hidden if that commit has no
 tag. **Follows** and **Precedes** separately indicate the neighboring tags in
 the history.
 
+History keeps space for the commit subject even when many references point to
+one commit. HEAD's branch name comes first; **`+N`** opens a searchable list of
+that commit's references. **Compact refs** keeps HEAD named and groups the
+remaining references into counted markers, such as `[B:2] [T:12] [R:5]`.
+Click a marker to expand it. **View > Reference labels** hides categories for
+the current session without filtering commits or changing the graph; HEAD
+remains visible.
+
+**F2** opens a fixed, non-modal reference browser. Click visible History
+elements to select commits, scroll or open context menus while it stays open.
+Click inside the browser to resume filtering; F2 focuses the global reference
+list again. Escape clears a nonempty browser filter first, then closes the
+browser; an open context menu closes first. Confirmations remain modal.
+Clicking a tag shows its annotation with preserved paragraphs and indentation.
+
+In Worktree, each file list has its own **Filter** field. Click it, or press
+**`/` / `Ctrl-F`** while that list is focused. Matching is case-insensitive:
+plain text searches the path, `*` matches any sequence and `?` one character.
+**Enter / Esc** returns to the list without clearing the filter;
+**Ctrl-U** while editing, or **`[x]`**, clears it. Active filters show
+visible/total counts and survive rescans and view changes during the session.
+Hidden files are removed from selection; **Ctrl-A** selects visible files,
+and **Stage Visible** / Ctrl-I only stages visible changes.
+**Commit always includes the entire index**, including staged files hidden by
+the filter; the message panel displays the total staged count.
+
 | Command | Effect |
 | --- | --- |
 | `F6` | Switch between History and Worktree |

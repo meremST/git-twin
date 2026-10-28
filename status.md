@@ -1,7 +1,9 @@
 # Git Twin — development status
 
-Last update: 2026-10-28, version bumped to 1.0.1 without behavior changes.
-Spec: `design.md`. The proposed 1.1 improvements are not implemented.
+Last update: 2026-10-28, development package version 1.0.1.
+Spec: `design.md`. The proposed 1.1 improvements are implemented locally:
+multiline tag annotations, adaptive/counted reference labels, a non-modal F2
+browser and independent Worktree filters. See `CHANGELOG.md` (Unreleased).
 Release preparation status below is retained from 2026-10-16; full parity
 is not a release claim.
 
@@ -16,7 +18,7 @@ is not a release claim.
 | App interactions | `src/app/{worktree,forms,menu,keys,mouse}.rs` | Implemented; deterministic mutation/failure scenarios added, real external environments remain to be validated |
 | UI | `src/ui/{mod,theme,hit,overlays}.rs` | Both views, graph, diffs, message editor, menus, dialogs and hit zones |
 | Binaries | `src/main.rs`, `src/bin/git-tui.rs`, shared `src/cli.rs` | `gitt` defaults to History; `git tui` defaults to Worktree; About dialogs updated |
-| Integration / PTY tests | `tests/{prototype,file_browser,operations}.rs` | 77 scenarios including Patch/diff synchronization, partial operations, conflicts, recovery and terminal handoffs |
+| Integration / PTY tests | `tests/{prototype,file_browser,operations}.rs` | 86 scenarios including tag rendering, reference browsing, Worktree filters, Patch/diff synchronization, partial operations, conflicts, recovery and terminal handoffs |
 | Docs | README, limitations, parity inventory, architecture, build/install and testing guides | ✅ |
 | CI | `.github/workflows/{ci,release}.yml` | Strict checks, Linux archive/install jobs and draft release; new scenarios await a hosted run after push |
 | Repo | `https://github.com/meremST/git-twin` | Private during preparation; 0.x drafts exist, no public release yet |

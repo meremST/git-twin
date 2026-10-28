@@ -2,12 +2,33 @@
 
 ## Unreleased
 
+Improvements planned for 1.1; the development package version remains 1.0.1.
+
+### New features
+
+- Independent, case-insensitive path filters in the staged and unstaged
+  Worktree lists, with wildcard matching, visible/total counts and clear buttons.
+  Selection and staging actions operate on visible files; commits still include
+  the entire index.
+- History reference labels reserve space for commit subjects, prioritize HEAD
+  and show an overflow `+N` browser scoped to the commit. Compact mode counts
+  references by category; View > Reference labels hides categories without
+  changing the graph, while keeping HEAD identifiable.
+- The fixed F2 reference browser leaves visible History elements interactive,
+  including selection, scrolling and context menus. Click to move keyboard
+  focus, use F2 to return to the global reference browser, and keep confirmation
+  dialogs modal. Reference lists refresh after ref changes.
+
+### Fixes
+
+- Preserve annotated-tag line breaks, blank lines and tab indentation without
+  allowing terminal control sequences or losing escaped invalid UTF-8 bytes.
+
 ## 1.0.1 — 2026-10-28
 
 ### Maintenance
 
 - Bump the project version and align installation documentation.
-- No application behavior changes; proposed 1.1 improvements are not included.
 
 ## 1.0.0 — 2026-10-16
 
