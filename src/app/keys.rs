@@ -41,7 +41,7 @@ impl App {
                 return;
             }
             if k.code == C::F(2) {
-                self.dialogs[0].background_focus = false;
+                self.open_list_refs();
                 return;
             }
             if k.code == C::Esc && self.dialogs[0].background_focus {

@@ -370,7 +370,7 @@ pub enum FormKind {
     ResetHere(Oid),
     MakePatch(Oid, Oid),
     WriteCommit(Oid),
-    ListRefs,
+    ListRefs(Option<Oid>),
     CommandPalette,
     GuiCreateBranch,
     GuiCheckout,
@@ -445,7 +445,7 @@ impl Dialog {
     }
 
     pub fn is_modeless(&self) -> bool {
-        matches!(self.kind, Kind::Form(FormKind::ListRefs))
+        matches!(self.kind, Kind::Form(FormKind::ListRefs(_)))
     }
 
     /// Read-only, syntax-highlighted file viewer with an "Open in editor" button.

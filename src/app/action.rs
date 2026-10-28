@@ -4,6 +4,7 @@
 use crate::app::diffview::Show;
 use crate::config::ViewKind;
 use crate::domain::oid::Oid;
+use crate::domain::refs::RefKind;
 use crate::domain::textmatch::MatchKind;
 use crate::git::ops::ResetMode;
 use crate::git::read::{FindField, FindType, WordMode};
@@ -33,6 +34,9 @@ pub enum Action {
     Reload,
     RereadRefs,
     ListRefs,
+    ListCommitRefs(Oid),
+    ShowTagInfo(Vec<u8>),
+    ToggleRefKind(RefKind),
     StartGitGui,
     Preferences,
     NewView,

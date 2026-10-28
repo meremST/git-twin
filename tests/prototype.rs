@@ -2328,6 +2328,8 @@ fn worktree_filters_are_independent_and_survive_rescan() {
     assert!(screen.contains("(no matches)"));
     app.rescan();
     settle(&mut app);
+    app.switch_view(ViewKind::History);
+    app.switch_view(ViewKind::Worktree);
     assert_eq!(app.wt.list(FileList::Unstaged).len(), 1);
     assert!(app.wt.list(FileList::Staged).is_empty());
     app.on_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
@@ -2362,6 +2364,7 @@ fn reference_window_keeps_history_interactive_and_routes_context_menus() {
     assert!(app.refs_window_open());
     assert!(app.dialogs[0].background_focus);
     app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    settle(&mut app);
     assert_eq!(app.hist.sel, Some(row + 1));
     let before = app.hist.top;
     mouse(&mut app, point, MouseEventKind::ScrollDown);
@@ -2432,6 +2435,120 @@ fn reference_window_does_not_make_other_dialogs_modeless() {
 }
 
 #[test]
+fn crowded_references_keep_subjects_visible_and_offer_a_scoped_browser() {
+    let dir = fixture();
+    git(dir.path(), &["tag", "previous"]);
+    git(
+        dir.path(),
+        &["commit", "--allow-empty", "-qm", "Crowded references"],
+    );
+    for n in 0..30 {
+        git(
+            dir.path(),
+            &[
+                "tag",
+                "-a",
+                &format!("release-{n:02}"),
+                "-m",
+                "Release\n\nDetails",
+            ],
+        );
+    }
+    git(dir.path(), &["branch", "feature-with-a-long-name"]);
+    git(
+        dir.path(),
+        &["update-ref", "refs/remotes/origin/main", "HEAD"],
+    );
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    let oid = app.refs.head.oid().unwrap();
+    let count = app.refs.for_commit(&oid).count();
+    for icons in [IconMode::Ascii, IconMode::Unicode, IconMode::Nerd] {
+        app.cfg.icons = icons;
+        app.theme = git_twin::ui::theme::Theme::new(&app.cfg);
+        for width in [79, 120, 200] {
+            let screen = render(&mut app, width, 40);
+            assert!(
+                screen.contains("Crowded references"),
+                "{icons:?}, {width}\n{screen}"
+            );
+            assert!(
+                app.hits
+                    .zones
+                    .iter()
+                    .any(|(_, h)| *h == Hit::Button(Action::ListCommitRefs(oid)))
+            );
+        }
+    }
+    let point = visible_point(&app, &Hit::Button(Action::ListCommitRefs(oid)));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+    assert!(matches!(app.dialogs[0].kind, Kind::Form(FormKind::ListRefs(Some(o))) if o == oid));
+    assert!(
+        matches!(&app.dialogs[0].fields[0], Field::List { values, .. } if values.len() == count && !values.contains(&b"refs/tags/previous".to_vec()))
+    );
+    app.paste("release-00");
+    render(&mut app, 120, 40);
+    let point = visible_point(&app, &Hit::DlgListRow(0, 0));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+    settle(&mut app);
+    assert_eq!(app.hist.tag_info.as_ref().unwrap().short, "release-00");
+    assert!(app.hist.diff.lines.iter().any(|l| l.text == "Details"));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Right));
+    assert!(app.menu.is_some());
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    git(dir.path(), &["tag", "-d", "release-00"]);
+    app.dispatch(Action::RereadRefs);
+    settle(&mut app);
+    assert!(
+        matches!(&app.dialogs[0].fields[0], Field::List { values, search: Some(s), .. } if values.is_empty() && s.input.text == "release-00")
+    );
+    app.on_key(KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE));
+    assert!(matches!(
+        app.dialogs[0].kind,
+        Kind::Form(FormKind::ListRefs(None))
+    ));
+}
+
+#[test]
+fn compact_reference_counts_and_category_filters_do_not_change_history() {
+    use git_twin::domain::refs::RefKind;
+    let dir = fixture();
+    for n in 0..12 {
+        git(dir.path(), &["tag", &format!("v{n}")]);
+    }
+    git(dir.path(), &["branch", "feature"]);
+    git(
+        dir.path(),
+        &["update-ref", "refs/remotes/origin/main", "HEAD"],
+    );
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.hist.compact_refs = true;
+    let rows: Vec<_> = app.hist.commits.iter().map(|c| c.oid).collect();
+    let graph = app.hist.graph.clone();
+    let selection = app.hist.sel;
+    let screen = render(&mut app, 200, 50);
+    assert!(screen.contains("[main] [B:1] [T:12] [R:1]"), "{screen}");
+    app.dispatch(Action::ToggleRefKind(RefKind::Tag));
+    app.dispatch(Action::ToggleRefKind(RefKind::LocalBranch));
+    let screen = render(&mut app, 200, 50);
+    assert!(!screen.contains("[T:12]"));
+    assert!(!screen.contains("[B:1]"));
+    assert!(screen.contains("[main]"), "HEAD remains identifiable");
+    assert_eq!(
+        rows,
+        app.hist.commits.iter().map(|c| c.oid).collect::<Vec<_>>()
+    );
+    assert_eq!(graph, app.hist.graph);
+    assert_eq!(selection, app.hist.sel);
+    let oid = app.refs.head.oid().unwrap();
+    app.dispatch(Action::ListCommitRefs(oid));
+    assert!(matches!(&app.dialogs[0].fields[0], Field::List { values, .. } if values.len() == 15));
+}
+
+#[test]
 fn worktree_filters_limit_selection_and_stage_operations() {
     let dir = fixture();
     fs::write(dir.path().join("other.txt"), "other\n").unwrap();
@@ -2468,6 +2585,21 @@ fn worktree_filters_limit_selection_and_stage_operations() {
     settle(&mut app);
     assert!(git(dir.path(), &["diff", "--cached", "--name-only"]).contains("other.txt"));
     assert_eq!(git(dir.path(), &["diff", "--name-only"]), "hello.txt\n");
+    render(&mut app, 120, 35);
+    let point = visible_point(&app, &Hit::WtFile(FileList::Staged, 0, true));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+    settle(&mut app);
+    assert_eq!(
+        git(dir.path(), &["diff", "--cached", "--name-only"]),
+        "staged.txt\n"
+    );
+    render(&mut app, 120, 35);
+    let point = visible_point(
+        &app,
+        &Hit::Button(Action::ClearFileFilter(FileList::Staged)),
+    );
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+    assert_eq!(app.wt.list(FileList::Staged)[0].path, b"staged.txt");
 }
 
 #[test]
@@ -2518,6 +2650,11 @@ fn worktree_filters_do_not_limit_the_committed_index() {
 #[test]
 fn tag_annotations_preserve_lines_without_terminal_controls() {
     let dir = fixture();
+    fs::write(
+        dir.path().join(".git/annotation"),
+        b"Release\r\n\r\nDetails\n\tIndented\n\x1b[31mNot terminal markup\nInvalid: \xff\n",
+    )
+    .unwrap();
     git(
         dir.path(),
         &[
@@ -2525,8 +2662,8 @@ fn tag_annotations_preserve_lines_without_terminal_controls() {
             "-a",
             "multiline",
             "--cleanup=verbatim",
-            "-m",
-            "Release\r\n\r\nDetails\n\tIndented\n\u{1b}[31mNot terminal markup\n",
+            "-F",
+            ".git/annotation",
         ],
     );
     git(dir.path(), &["tag", "lightweight"]);
@@ -2546,6 +2683,7 @@ fn tag_annotations_preserve_lines_without_terminal_controls() {
     assert!(lines.starts_with(&["Release", "", "Details", "        Indented"]));
     assert!(lines[4].contains("Not terminal markup"));
     assert!(!lines[4].contains('\u{1b}'));
+    assert_eq!(lines[5], "Invalid: \\xFF");
     app.show_tag_info(b"refs/tags/lightweight".to_vec());
     settle(&mut app);
     assert!(

@@ -204,10 +204,10 @@ impl WorktreeState {
             .filter(|f| search_match(self.filter_staged.text.trim(), &f.display))
             .cloned()
             .collect();
-        self.sel_unstaged
-            .retain(|p| self.filtered_unstaged.iter().any(|f| f.path == *p));
-        self.sel_staged
-            .retain(|p| self.filtered_staged.iter().any(|f| f.path == *p));
+        let visible: HashSet<_> = self.filtered_unstaged.iter().map(|f| &f.path).collect();
+        self.sel_unstaged.retain(|p| visible.contains(p));
+        let visible: HashSet<_> = self.filtered_staged.iter().map(|f| &f.path).collect();
+        self.sel_staged.retain(|p| visible.contains(p));
         if let Some((l, p)) = &self.current
             && self.index_of(*l, p).is_none()
         {

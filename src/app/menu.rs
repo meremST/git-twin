@@ -415,6 +415,26 @@ impl App {
                     Action::ToggleCompactRefs,
                     h.compact_refs,
                 ));
+                v.push(sub(
+                    "Reference labels",
+                    [
+                        (RefKind::LocalBranch, "Local branches (HEAD always shown)"),
+                        (RefKind::RemoteBranch, "Remote branches"),
+                        (RefKind::Tag, "Tags"),
+                        (RefKind::Other, "Other references"),
+                        (RefKind::Stash, "Stash"),
+                    ]
+                    .into_iter()
+                    .map(|(kind, label)| {
+                        chk(
+                            label,
+                            "",
+                            Action::ToggleRefKind(kind),
+                            !h.hidden_ref_kinds.contains(&kind),
+                        )
+                    })
+                    .collect(),
+                ));
                 v.push(e("Maximize pane", "F11", Action::ToggleMaximize));
                 v.push(en(
                     "Working tree view",
@@ -730,7 +750,13 @@ impl App {
                             Action::RemoveBranch(full.clone()),
                             ro && local && !is_head,
                         ),
-                        e("Copy branch name", "", Action::CopyRefName(full.clone())),
+                        en(
+                            "Show tag annotation",
+                            "",
+                            Action::ShowTagInfo(full.clone()),
+                            r.kind == RefKind::Tag,
+                        ),
+                        e("Copy reference name", "", Action::CopyRefName(full.clone())),
                     ],
                 )
             }

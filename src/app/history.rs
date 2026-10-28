@@ -89,10 +89,11 @@ pub struct HistoryState {
     pub files: Vec<Vec<u8>>,
     pub tree: Vec<Vec<u8>>,
     pub tree_mode: bool,
-    /// Collapse each commit's refs into one marker per kind.
+    /// Keep HEAD named and collapse other refs into counted markers by kind.
     pub compact_refs: bool,
     /// Commits whose refs were opened by a click while compact.
     pub expanded_refs: HashSet<Oid>,
+    pub hidden_ref_kinds: HashSet<crate::domain::refs::RefKind>,
     /// Commits HEAD pointed to when the session started or was last
     /// reloaded; the history keeps showing them after checkouts, like gitk.
     pub base_tips: Vec<Oid>,
@@ -175,6 +176,7 @@ impl HistoryState {
             tree_mode: false,
             compact_refs: state.compact_refs,
             expanded_refs: HashSet::new(),
+            hidden_ref_kinds: HashSet::new(),
             base_tips: Vec::new(),
             file_sel: 0,
             file_top: 0,
@@ -1006,6 +1008,7 @@ impl App {
             return;
         }
         let Some(&i) = self.hist.index.get(&r.target) else {
+            self.select_oid(r.target, false);
             return;
         };
         let oid = r.target;
@@ -1507,6 +1510,13 @@ impl App {
             }
             A::RereadRefs => self.load_refs(),
             A::ListRefs => self.open_list_refs(),
+            A::ListCommitRefs(oid) => self.open_ref_browser(Some(*oid)),
+            A::ShowTagInfo(full) => self.show_tag_info(full.clone()),
+            A::ToggleRefKind(kind) => {
+                if !self.hist.hidden_ref_kinds.remove(kind) {
+                    self.hist.hidden_ref_kinds.insert(*kind);
+                }
+            }
             A::StartGitGui => self.switch_view(ViewKind::Worktree),
             A::NewView => self.open_view_editor(None),
             A::EditView => {
@@ -2227,7 +2237,7 @@ fn keybindings_dialog() -> Dialog {
                 ("Ctrl-S / Ctrl-R", "Next / previous diff search hit"),
                 ("Ctrl-+ / Ctrl--", "More / less context"),
                 ("F5 / Shift-F5", "Update / reload"),
-                ("F2", "List references"),
+                ("F2", "Reference browser (History stays interactive)"),
                 ("F4 / Shift-F4", "Edit / create view"),
                 ("c (diff pane)", "Copy selection"),
                 ("Drag / Shift-Left/Right", "Select text (copy only)"),
@@ -2238,7 +2248,10 @@ fn keybindings_dialog() -> Dialog {
             "WORKTREE",
             &[
                 ("Ctrl-T / Ctrl-U", "Stage / unstage selected files"),
-                ("Ctrl-I", "Stage changed files"),
+                ("Ctrl-I", "Stage visible changed files"),
+                ("/ or Ctrl-F (file list)", "Edit this list's path filter"),
+                ("Ctrl-U (filter)", "Clear filter; Enter/Esc returns to list"),
+                ("Ctrl-A (file list)", "Select all visible files"),
                 ("Ctrl-J", "Revert selected changes"),
                 ("Ctrl-E / Ctrl-S", "Amend last commit / sign off"),
                 ("Ctrl-Enter / Alt-Enter", "Commit"),

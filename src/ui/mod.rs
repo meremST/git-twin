@@ -23,7 +23,12 @@ use crate::app::{
     menu,
 };
 use crate::config::ViewKind;
-use crate::domain::{graph, refs::RefKind, sanitize::sanitize};
+use crate::domain::{
+    graph,
+    oid::Oid,
+    refs::{GitRef, RefKind},
+    sanitize::sanitize,
+};
 use hit::{Hit, HitMap, PaneId, SplitId};
 use theme::Theme;
 
@@ -420,7 +425,7 @@ fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
         PaneId::Dialog => {}
     }
     if footer > 0 {
-        let buttons = worktree_buttons(&app.theme);
+        let buttons = worktree_buttons(app);
         let total_width: u16 = buttons
             .iter()
             .map(|(label, _, _)| label.width() as u16 + 3)
@@ -439,6 +444,149 @@ fn single_pane(f: &mut Frame, app: &mut App, r: Rect) {
             x += w;
         }
     }
+}
+
+struct ReferenceLabel {
+    text: Line<'static>,
+    hit: Hit,
+    count: usize,
+}
+
+fn reference_label(app: &App, reference: &GitRef, row: usize, style: Style) -> ReferenceLabel {
+    let color = if app.refs.is_head_ref(reference) {
+        app.theme.head
+    } else {
+        match reference.kind {
+            RefKind::LocalBranch => app.theme.branch,
+            RefKind::RemoteBranch => app.theme.remote,
+            RefKind::Tag => app.theme.tag,
+            _ => app.theme.meta,
+        }
+    };
+    let icons = &app.theme.icons;
+    let icon = icons.reference(reference.kind);
+    let spans = if app.theme.ref_pills() {
+        let cap = Style::default()
+            .fg(color)
+            .bg(style.bg.unwrap_or(app.theme.bg));
+        vec![
+            Span::styled(icons.pill_left, cap),
+            Span::styled(
+                format!("{icon} {}", reference.short),
+                Style::default()
+                    .fg(app.theme.bg)
+                    .bg(color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(icons.pill_right, cap),
+            Span::styled(" ", style),
+        ]
+    } else {
+        let label = if icons.nerd {
+            format!("{icon} {} ", reference.short)
+        } else {
+            format!("[{}] ", reference.short)
+        };
+        vec![Span::styled(
+            label,
+            app.theme
+                .commit_tint(style, color)
+                .add_modifier(Modifier::BOLD),
+        )]
+    };
+    ReferenceLabel {
+        text: Line::from(spans),
+        hit: Hit::RefLabel(row, reference.full.clone()),
+        count: 1,
+    }
+}
+
+fn reference_labels(app: &App, oid: &Oid, row: usize, style: Style) -> Vec<ReferenceLabel> {
+    let mut refs: Vec<_> = app
+        .refs
+        .for_commit(oid)
+        .filter(|r| app.refs.is_head_ref(r) || !app.hist.hidden_ref_kinds.contains(&r.kind))
+        .collect();
+    refs.sort_by_key(|r| {
+        (
+            !app.refs.is_head_ref(r),
+            match r.kind {
+                RefKind::LocalBranch => 0,
+                RefKind::Tag => 1,
+                RefKind::RemoteBranch => 2,
+                _ => 3,
+            },
+        )
+    });
+    let compact = app.hist.compact_refs;
+    let open = compact && app.hist.expanded_refs.contains(oid);
+    let mut labels = Vec::new();
+    if open {
+        labels.push(ReferenceLabel {
+            text: Line::styled("< ", app.theme.dimmed()),
+            hit: Hit::RefToggle(row),
+            count: 0,
+        });
+    }
+    if !compact || open {
+        labels.extend(
+            refs.into_iter()
+                .map(|r| reference_label(app, r, row, style)),
+        );
+        return labels;
+    }
+    if let Some(head) = refs.first().filter(|r| app.refs.is_head_ref(r)) {
+        labels.push(reference_label(app, head, row, style));
+    }
+    for (kind, letter, color) in [
+        (RefKind::LocalBranch, "B", app.theme.branch),
+        (RefKind::Tag, "T", app.theme.tag),
+        (RefKind::RemoteBranch, "R", app.theme.remote),
+        (RefKind::Stash, "S", app.theme.meta),
+        (RefKind::Other, "O", app.theme.meta),
+    ] {
+        let count = refs
+            .iter()
+            .filter(|r| r.kind == kind && !app.refs.is_head_ref(r))
+            .count();
+        if count == 0 {
+            continue;
+        }
+        let marker = if app.theme.icons.nerd {
+            app.theme.icons.reference(kind)
+        } else {
+            letter
+        };
+        labels.push(ReferenceLabel {
+            text: Line::styled(
+                format!("[{marker}:{count}] "),
+                app.theme
+                    .commit_tint(style, color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            hit: Hit::RefToggle(row),
+            count,
+        });
+    }
+    labels
+}
+
+fn shortened_reference(line: &Line<'_>, width: usize) -> Line<'static> {
+    let mut left = width.saturating_sub(3);
+    let mut spans = Vec::new();
+    for span in &line.spans {
+        let mut text = String::new();
+        for g in span.content.graphemes(true) {
+            if g.width() > left {
+                spans.push(Span::styled(format!("{text}..."), span.style));
+                return Line::from(spans);
+            }
+            text.push_str(g);
+            left -= g.width();
+        }
+        spans.push(Span::styled(text, span.style));
+    }
+    Line::from(spans)
 }
 
 fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
@@ -613,108 +761,55 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                 app.hits.push(zone, hit);
             }
         }
-        let compact = app.hist.compact_refs;
-        let open = compact && app.hist.expanded_refs.contains(&c.oid);
-        if compact && !open {
-            // One marker per kind present; a click opens the full labels.
-            let kinds = [
-                (RefKind::Tag, "T", app.theme.tag),
-                (RefKind::LocalBranch, "B", app.theme.branch),
-                (RefKind::RemoteBranch, "R", app.theme.remote),
-            ];
-            let mut spans = Vec::new();
-            for (kind, letter, color) in kinds {
-                let mut refs = app
-                    .refs
-                    .for_commit(&c.oid)
-                    .filter(|r| r.kind == kind)
-                    .peekable();
-                if refs.peek().is_none() {
-                    continue;
+        let labels = reference_labels(app, &c.oid, i, style);
+        let mut remaining: usize = labels.iter().map(|l| l.count).sum();
+        let available = author_x.saturating_sub(x);
+        let end = x + available
+            .saturating_sub(GRAPH_MIN_SUBJECT)
+            .min(available / 2);
+        let start = x;
+        for label in labels {
+            let after = remaining - label.count;
+            let overflow_width = if after > 0 {
+                format!("+{after} ").len() as u16
+            } else {
+                0
+            };
+            let room = end.saturating_sub(x + overflow_width);
+            if label.text.width() > usize::from(room) {
+                if label.count == 1 && x == start && room >= 6 {
+                    let zone = Rect::new(x, rr.y, room, 1);
+                    f.render_widget(
+                        Paragraph::new(shortened_reference(&label.text, usize::from(room))),
+                        zone,
+                    );
+                    app.hits
+                        .push(zone, Hit::Button(Action::ListCommitRefs(c.oid)));
+                    x += room;
+                    remaining = after;
                 }
-                let color = if refs.any(|r| app.refs.is_head_ref(r)) {
-                    app.theme.head
-                } else {
-                    color
-                };
-                let icons = &app.theme.icons;
-                let t = if icons.nerd {
-                    // The cloud glyph is drawn wider than the others and needs more room.
-                    let pad = if kind == RefKind::RemoteBranch {
-                        "  "
-                    } else {
-                        " "
-                    };
-                    format!("{}{pad}", icons.reference(kind))
-                } else {
-                    format!("[{letter}] ")
-                };
-                spans.push(Span::styled(t, tint(color).add_modifier(Modifier::BOLD)));
+                break;
             }
-            if !spans.is_empty() {
-                let label = Line::from(spans);
-                let w = label.width().min(usize::from(author_x.saturating_sub(x))) as u16;
-                let zone = Rect::new(x, rr.y, w, 1);
-                f.render_widget(Paragraph::new(label), zone);
-                app.hits.push(zone, Hit::RefToggle(i));
-                x += w;
-            }
-        } else {
-            if open {
-                let t = if app.theme.icons.ascii { "< " } else { "‹ " };
-                let zone = Rect::new(x, rr.y, 2, 1);
-                text(f, zone, t.to_string(), tint(app.theme.dim));
-                app.hits.push(zone, Hit::RefToggle(i));
-                x += 2;
-            }
-            for reference in app.refs.for_commit(&c.oid) {
-                let color = if app.refs.is_head_ref(reference) {
-                    app.theme.head
-                } else {
-                    match reference.kind {
-                        RefKind::LocalBranch => app.theme.branch,
-                        RefKind::RemoteBranch => app.theme.remote,
-                        RefKind::Tag => app.theme.tag,
-                        _ => app.theme.meta,
-                    }
-                };
-                let icons = &app.theme.icons;
-                let icon = icons.reference(reference.kind);
-                let spans = if app.theme.ref_pills() {
-                    let cap = Style::default()
-                        .fg(color)
-                        .bg(style.bg.unwrap_or(app.theme.bg));
-                    vec![
-                        Span::styled(icons.pill_left, cap),
-                        Span::styled(
-                            format!("{icon} {}", reference.short),
-                            Style::default()
-                                .fg(app.theme.bg)
-                                .bg(color)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(icons.pill_right, cap),
-                        Span::styled(" ", style),
-                    ]
-                } else if icons.nerd {
-                    vec![Span::styled(
-                        format!("{icon} {} ", reference.short),
-                        tint(color).add_modifier(Modifier::BOLD),
-                    )]
-                } else {
-                    vec![Span::styled(
-                        format!("[{}] ", reference.short),
-                        tint(color).add_modifier(Modifier::BOLD),
-                    )]
-                };
-                let label = Line::from(spans);
-                let w = label.width().min(usize::from(author_x.saturating_sub(x))) as u16;
-                let zone = Rect::new(x, rr.y, w, 1);
-                f.render_widget(Paragraph::new(label), zone);
-                app.hits
-                    .push(zone, Hit::RefLabel(i, reference.full.clone()));
-                x += w;
-            }
+            let w = label.text.width() as u16;
+            let zone = Rect::new(x, rr.y, w, 1);
+            f.render_widget(Paragraph::new(label.text), zone);
+            app.hits.push(zone, label.hit);
+            x += w;
+            remaining = after;
+        }
+        if remaining > 0 {
+            let label = format!("+{remaining} ");
+            let w = (label.len() as u16).min(end.saturating_sub(x));
+            let zone = Rect::new(x, rr.y, w, 1);
+            text(
+                f,
+                zone,
+                label,
+                tint(app.theme.meta).add_modifier(Modifier::BOLD),
+            );
+            app.hits
+                .push(zone, Hit::Button(Action::ListCommitRefs(c.oid)));
+            x += w;
         }
         let bold = app
             .hist
@@ -1114,7 +1209,7 @@ fn worktree(f: &mut Frame, app: &mut App, r: Rect) {
         left_w.saturating_sub(2),
         bottom.height,
     );
-    for (i, (label, action, write)) in worktree_buttons(&app.theme)
+    for (i, (label, action, write)) in worktree_buttons(app)
         .into_iter()
         .enumerate()
         .take(usize::from(actions.height))
@@ -1143,15 +1238,16 @@ fn worktree(f: &mut Frame, app: &mut App, r: Rect) {
 }
 
 /// git gui's worktree action column: label, action, and whether it writes.
-fn worktree_buttons(t: &Theme) -> [(String, Action, bool); 5] {
-    let i = &t.icons;
+fn worktree_buttons(app: &App) -> [(String, Action, bool); 5] {
+    let i = &app.theme.icons;
+    let stage = if app.wt.filter_unstaged.text.trim().is_empty() {
+        "Stage Changed"
+    } else {
+        "Stage Visible"
+    };
     [
         (i.label(i.rescan, "Rescan"), Action::Rescan, false),
-        (
-            i.label(i.stage, "Stage Changed"),
-            Action::StageChanged,
-            true,
-        ),
+        (i.label(i.stage, stage), Action::StageChanged, true),
         (i.label(i.sign_off, "Sign Off"), Action::SignOff, false),
         (i.label(i.commit, "Commit"), Action::Commit, true),
         (i.label(i.push, "Push"), Action::Push, true),
@@ -1166,17 +1262,24 @@ fn worktree_files(f: &mut Frame, app: &mut App, r: Rect, list: FileList) {
         PaneId::WUnstaged
     };
     let icons = &app.theme.icons;
+    let count = if app.wt.filter(list).text.trim().is_empty() {
+        app.wt.all_files(list).len().to_string()
+    } else {
+        format!(
+            "{}/{}",
+            app.wt.list(list).len(),
+            app.wt.all_files(list).len()
+        )
+    };
     let title = icons.label(
         if staged { icons.staged } else { icons.unstaged },
         &format!(
-            "{} ({}/{})",
+            "{} ({count})",
             if staged {
                 "Staged Changes"
             } else {
                 "Unstaged Changes"
-            },
-            app.wt.list(list).len(),
-            app.wt.all_files(list).len()
+            }
         ),
     );
     let inner = pane(f, r, &title, id, app);

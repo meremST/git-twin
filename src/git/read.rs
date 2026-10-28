@@ -217,8 +217,13 @@ pub fn tag_details(r: &Runner, full_ref: &[u8]) -> Result<Option<TagDetails>, Gi
     let email = sanitize::display_bytes(next());
     let date = sanitize::display_bytes(next());
     let msg_bytes = next();
-    let message =
-        sanitize::display_lines_tabs(msg_bytes.strip_suffix(b"\n").unwrap_or(msg_bytes), 8);
+    let message = msg_bytes
+        .strip_suffix(b"\n")
+        .unwrap_or(msg_bytes)
+        .split(|c| *c == b'\n')
+        .map(|line| sanitize::display_bytes_tabs(line.strip_suffix(b"\r").unwrap_or(line), 8))
+        .collect::<Vec<_>>()
+        .join("\n");
     let tagger = if email.is_empty() {
         name
     } else {

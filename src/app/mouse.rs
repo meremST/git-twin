@@ -8,7 +8,7 @@ use ratatui::layout::Rect;
 
 use super::App;
 use super::action::{Action, FileList};
-use super::dialog::{DialogResult, Field, FormKind, Kind};
+use super::dialog::{DialogResult, Field};
 use super::history::HFocus;
 use super::menu::{Ctx, MenuItem};
 use super::worktree::WFocus;
@@ -279,7 +279,7 @@ impl App {
                     {
                         accept = n >= 2 && *sel == row;
                         *sel = row;
-                        preview = matches!(d.kind, Kind::Form(FormKind::ListRefs));
+                        preview = d.is_modeless();
                     }
                 }
                 if preview {
@@ -418,6 +418,12 @@ impl App {
     }
 
     fn on_drag(&mut self, x: u16, y: u16) {
+        if !self.dialogs.is_empty()
+            && (!self.refs_window_open()
+                || self.hits.at(x, y).is_some_and(|(_, hit)| hit.is_dialog()))
+        {
+            return;
+        }
         let Some(d) = self.drag else { return };
         match d {
             Drag::Split(id, r) => {

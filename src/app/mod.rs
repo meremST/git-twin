@@ -743,6 +743,7 @@ impl App {
                         Ok(rs) => {
                             self.refs = rs;
                             self.wt.branch_label = self.refs.head.label();
+                            self.refresh_ref_browser();
                         }
                         Err(e) => {
                             self.set_status(format!("Cannot read refs: {e}"), StatusTone::Error)

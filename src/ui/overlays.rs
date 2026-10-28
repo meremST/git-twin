@@ -125,7 +125,7 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
         return;
     };
     let screen = f.area();
-    let active = !d.background_focus && app.menu.is_none();
+    let active = !d.is_modeless() || (!d.background_focus && app.menu.is_none());
     if !d.is_modeless() {
         app.hits.push(screen, Hit::DlgBackdrop);
     }

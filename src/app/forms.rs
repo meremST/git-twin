@@ -148,10 +148,21 @@ impl App {
     }
 
     pub fn open_list_refs(&mut self) {
+        self.open_ref_browser(None);
+    }
+
+    pub fn open_ref_browser(&mut self, scope: Option<Oid>) {
         if self.refs_window_open() {
-            self.dialogs[0].background_focus = false;
-            return;
+            if matches!(self.dialogs[0].kind, Kind::Form(FormKind::ListRefs(s)) if s == scope) {
+                self.dialogs[0].background_focus = false;
+                return;
+            }
+            self.dialogs.pop();
         }
+        self.dialogs.push(self.reference_dialog(scope));
+    }
+
+    fn reference_dialog(&self, scope: Option<Oid>) -> Dialog {
         let kinds = [
             RefKind::LocalBranch,
             RefKind::RemoteBranch,
@@ -164,7 +175,7 @@ impl App {
         let mut values = Vec::new();
         let mut keys = Vec::new();
         for r in &self.refs.refs {
-            if !kinds.contains(&r.kind) {
+            if !kinds.contains(&r.kind) || scope.is_some_and(|oid| oid != r.target) {
                 continue;
             }
             let shown = if icons.nerd {
@@ -182,19 +193,49 @@ impl App {
             values.push(r.full.clone());
             keys.push(r.short.clone());
         }
-        let title = format!("Tags and heads: {}", self.repo.display_name());
+        let title = match scope {
+            Some(oid) => format!("References at {}", oid.short(12)),
+            None => format!("Tags and heads: {}", self.repo.display_name()),
+        };
         let legend = if icons.nerd {
             "type to filter, * wildcard; click History to interact"
         } else {
             "H branch  R remote  T tag  o other; type to filter (*); History stays interactive"
         };
         let fields = vec![Field::filter_list(legend, items, values, keys, 14)];
-        self.dialogs.push(form(
+        form(
             &title,
-            FormKind::ListRefs,
+            FormKind::ListRefs(scope),
             fields,
             &["Select", "Close"],
-        ));
+        )
+    }
+
+    pub fn refresh_ref_browser(&mut self) {
+        let Some(i) = self.dialogs.iter().position(Dialog::is_modeless) else {
+            return;
+        };
+        let Kind::Form(FormKind::ListRefs(scope)) = self.dialogs[i].kind else {
+            return;
+        };
+        let old = &self.dialogs[i];
+        let selected = old.list_value(0);
+        let pattern = match &old.fields[0] {
+            Field::List {
+                search: Some(s), ..
+            } => s.input.text.clone(),
+            _ => String::new(),
+        };
+        let mut d = self.reference_dialog(scope);
+        d.paste(&pattern);
+        d.background_focus = old.background_focus;
+        d.focus = old.focus;
+        if let Field::List { values, sel, .. } = &mut d.fields[0]
+            && let Some(i) = values.iter().position(|v| Some(v) == selected.as_ref())
+        {
+            *sel = i;
+        }
+        self.dialogs[i] = d;
     }
 
     /// Shows the reference highlighted in the F2 list in the history view,
@@ -203,8 +244,12 @@ impl App {
         let Some(full) = self.dialogs.last().and_then(|d| d.list_value(0)) else {
             return;
         };
-        if let Some(o) = self.refs.find_full(&full).map(|r| r.target) {
-            self.select_oid(o, false);
+        if let Some(r) = self.refs.find_full(&full) {
+            if r.kind == RefKind::Tag {
+                self.show_tag_info(full);
+            } else {
+                self.select_oid(r.target, false);
+            }
         }
     }
 
@@ -732,12 +777,16 @@ impl App {
                 _ => {}
             },
             FormKind::Preferences => self.submit_preferences(d),
-            FormKind::ListRefs => {
+            FormKind::ListRefs(_) => {
                 if let Some(full) = d.list_value(0)
                     && let Some(r) = self.refs.find_full(&full)
                 {
-                    let o = r.target;
-                    self.select_oid(o, true);
+                    if r.kind == RefKind::Tag {
+                        self.show_tag_info(full);
+                    } else {
+                        let o = r.target;
+                        self.select_oid(o, true);
+                    }
                 }
             }
             FormKind::CommandPalette => {
