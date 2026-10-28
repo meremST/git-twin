@@ -754,6 +754,223 @@ fn mouse(app: &mut App, point: (u16, u16), kind: MouseEventKind) {
     });
 }
 
+fn append_history_rows(app: &mut App, count: usize) {
+    use git_twin::domain::{commit::Commit, oid::Oid};
+    let start = app.hist.commits.len() + 100;
+    let commits = (start..start + count)
+        .map(|i| Commit {
+            oid: Oid::from_hex(&format!("{i:040x}")).unwrap(),
+            parents: Box::new([]),
+            author: "Scrollbar test".into(),
+            date: "2026-10-28".into(),
+            subject: format!("Loaded commit {i}").into(),
+        })
+        .collect();
+    app.on_log_batch(commits, Vec::new(), Vec::new());
+}
+
+fn history_scrollbar(app: &App) -> Option<git_twin::ui::hit::HistoryScrollbar> {
+    app.hits.zones.iter().find_map(|(_, h)| match h {
+        Hit::HistoryScrollbar(bar) => Some(*bar),
+        _ => None,
+    })
+}
+
+#[test]
+fn history_scrollbar_renders_only_when_enabled_and_overflowing() {
+    use git_twin::config::ThemeName;
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.cfg.history_scrollbar = true;
+    render(&mut app, 120, 40);
+    assert!(history_scrollbar(&app).is_none());
+    append_history_rows(&mut app, 100);
+    app.cfg.history_scrollbar = false;
+    render(&mut app, 120, 40);
+    assert!(history_scrollbar(&app).is_none());
+    app.cfg.history_scrollbar = true;
+    for (width, height) in [(79, 24), (120, 40)] {
+        for connectors in [false, true] {
+            app.cfg.graph_connectors = connectors;
+            for theme in [ThemeName::Dark, ThemeName::Light, ThemeName::Terminal] {
+                app.cfg.theme = theme;
+                for icons in [IconMode::Ascii, IconMode::Unicode, IconMode::Nerd] {
+                    app.cfg.icons = icons;
+                    app.theme = ui::theme::Theme::new(&app.cfg);
+                    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                    terminal.draw(|f| ui::draw(f, &mut app)).unwrap();
+                    let bar = history_scrollbar(&app).unwrap();
+                    assert_eq!(bar.max_top, app.hist.commits.len() - app.hist.height);
+                    let b = terminal.backend().buffer();
+                    assert_eq!(
+                        b[(bar.track.x, bar.track.y)].symbol(),
+                        if icons == IconMode::Ascii { "#" } else { "█" }
+                    );
+                    assert_eq!(b[(bar.track.x, bar.track.y)].fg, app.theme.accent);
+                    for y in bar.track.y..bar.track.bottom() {
+                        assert_eq!(
+                            app.hits.at(bar.track.x, y).unwrap().1,
+                            &Hit::HistoryScrollbar(bar)
+                        );
+                    }
+                    assert!(app.hits.zones.iter().all(|(r, h)| {
+                        !matches!(h, Hit::CommitRow(_) | Hit::Split(..))
+                            || r.right() <= bar.track.x
+                            || r.y >= bar.track.bottom()
+                            || r.bottom() <= bar.track.y
+                    }));
+                }
+            }
+        }
+    }
+    app.hist.commits.clear();
+    render(&mut app, 120, 40);
+    assert!(history_scrollbar(&app).is_none());
+}
+
+#[test]
+fn history_scrollbar_mouse_navigation_freezes_streaming_range_until_release() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    append_history_rows(&mut app, 100_000);
+    app.cfg.history_scrollbar = true;
+    render(&mut app, 120, 40);
+    let bar = history_scrollbar(&app).unwrap();
+    let selected = app.hist.selected_oid();
+    let detail_oid = app.hist.detail_oid;
+    let detail_request = app.req.details;
+    let back = app.hist.back.clone();
+    let down = MouseEventKind::Down(MouseButton::Left);
+    let drag = MouseEventKind::Drag(MouseButton::Left);
+    let up = MouseEventKind::Up(MouseButton::Left);
+    let middle = (bar.track.x, bar.track.y + bar.track.height / 2);
+    mouse(&mut app, middle, down);
+    assert_eq!(app.hist.top, bar.jump(middle.1));
+    mouse(&mut app, middle, up);
+    render(&mut app, 120, 40);
+    let grab = (bar.track.x, bar.thumb_top(app.hist.top));
+    let top = app.hist.top;
+    mouse(&mut app, grab, down);
+    mouse(&mut app, grab, drag);
+    assert_eq!(app.hist.top, top, "grabbing the thumb must not jump");
+
+    app.hist.loading = true;
+    append_history_rows(&mut app, 100_000);
+    render(&mut app, 120, 40);
+    assert_eq!(history_scrollbar(&app), Some(bar));
+    mouse(&mut app, (0, u16::MAX), drag);
+    assert_eq!(
+        app.hist.top, bar.max_top,
+        "keep the original range while dragging"
+    );
+    render(&mut app, 120, 40);
+    assert_eq!(history_scrollbar(&app), Some(bar));
+    mouse(&mut app, (0, 0), drag);
+    assert_eq!(
+        app.hist.top, 0,
+        "dragging outside the track clamps to the start"
+    );
+    mouse(&mut app, (0, u16::MAX), drag);
+    mouse(&mut app, (0, u16::MAX), up);
+    assert!(app.drag.is_none());
+    render(&mut app, 120, 40);
+    let grown = history_scrollbar(&app).unwrap();
+    assert_eq!(grown.max_top, bar.max_top + 100_000);
+    let bottom = (grown.track.x, grown.track.bottom() - 1);
+    mouse(&mut app, bottom, down);
+    mouse(&mut app, bottom, up);
+    assert_eq!(app.hist.top, grown.max_top);
+    mouse(&mut app, bottom, MouseEventKind::ScrollUp);
+    assert_eq!(app.hist.top, grown.max_top - 3);
+    assert_eq!(app.hist.selected_oid(), selected);
+    assert_eq!(app.hist.detail_oid, detail_oid);
+    assert_eq!(app.req.details, detail_request);
+    assert_eq!(app.hist.back, back);
+
+    render(&mut app, 120, 40);
+    mouse(&mut app, bottom, down);
+    render(&mut app, 79, 24);
+    assert!(
+        app.drag.is_none(),
+        "resizing cancels obsolete drag geometry"
+    );
+    let resized = history_scrollbar(&app).unwrap();
+    mouse(&mut app, (resized.track.x, resized.track.y), down);
+    app.switch_view(ViewKind::Worktree);
+    assert!(app.drag.is_none());
+    app.switch_view(ViewKind::History);
+    render(&mut app, 120, 40);
+    let bar = history_scrollbar(&app).unwrap();
+    mouse(&mut app, (bar.track.x, bar.track.y), down);
+    app.cfg.history_scrollbar = false;
+    render(&mut app, 120, 40);
+    assert!(app.drag.is_none());
+    assert!(history_scrollbar(&app).is_none());
+
+    let row = app.hist.top + 1;
+    let point = visible_point(&app, &Hit::CommitRow(row));
+    mouse(&mut app, point, down);
+    assert_eq!(app.hist.sel, Some(row), "normal row selection still works");
+}
+
+#[test]
+fn history_scrollbar_preferences_apply_cancel_and_persist() {
+    use git_twin::{app::dialog::DialogResult, config};
+    if std::env::var_os("GITT_SCROLLBAR_TEST").is_none() {
+        let state = tempfile::tempdir().unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "history_scrollbar_preferences_apply_cancel_and_persist",
+                "--nocapture",
+            ])
+            .env("GITT_SCROLLBAR_TEST", "1")
+            .env("XDG_STATE_HOME", state.path().join("state"))
+            .env("XDG_CONFIG_HOME", state.path().join("config"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    let mut expected = app.cfg.clone();
+    for (enabled, button) in [(true, 1), (true, 0), (false, 0)] {
+        app.open_preferences();
+        let d = app.dialogs.last_mut().unwrap();
+        let field = d
+            .fields
+            .iter()
+            .position(|f| matches!(f, Field::Check { label, .. } if label == "History scrollbar"))
+            .unwrap();
+        assert_eq!(d.checked(field), app.cfg.history_scrollbar);
+        d.focus = field;
+        render(&mut app, 79, 24);
+        let point = visible_point(&app, &Hit::DlgField(field));
+        mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+        assert_eq!(app.dialogs.last().unwrap().checked(field), enabled);
+        assert_eq!(app.cfg, expected, "changes only apply on OK");
+        app.on_dialog_result(DialogResult::Button(button));
+        if button == 0 {
+            expected.history_scrollbar = enabled;
+            assert_eq!(
+                Config::load_from(&config::config_file().unwrap()).unwrap(),
+                expected
+            );
+        }
+        assert_eq!(app.cfg, expected);
+    }
+}
+
 fn patch_navigation_fixture() -> (tempfile::TempDir, App) {
     let dir = fixture();
     git(dir.path(), &["add", "."]);

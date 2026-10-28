@@ -13,7 +13,7 @@ use super::history::HFocus;
 use super::menu::{Ctx, MenuItem};
 use super::worktree::WFocus;
 use crate::domain::refs::RefKind;
-use crate::ui::hit::{Hit, PaneId, SplitId};
+use crate::ui::hit::{HistoryScrollbar, Hit, PaneId, SplitId};
 
 const WHEEL_LINES: isize = 3;
 
@@ -56,6 +56,11 @@ pub enum Drag {
     DiffSel(PaneId, Rect),
     /// Text selection in the commit message (rect = text area).
     MsgSel(Rect),
+    HistoryScroll {
+        bar: HistoryScrollbar,
+        start_top: usize,
+        start_y: u16,
+    },
 }
 
 fn ratio(pos: u16, start: u16, len: u16) -> u16 {
@@ -170,6 +175,18 @@ impl App {
             Hit::ViewTab(v) => self.switch_view(v),
             Hit::StatusMsg => self.show_message_log(),
             Hit::Split(id, rect) => self.drag = Some(Drag::Split(id, rect)),
+            Hit::HistoryScrollbar(bar) => {
+                self.hist.focus = HFocus::List;
+                let thumb_top = bar.thumb_top(self.hist.top);
+                if y < thumb_top || y >= thumb_top + bar.thumb_height {
+                    self.hist.top = bar.jump(y);
+                }
+                self.drag = Some(Drag::HistoryScroll {
+                    bar,
+                    start_top: self.hist.top,
+                    start_y: y,
+                });
+            }
             Hit::Pane(p) => {
                 self.focus_pane(p);
                 if p == PaneId::WMessage {
@@ -440,6 +457,15 @@ impl App {
         }
         let Some(d) = self.drag else { return };
         match d {
+            Drag::HistoryScroll {
+                bar,
+                start_top,
+                start_y,
+            } => {
+                self.hist.top = bar
+                    .drag(start_top, start_y, y)
+                    .min(self.hist.commits.len().saturating_sub(self.hist.height));
+            }
             Drag::Split(id, r) => {
                 let s = &mut self.state.splits;
                 match id {

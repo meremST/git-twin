@@ -21,6 +21,7 @@ use crate::app::{
     history::HFocus,
     input::{TextArea, TextInput, width_upto},
     menu,
+    mouse::Drag,
 };
 use crate::config::ViewKind;
 use crate::domain::{
@@ -29,7 +30,7 @@ use crate::domain::{
     refs::{GitRef, RefKind},
     sanitize::sanitize,
 };
-use hit::{Hit, HitMap, PaneId, SplitId};
+use hit::{HistoryScrollbar, Hit, HitMap, PaneId, SplitId};
 use theme::Theme;
 
 /// Columns kept for the subject when the history graph is wide.
@@ -60,6 +61,10 @@ fn unobscured(app: &App) -> bool {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
+    if app.size != (area.width, area.height) && matches!(app.drag, Some(Drag::HistoryScroll { .. }))
+    {
+        app.drag = None;
+    }
     app.size = (area.width, area.height);
     app.hits.clear();
     f.render_widget(Block::default().style(app.theme.base()), area);
@@ -84,6 +89,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             ViewKind::History => history(f, app, body),
             ViewKind::Worktree => worktree(f, app, body),
         }
+    }
+    if matches!(app.drag, Some(Drag::HistoryScroll { .. }))
+        && !app
+            .hits
+            .zones
+            .iter()
+            .any(|(_, h)| matches!(h, Hit::HistoryScrollbar(_)))
+    {
+        app.drag = None;
     }
     let color = if app.status.1 == StatusTone::Error {
         app.theme.error
@@ -614,9 +628,32 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         app.theme.icons.history,
         &format!("{} - {}", app.repo.display_name(), app.hist.view().name),
     );
-    let inner = pane(f, r, &title, PaneId::HList, app);
+    let mut inner = pane(f, r, &title, PaneId::HList, app);
     if inner.height == 0 {
         return;
+    }
+    let step: u16 = if app.cfg.graph_connectors { 2 } else { 1 };
+    app.hist.height = usize::from((inner.height - 1) / step).max(1);
+    app.hist.top = app
+        .hist
+        .top
+        .min(app.hist.commits.len().saturating_sub(app.hist.height));
+    let scrollbar = if app.cfg.history_scrollbar && inner.width > 1 {
+        let track = Rect::new(inner.right() - 1, inner.y + 1, 1, inner.height - 1);
+        HistoryScrollbar::new(track, app.hist.commits.len(), app.hist.height).map(|bar| {
+            if let Some(Drag::HistoryScroll { bar: frozen, .. }) = app.drag {
+                if frozen.track == track && frozen.max_top <= bar.max_top {
+                    return frozen;
+                }
+                app.drag = None;
+            }
+            bar
+        })
+    } else {
+        None
+    };
+    if scrollbar.is_some() {
+        inner.width -= 1;
     }
     let date_w = app.state.splits.history_date_col.min(inner.width / 4);
     let author_w = app.state.splits.history_author_col.min(inner.width / 4);
@@ -634,14 +671,6 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         Rect::new(date_x, inner.y, date_w, 1),
         "Date",
         app.theme.dimmed(),
-    );
-    let step: u16 = if app.cfg.graph_connectors { 2 } else { 1 };
-    app.hist.height = usize::from((inner.height - 1) / step).max(1);
-    app.hist.top = app.hist.top.min(
-        app.hist
-            .commits
-            .len()
-            .saturating_sub(app.hist.height.max(1)),
     );
     for (line, i) in (app.hist.top..app.hist.commits.len())
         .take(app.hist.height)
@@ -873,6 +902,30 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
         Rect::new(date_x.saturating_sub(1), inner.y, 1, inner.height),
         Hit::Split(SplitId::HDate, inner),
     );
+    if let Some(bar) = scrollbar {
+        let thumb_top = bar.thumb_top(app.hist.top);
+        for y in bar.track.y..bar.track.bottom() {
+            let thumb = y >= thumb_top && y < thumb_top + bar.thumb_height;
+            let symbol = match (app.theme.icons.ascii, thumb) {
+                (true, true) => "#",
+                (true, false) => "|",
+                (false, true) => "█",
+                (false, false) => "│",
+            };
+            let color = if thumb {
+                app.theme.accent
+            } else {
+                app.theme.dim
+            };
+            text(
+                f,
+                Rect::new(bar.track.x, y, 1, 1),
+                symbol,
+                app.theme.base().fg(color),
+            );
+        }
+        app.hits.push(bar.track, Hit::HistoryScrollbar(bar));
+    }
     if app.hist.commits.is_empty() && inner.height > 1 {
         text(
             f,

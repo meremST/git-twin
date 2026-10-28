@@ -203,6 +203,14 @@ tab and the open menu are highlighted in solid gold. The most faithful rendering
 uses `--colors truecolor`.
 OSC 52 clipboard support is optional and disabled by default.
 
+Enable **History scrollbar** in **Edit > Preferences** (`history_scrollbar = true`
+in `config.toml`) to show a vertical scrollbar when the commit list exceeds the
+visible area. It is disabled by default. Drag the thumb or click the track to
+jump through the loaded commits of the current view; use the wheel for finer
+scrolling. Scrolling does not change the selected commit or its details.
+While history is loading, the range grows with the loaded commits, but stays
+fixed during a drag and updates on release.
+
 On very branchy histories (for example `gitt --all` on the Linux kernel), two
 preferences keep the graph readable:
 `graph_max_lanes` (20 by default, 0 = as many as the space allows) limits the

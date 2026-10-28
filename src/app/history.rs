@@ -745,6 +745,9 @@ impl App {
     }
 
     pub fn load_history(&mut self, keep: Option<Oid>) {
+        if matches!(self.drag, Some(super::mouse::Drag::HistoryScroll { .. })) {
+            self.drag = None;
+        }
         let h = &mut self.hist;
         h.cancel.cancel();
         h.cancel = Cancel::default();

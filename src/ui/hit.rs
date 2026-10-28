@@ -30,6 +30,53 @@ pub enum SplitId {
     WDiff,
 }
 
+/// Geometry shared by drawing and mouse handling; frozen during a drag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HistoryScrollbar {
+    pub track: Rect,
+    pub thumb_height: u16,
+    pub max_top: usize,
+}
+
+impl HistoryScrollbar {
+    pub fn new(track: Rect, total: usize, visible: usize) -> Option<Self> {
+        if track.width == 0 || track.height < 2 || visible == 0 || total <= visible {
+            return None;
+        }
+        let thumb_height = (u128::from(track.height) * visible as u128 / total as u128)
+            .clamp(1, u128::from(track.height - 1)) as u16;
+        Some(Self {
+            track,
+            thumb_height,
+            max_top: total - visible,
+        })
+    }
+
+    pub fn thumb_top(self, top: usize) -> u16 {
+        self.track.y
+            + (top.min(self.max_top) as u128 * u128::from(self.travel()) / self.max_top as u128)
+                as u16
+    }
+
+    pub fn travel(self) -> u16 {
+        self.track.height - self.thumb_height
+    }
+
+    pub fn jump(self, y: u16) -> usize {
+        let pos = y
+            .saturating_sub(self.track.y)
+            .saturating_sub(self.thumb_height / 2)
+            .min(self.travel());
+        (u128::from(pos) * self.max_top as u128 / u128::from(self.travel())) as usize
+    }
+
+    pub fn drag(self, start_top: usize, start_y: u16, y: u16) -> usize {
+        let delta = (i128::from(y) - i128::from(start_y)) * self.max_top as i128
+            / i128::from(self.travel());
+        (start_top as i128 + delta).clamp(0, self.max_top as i128) as usize
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Hit {
     MenuTitle(usize),
@@ -42,6 +89,7 @@ pub enum Hit {
     Split(SplitId, Rect),
     Pane(PaneId),
     PaneTab(PaneId),
+    HistoryScrollbar(HistoryScrollbar),
     CommitRow(usize),
     RefLabel(usize, Vec<u8>),
     /// Compact ref marker (or its collapse arrow) of the commit at this row.
@@ -90,7 +138,8 @@ impl Hit {
     pub fn pane(&self) -> Option<PaneId> {
         match self {
             Hit::Pane(p) | Hit::DiffLine(p, _) => Some(*p),
-            Hit::CommitRow(_)
+            Hit::HistoryScrollbar(_)
+            | Hit::CommitRow(_)
             | Hit::RefLabel(..)
             | Hit::RefToggle(_)
             | Hit::CutArrow(..)
@@ -153,6 +202,36 @@ impl HitMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_scrollbar_geometry_handles_overflow_and_small_tracks() {
+        let track = Rect::new(10, 5, 1, 10);
+        assert!(HistoryScrollbar::new(track, 0, 10).is_none());
+        assert!(HistoryScrollbar::new(track, 10, 10).is_none());
+        assert!(HistoryScrollbar::new(Rect::new(10, 5, 1, 1), 100, 1).is_none());
+        let bar = HistoryScrollbar::new(track, 100, 20).unwrap();
+        assert_eq!(bar.thumb_height, 2);
+        assert_eq!(bar.thumb_top(0), track.y);
+        assert_eq!(bar.thumb_top(80) + bar.thumb_height, track.bottom());
+        assert_eq!(bar.jump(0), 0);
+        assert_eq!(bar.jump(track.y + 5), 40);
+        assert_eq!(bar.jump(u16::MAX), 80);
+        assert_eq!(
+            bar.drag(37, 10, 10),
+            37,
+            "grabbing must not quantize the position"
+        );
+        assert_eq!(bar.drag(37, 10, 11), 47);
+        assert_eq!(bar.drag(37, 10, 0), 0);
+        assert_eq!(bar.drag(37, 10, u16::MAX), 80);
+
+        for total in [21, 100_000, usize::MAX] {
+            let bar = HistoryScrollbar::new(track, total, 20).unwrap();
+            assert!(bar.thumb_height >= 1 && bar.thumb_height < track.height);
+            assert_eq!(bar.jump(track.bottom() - 1), total - 20);
+            assert_eq!(bar.thumb_top(total), track.bottom() - bar.thumb_height);
+        }
+    }
 
     #[test]
     fn topmost_wins() {

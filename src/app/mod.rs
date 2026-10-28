@@ -942,6 +942,9 @@ impl App {
             return;
         }
         self.view = v;
+        if matches!(self.drag, Some(mouse::Drag::HistoryScroll { .. })) {
+            self.drag = None;
+        }
         if v != ViewKind::History {
             self.dialogs.retain(|d| !d.is_modeless());
         }
