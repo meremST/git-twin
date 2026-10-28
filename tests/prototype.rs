@@ -2606,7 +2606,8 @@ fn nerd_compact_refs_render_icon_then_count() {
     settle(&mut app);
     app.hist.compact_refs = true;
     let screen = render(&mut app, 200, 50);
-    assert!(screen.contains("\u{f02b}2"), "{screen}");
+    assert!(screen.contains("\u{f02b} 2"), "{screen}");
+    assert!(!screen.contains("\u{f02b}2"), "{screen}");
     assert!(!screen.contains("\u{f02b}:2"), "{screen}");
     assert!(!screen.contains("[\u{f02b}"), "{screen}");
 }

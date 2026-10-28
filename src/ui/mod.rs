@@ -553,7 +553,7 @@ fn reference_labels(app: &App, oid: &Oid, row: usize, style: Style) -> Vec<Refer
             continue;
         }
         let text = if app.theme.icons.nerd {
-            format!("{}{count} ", app.theme.icons.reference(kind))
+            format!("{} {count} ", app.theme.icons.reference(kind))
         } else {
             format!("[{letter}:{count}] ")
         };
