@@ -217,7 +217,8 @@ pub fn tag_details(r: &Runner, full_ref: &[u8]) -> Result<Option<TagDetails>, Gi
     let email = sanitize::display_bytes(next());
     let date = sanitize::display_bytes(next());
     let msg_bytes = next();
-    let message = sanitize::display_bytes(msg_bytes.strip_suffix(b"\n").unwrap_or(msg_bytes));
+    let message =
+        sanitize::display_lines_tabs(msg_bytes.strip_suffix(b"\n").unwrap_or(msg_bytes), 8);
     let tagger = if email.is_empty() {
         name
     } else {

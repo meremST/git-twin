@@ -2282,6 +2282,48 @@ fn clicking_a_reference_in_list_refs_shows_it_in_history() {
 }
 
 #[test]
+fn tag_annotations_preserve_lines_without_terminal_controls() {
+    let dir = fixture();
+    git(
+        dir.path(),
+        &[
+            "tag",
+            "-a",
+            "multiline",
+            "--cleanup=verbatim",
+            "-m",
+            "Release\r\n\r\nDetails\n\tIndented\n\u{1b}[31mNot terminal markup\n",
+        ],
+    );
+    git(dir.path(), &["tag", "lightweight"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.show_tag_info(b"refs/tags/multiline".to_vec());
+    settle(&mut app);
+    let lines: Vec<_> = app
+        .hist
+        .diff
+        .lines
+        .iter()
+        .filter(|l| l.kind == git_twin::app::diffview::DKind::Message)
+        .map(|l| l.text.as_str())
+        .collect();
+    assert!(lines.starts_with(&["Release", "", "Details", "        Indented"]));
+    assert!(lines[4].contains("Not terminal markup"));
+    assert!(!lines[4].contains('\u{1b}'));
+    app.show_tag_info(b"refs/tags/lightweight".to_vec());
+    settle(&mut app);
+    assert!(
+        app.hist
+            .diff
+            .lines
+            .iter()
+            .any(|l| l.text == "Lightweight tag (no annotation).")
+    );
+}
+
+#[test]
 fn checkout_moves_head_marker_but_keeps_history_rows() {
     let dir = fixture();
     git(dir.path(), &["add", "."]);
