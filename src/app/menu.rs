@@ -508,7 +508,7 @@ impl App {
                         !staged_side,
                     ),
                     e(
-                        "Stage Changed Files To Commit",
+                        "Stage Visible Changed Files To Commit",
                         "Ctrl-I",
                         Action::StageChanged,
                     ),

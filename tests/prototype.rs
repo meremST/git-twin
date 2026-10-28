@@ -2282,6 +2282,124 @@ fn clicking_a_reference_in_list_refs_shows_it_in_history() {
 }
 
 #[test]
+fn worktree_filters_are_independent_and_survive_rescan() {
+    let dir = fixture();
+    fs::write(dir.path().join("other.txt"), "other\n").unwrap();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.switch_view(ViewKind::Worktree);
+    app.dispatch(Action::FilterFiles(FileList::Unstaged));
+    app.paste("HEL*.txt");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.wt.list(FileList::Unstaged).len(), 1);
+    assert_eq!(app.wt.list(FileList::Unstaged)[0].path, b"hello.txt");
+    assert_eq!(app.wt.list(FileList::Staged).len(), 1);
+    app.dispatch(Action::FilterFiles(FileList::Staged));
+    app.paste("missing");
+    let screen = render(&mut app, 120, 35);
+    assert!(screen.contains("Unstaged Changes (1/2)"));
+    assert!(screen.contains("Staged Changes (0/1)"));
+    assert!(screen.contains("(no matches)"));
+    app.rescan();
+    settle(&mut app);
+    assert_eq!(app.wt.list(FileList::Unstaged).len(), 1);
+    assert!(app.wt.list(FileList::Staged).is_empty());
+    app.on_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+    assert_eq!(app.wt.list(FileList::Staged).len(), 1);
+    assert_eq!(app.wt.filter_unstaged.text, "HEL*.txt");
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.dispatch(Action::FilterFiles(FileList::Unstaged));
+    let screen = render(&mut app, 79, 24);
+    assert!(screen.contains("Filter:"));
+    assert!(!screen.contains("other.txt"));
+}
+
+#[test]
+fn worktree_filters_limit_selection_and_stage_operations() {
+    let dir = fixture();
+    fs::write(dir.path().join("other.txt"), "other\n").unwrap();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.switch_view(ViewKind::Worktree);
+    app.dispatch(Action::SelectFile(FileList::Unstaged, 0));
+    app.dispatch(Action::SelectAll);
+    assert_eq!(app.wt.targets(FileList::Unstaged).len(), 2);
+    app.dispatch(Action::FilterFiles(FileList::Unstaged));
+    app.paste("other");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(
+        app.wt.targets(FileList::Unstaged),
+        vec![b"other.txt".to_vec()]
+    );
+    app.dispatch(Action::StageSelected);
+    settle(&mut app);
+    assert!(app.wt.list(FileList::Unstaged).is_empty());
+    assert_eq!(git(dir.path(), &["diff", "--name-only"]), "hello.txt\n");
+    assert!(git(dir.path(), &["diff", "--cached", "--name-only"]).contains("other.txt"));
+    app.dispatch(Action::FilterFiles(FileList::Staged));
+    app.paste("other");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.dispatch(Action::SelectFile(FileList::Staged, 0));
+    app.dispatch(Action::UnstageSelected);
+    settle(&mut app);
+    assert_eq!(
+        git(dir.path(), &["diff", "--cached", "--name-only"]),
+        "staged.txt\n"
+    );
+    app.stage_changed(Some(true));
+    settle(&mut app);
+    assert!(git(dir.path(), &["diff", "--cached", "--name-only"]).contains("other.txt"));
+    assert_eq!(git(dir.path(), &["diff", "--name-only"]), "hello.txt\n");
+}
+
+#[test]
+fn worktree_filters_do_not_limit_the_committed_index() {
+    if std::env::var_os("GITT_FILTER_COMMIT_TEST").is_none() {
+        let state = tempfile::tempdir().unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "worktree_filters_do_not_limit_the_committed_index",
+                "--nocapture",
+            ])
+            .env("GITT_FILTER_COMMIT_TEST", "1")
+            .env("XDG_STATE_HOME", state.path().join("state"))
+            .env("XDG_CONFIG_HOME", state.path().join("config"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let dir = fixture();
+    git(dir.path(), &["add", "hello.txt"]);
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.switch_view(ViewKind::Worktree);
+    app.dispatch(Action::FilterFiles(FileList::Staged));
+    app.paste("hello");
+    app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.wt.list(FileList::Staged).len(), 1);
+    app.wt.message.set_text("Commit the entire index");
+    app.dispatch(Action::Commit);
+    settle(&mut app);
+    assert_eq!(
+        git(
+            dir.path(),
+            &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]
+        ),
+        "hello.txt\nstaged.txt\n"
+    );
+}
+
+#[test]
 fn tag_annotations_preserve_lines_without_terminal_controls() {
     let dir = fixture();
     git(

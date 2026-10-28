@@ -132,6 +132,8 @@ pub enum Action {
     RevertSelected,
     StageToggle(FileList, usize),
     SelectFile(FileList, usize),
+    FilterFiles(FileList),
+    ClearFileFilter(FileList),
     ExtendFile(FileList, usize),
     ToggleFileSel(FileList, usize),
     MoveFile(isize),

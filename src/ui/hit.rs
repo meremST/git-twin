@@ -61,6 +61,7 @@ pub enum Hit {
     HFileRow(usize),
     DiffLine(PaneId, usize),
     WtFile(FileList, usize, bool),
+    WtFilter(FileList),
     Message,
     /// Message text in the status bar (opens the message history).
     StatusMsg,
@@ -82,8 +83,12 @@ impl Hit {
             | Hit::CutArrow(..)
             | Hit::ResumeArrow { .. } => Some(PaneId::HList),
             Hit::HFileRow(_) => Some(PaneId::HFiles),
-            Hit::WtFile(FileList::Unstaged, ..) => Some(PaneId::WUnstaged),
-            Hit::WtFile(FileList::Staged, ..) => Some(PaneId::WStaged),
+            Hit::WtFile(FileList::Unstaged, ..) | Hit::WtFilter(FileList::Unstaged) => {
+                Some(PaneId::WUnstaged)
+            }
+            Hit::WtFile(FileList::Staged, ..) | Hit::WtFilter(FileList::Staged) => {
+                Some(PaneId::WStaged)
+            }
             Hit::Message => Some(PaneId::WMessage),
             Hit::DlgField(_) | Hit::DlgArea(..) | Hit::DlgListRow(..) | Hit::DlgBackdrop => {
                 Some(PaneId::Dialog)

@@ -108,6 +108,7 @@ impl App {
     }
 
     fn focus_pane(&mut self, p: PaneId) {
+        self.wt.filter_focus = None;
         match p {
             PaneId::HList => self.hist.focus = HFocus::List,
             PaneId::HDiff => self.hist.focus = HFocus::Diff,
@@ -127,6 +128,12 @@ impl App {
             return;
         };
         let col = usize::from(x.saturating_sub(r.x));
+        if !matches!(
+            hit,
+            Hit::WtFilter(_) | Hit::Button(Action::ClearFileFilter(_))
+        ) {
+            self.wt.filter_focus = None;
+        }
         if let Some(d) = self.dialogs.last_mut()
             && let Some((field, _)) = d.open_choice
             && !matches!(hit, Hit::DlgField(i) | Hit::DlgChoice(i, _) if i == field)
@@ -240,6 +247,10 @@ impl App {
                 } else {
                     self.dispatch(Action::SelectFile(l, i));
                 }
+            }
+            Hit::WtFilter(l) => {
+                self.dispatch(Action::FilterFiles(l));
+                self.wt.filter_mut(l).click(col);
             }
             Hit::Message => {
                 self.wt.focus = WFocus::Message;

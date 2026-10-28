@@ -1164,16 +1164,43 @@ fn worktree_files(f: &mut Frame, app: &mut App, r: Rect, list: FileList) {
     let title = icons.label(
         if staged { icons.staged } else { icons.unstaged },
         &format!(
-            "{} ({})",
+            "{} ({}/{})",
             if staged {
                 "Staged Changes"
             } else {
                 "Unstaged Changes"
             },
-            app.wt.list(list).len()
+            app.wt.list(list).len(),
+            app.wt.all_files(list).len()
         ),
     );
     let inner = pane(f, r, &title, id, app);
+    let filter_row = row(inner, 0);
+    text(f, filter_row, "Filter: ", app.theme.dimmed());
+    let entry = Rect::new(
+        filter_row.x + 8,
+        filter_row.y,
+        filter_row.width.saturating_sub(12),
+        filter_row.height,
+    );
+    let focused = app.wt.filter_focus == Some(list) && app.focused_pane() == id && unobscured(app);
+    input(f, app.wt.filter_mut(list), entry, focused, &app.theme);
+    app.hits.push(entry, Hit::WtFilter(list));
+    let clear = Rect::new(
+        filter_row.right().saturating_sub(3),
+        filter_row.y,
+        3.min(filter_row.width),
+        filter_row.height,
+    );
+    text(f, clear, "[x]", app.theme.dimmed());
+    app.hits
+        .push(clear, Hit::Button(Action::ClearFileFilter(list)));
+    let inner = Rect::new(
+        inner.x,
+        inner.y + filter_row.height,
+        inner.width,
+        inner.height.saturating_sub(1),
+    );
     let height = usize::from(inner.height);
     let len = app.wt.list(list).len();
     let top = if staged {
@@ -1237,7 +1264,12 @@ fn worktree_files(f: &mut Frame, app: &mut App, r: Rect, list: FileList) {
         );
     }
     if len == 0 {
-        text(f, row(inner, 0), "(none)", app.theme.dimmed());
+        let label = if app.wt.all_files(list).is_empty() {
+            "(none)"
+        } else {
+            "(no matches)"
+        };
+        text(f, row(inner, 0), label, app.theme.dimmed());
     }
 }
 
@@ -1248,7 +1280,11 @@ fn message(f: &mut Frame, app: &mut App, r: Rect) {
     ) + 1;
     let title = app.theme.icons.label(
         app.theme.icons.message,
-        &format!("Commit Message - col {column}/{}", app.cfg.commit_width),
+        &format!(
+            "Commit Message - col {column}/{} - all {} staged",
+            app.cfg.commit_width,
+            app.wt.staged.len()
+        ),
     );
     let controls = Rect::new(
         r.x.saturating_add(1),

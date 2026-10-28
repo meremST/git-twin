@@ -1138,7 +1138,10 @@ impl App {
                 _ => {}
             },
             ViewKind::Worktree => {
-                if self.wt.focus == worktree::WFocus::Message {
+                if let Some(l) = self.wt.filter_focus {
+                    self.wt.filter_mut(l).insert_str(s);
+                    self.worktree_filter_changed(l);
+                } else if self.wt.focus == worktree::WFocus::Message {
                     self.wt.message.insert_str(s);
                     self.wt
                         .message

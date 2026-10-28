@@ -338,6 +338,22 @@ impl App {
         let ctrl = k.modifiers.contains(M::CONTROL);
         let alt = k.modifiers.contains(M::ALT);
         let shift = k.modifiers.contains(M::SHIFT);
+        if let Some(l) = self.wt.filter_focus {
+            match k.code {
+                C::Esc | C::Enter if !ctrl && !alt => self.wt.filter_focus = None,
+                C::Char('u') if ctrl => {
+                    self.dispatch(Action::ClearFileFilter(l));
+                }
+                _ => {
+                    let before = self.wt.filter(l).text.clone();
+                    edit_input(self.wt.filter_mut(l), k);
+                    if before != self.wt.filter(l).text {
+                        self.worktree_filter_changed(l);
+                    }
+                }
+            }
+            return;
+        }
         // Commands valid in every pane (including the message).
         let a = match k.code {
             C::Enter if ctrl || alt => Some(Action::Commit),
@@ -357,6 +373,7 @@ impl App {
             C::Char('-') if ctrl => Some(Action::WtContextLess),
             C::Char('+') | C::Char('=') if ctrl => Some(Action::WtContextMore),
             C::Char(c @ '1'..='4') if alt => {
+                self.wt.filter_focus = None;
                 self.wt.focus = [
                     WFocus::Unstaged,
                     WFocus::Staged,
@@ -398,6 +415,9 @@ impl App {
                     .filter(|(cl, _)| *cl == l)
                     .map(|(_, i)| i);
                 let a = match k.code {
+                    C::Char('/') => Some(Action::FilterFiles(l)),
+                    C::Char('f') if ctrl => Some(Action::FilterFiles(l)),
+                    C::Char('a') if ctrl => Some(Action::SelectAll),
                     C::Up | C::Char('k') if shift => {
                         cur.map(|i| Action::ExtendFile(l, i.saturating_sub(1)))
                     }

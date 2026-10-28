@@ -7,9 +7,9 @@ use std::os::unix::ffi::OsStringExt;
 use std::sync::Arc;
 
 use super::action::{Action, FileList};
-use super::dialog::{Dialog, Field, FormKind, Kind, Tone};
+use super::dialog::{Dialog, Field, FormKind, Kind, Tone, search_match};
 use super::diffview::{BuildOpts, DKind, DLine, DiffView, Show, WordStyle};
-use super::input::TextArea;
+use super::input::{TextArea, TextInput};
 use super::worker::{After, Payload, WtSnapshot};
 use super::{App, Handoff, Pending, StatusTone};
 use crate::config::{Config, Handoff as HandoffCfg, StageUntracked};
@@ -81,6 +81,11 @@ impl WFile {
 pub struct WorktreeState {
     pub unstaged: Vec<WFile>,
     pub staged: Vec<WFile>,
+    pub filter_unstaged: TextInput,
+    pub filter_staged: TextInput,
+    pub filter_focus: Option<FileList>,
+    filtered_unstaged: Vec<WFile>,
+    filtered_staged: Vec<WFile>,
     pub sel_unstaged: BTreeSet<Vec<u8>>,
     pub sel_staged: BTreeSet<Vec<u8>>,
     /// File whose diff is shown: (list, path).
@@ -113,6 +118,11 @@ impl WorktreeState {
         WorktreeState {
             unstaged: Vec::new(),
             staged: Vec::new(),
+            filter_unstaged: TextInput::default(),
+            filter_staged: TextInput::default(),
+            filter_focus: None,
+            filtered_unstaged: Vec::new(),
+            filtered_staged: Vec::new(),
             sel_unstaged: BTreeSet::new(),
             sel_staged: BTreeSet::new(),
             current: None,
@@ -139,6 +149,7 @@ impl WorktreeState {
     }
 
     pub fn cycle_focus(&mut self, dir: isize) {
+        self.filter_focus = None;
         const ORDER: [WFocus; 4] = [
             WFocus::Unstaged,
             WFocus::Staged,
@@ -150,10 +161,61 @@ impl WorktreeState {
     }
 
     pub fn list(&self, l: FileList) -> &[WFile] {
+        if !self.filter(l).text.trim().is_empty() {
+            return match l {
+                FileList::Unstaged => &self.filtered_unstaged,
+                FileList::Staged => &self.filtered_staged,
+            };
+        }
+        self.all_files(l)
+    }
+
+    pub fn all_files(&self, l: FileList) -> &[WFile] {
         match l {
             FileList::Unstaged => &self.unstaged,
             FileList::Staged => &self.staged,
         }
+    }
+
+    pub fn filter(&self, l: FileList) -> &TextInput {
+        match l {
+            FileList::Unstaged => &self.filter_unstaged,
+            FileList::Staged => &self.filter_staged,
+        }
+    }
+
+    pub fn filter_mut(&mut self, l: FileList) -> &mut TextInput {
+        match l {
+            FileList::Unstaged => &mut self.filter_unstaged,
+            FileList::Staged => &mut self.filter_staged,
+        }
+    }
+
+    fn refilter(&mut self) {
+        self.filtered_unstaged = self
+            .unstaged
+            .iter()
+            .filter(|f| search_match(self.filter_unstaged.text.trim(), &f.display))
+            .cloned()
+            .collect();
+        self.filtered_staged = self
+            .staged
+            .iter()
+            .filter(|f| search_match(self.filter_staged.text.trim(), &f.display))
+            .cloned()
+            .collect();
+        self.sel_unstaged
+            .retain(|p| self.filtered_unstaged.iter().any(|f| f.path == *p));
+        self.sel_staged
+            .retain(|p| self.filtered_staged.iter().any(|f| f.path == *p));
+        if let Some((l, p)) = &self.current
+            && self.index_of(*l, p).is_none()
+        {
+            self.current = self.list(*l).first().map(|f| (*l, f.path.clone()));
+        }
+        self.anchor = None;
+        self.scroll_list(FileList::Unstaged, 0);
+        self.scroll_list(FileList::Staged, 0);
     }
 
     pub fn sel(&self, l: FileList) -> &BTreeSet<Vec<u8>> {
@@ -257,6 +319,23 @@ fn has_conflict_markers(workdir: &std::path::Path, rel: &[u8]) -> bool {
 }
 
 impl App {
+    pub fn worktree_filter_changed(&mut self, l: FileList) {
+        let current = self.wt.current.clone();
+        self.wt.refilter();
+        *self.wt.top_mut(l).0 = 0;
+        if self.wt.current.is_none()
+            && let Some(f) = self.wt.list(l).first()
+        {
+            self.wt.current = Some((l, f.path.clone()));
+        }
+        if let Some((side, i)) = self.wt.cursor_index() {
+            self.wt.ensure_visible(side, i);
+        }
+        if self.wt.current != current {
+            self.load_wt_diff(false);
+        }
+    }
+
     fn wt_diff_opts(&self) -> DiffOpts {
         DiffOpts {
             context: self.wt.context,
@@ -366,10 +445,11 @@ impl App {
         drop(s);
         wt.unstaged = unstaged;
         wt.staged = staged;
+        wt.refilter();
         if wt.current.is_none() {
-            if let Some(f) = wt.unstaged.first() {
+            if let Some(f) = wt.list(FileList::Unstaged).first() {
                 wt.current = Some((FileList::Unstaged, f.path.clone()));
-            } else if let Some(f) = wt.staged.first() {
+            } else if let Some(f) = wt.list(FileList::Staged).first() {
                 wt.current = Some((FileList::Staged, f.path.clone()));
             }
         }
@@ -517,6 +597,7 @@ impl App {
             return;
         };
         self.wt.last_list = l;
+        self.wt.filter_focus = None;
         self.wt.anchor = Some(i);
         self.wt.sel_unstaged.clear();
         self.wt.sel_staged.clear();
@@ -629,14 +710,14 @@ impl App {
     pub fn stage_changed(&mut self, with_untracked: Option<bool>) {
         let tracked: Vec<Vec<u8>> = self
             .wt
-            .unstaged
+            .list(FileList::Unstaged)
             .iter()
             .filter(|f| !f.untracked && !f.unmerged)
             .map(|f| f.path.clone())
             .collect();
         let untracked: Vec<Vec<u8>> = self
             .wt
-            .unstaged
+            .list(FileList::Unstaged)
             .iter()
             .filter(|f| f.untracked)
             .map(|f| f.path.clone())
@@ -1033,6 +1114,17 @@ impl App {
                 }
             }
             A::SelectFile(l, i) => self.select_file(*l, *i),
+            A::FilterFiles(l) => {
+                self.wt.focus = match l {
+                    FileList::Unstaged => WFocus::Unstaged,
+                    FileList::Staged => WFocus::Staged,
+                };
+                self.wt.filter_focus = Some(*l);
+            }
+            A::ClearFileFilter(l) => {
+                self.wt.filter_mut(*l).clear();
+                self.worktree_filter_changed(*l);
+            }
             A::ExtendFile(l, i) => {
                 let n = self.wt.list(*l).len();
                 if *i >= n {
@@ -1112,6 +1204,11 @@ impl App {
                 self.wt.message.delete_selection();
             }
             A::SelectAll => match self.wt.focus {
+                WFocus::Unstaged | WFocus::Staged => {
+                    let l = self.focused_list();
+                    let paths = self.wt.list(l).iter().map(|f| f.path.clone()).collect();
+                    *self.wt.sel_mut(l) = paths;
+                }
                 WFocus::Diff => {
                     let n = self.wt.diff.lines.len();
                     if n > 0 {
