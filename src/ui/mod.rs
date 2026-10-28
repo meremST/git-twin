@@ -7,7 +7,7 @@ pub mod theme;
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
@@ -450,6 +450,23 @@ struct ReferenceLabel {
     text: Line<'static>,
     hit: Hit,
     count: usize,
+    /// Reference kind and its colour, used to tint the overflow marker.
+    kind: Option<(RefKind, Color)>,
+}
+
+/// Colour of the reference kind that dominates the hidden labels.
+fn dominant_kind_color(hidden: &[(usize, (RefKind, Color))]) -> Option<Color> {
+    let mut totals: Vec<(RefKind, Color, usize)> = Vec::new();
+    for &(count, (kind, color)) in hidden {
+        match totals.iter_mut().find(|t| t.0 == kind) {
+            Some(total) => total.2 += count,
+            None => totals.push((kind, color, count)),
+        }
+    }
+    totals
+        .into_iter()
+        .reduce(|best, t| if t.2 > best.2 { t } else { best })
+        .map(|t| t.1)
 }
 
 fn reference_label(app: &App, reference: &GitRef, row: usize, style: Style) -> ReferenceLabel {
@@ -498,6 +515,7 @@ fn reference_label(app: &App, reference: &GitRef, row: usize, style: Style) -> R
         text: Line::from(spans),
         hit: Hit::RefLabel(row, reference.full.clone()),
         count: 1,
+        kind: Some((reference.kind, color)),
     }
 }
 
@@ -526,6 +544,7 @@ fn reference_labels(app: &App, oid: &Oid, row: usize, style: Style) -> Vec<Refer
             text: Line::styled("< ", app.theme.dimmed()),
             hit: Hit::RefToggle(row),
             count: 0,
+            kind: None,
         });
     }
     if !compact || open {
@@ -566,6 +585,7 @@ fn reference_labels(app: &App, oid: &Oid, row: usize, style: Style) -> Vec<Refer
             ),
             hit: Hit::RefToggle(row),
             count,
+            kind: Some((kind, color)),
         });
     }
     labels
@@ -768,7 +788,13 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             .saturating_sub(GRAPH_MIN_SUBJECT)
             .min(available / 2);
         let start = x;
+        let mut hidden = Vec::new();
+        let mut blocked = false;
         for label in labels {
+            if blocked {
+                hidden.extend(label.kind.map(|k| (label.count, k)));
+                continue;
+            }
             let after = remaining - label.count;
             let overflow_width = if after > 0 {
                 format!("+{after} ").len() as u16
@@ -777,6 +803,7 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             };
             let room = end.saturating_sub(x + overflow_width);
             if label.text.width() > usize::from(room) {
+                blocked = true;
                 if label.count == 1 && x == start && room >= 6 {
                     let zone = Rect::new(x, rr.y, room, 1);
                     f.render_widget(
@@ -787,8 +814,10 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
                         .push(zone, Hit::Button(Action::ListCommitRefs(c.oid)));
                     x += room;
                     remaining = after;
+                } else {
+                    hidden.extend(label.kind.map(|k| (label.count, k)));
                 }
-                break;
+                continue;
             }
             let w = label.text.width() as u16;
             let zone = Rect::new(x, rr.y, w, 1);
@@ -801,12 +830,8 @@ fn history_list(f: &mut Frame, app: &mut App, r: Rect) {
             let label = format!("+{remaining} ");
             let w = (label.len() as u16).min(end.saturating_sub(x));
             let zone = Rect::new(x, rr.y, w, 1);
-            text(
-                f,
-                zone,
-                label,
-                tint(app.theme.meta).add_modifier(Modifier::BOLD),
-            );
+            let color = dominant_kind_color(&hidden).unwrap_or(app.theme.meta);
+            text(f, zone, label, tint(color).add_modifier(Modifier::BOLD));
             app.hits
                 .push(zone, Hit::Button(Action::ListCommitRefs(c.oid)));
             x += w;
@@ -1604,5 +1629,19 @@ mod tests {
                 assert!(!cell.modifier.contains(Modifier::UNDERLINED));
             }
         }
+    }
+
+    #[test]
+    fn overflow_marker_takes_colour_of_dominant_hidden_kind() {
+        let (tag, branch) = (Color::Yellow, Color::Green);
+        let hidden = [
+            (1, (RefKind::Tag, tag)),
+            (1, (RefKind::LocalBranch, branch)),
+            (3, (RefKind::Tag, tag)),
+            (1, (RefKind::LocalBranch, branch)),
+        ];
+        assert_eq!(dominant_kind_color(&hidden), Some(tag));
+        assert_eq!(dominant_kind_color(&hidden[..2]), Some(tag));
+        assert_eq!(dominant_kind_color(&[]), None);
     }
 }
