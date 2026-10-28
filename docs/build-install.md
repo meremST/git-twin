@@ -30,8 +30,8 @@ Once the version is published, open the
 and download both files into the same directory:
 
 ```text
-git-twin-1.0.1-x86_64-unknown-linux-gnu.tar.gz
-git-twin-1.0.1-x86_64-unknown-linux-gnu.tar.gz.sha256
+git-twin-1.1.0-x86_64-unknown-linux-gnu.tar.gz
+git-twin-1.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 ```
 
 Use only releases from `meremST/git-twin`, not a package with the same name.
@@ -40,9 +40,9 @@ Draft releases and private repositories are not accessible to the public.
 From the download directory:
 
 ```sh
-sha256sum --check git-twin-1.0.1-x86_64-unknown-linux-gnu.tar.gz.sha256
-tar -xzf git-twin-1.0.1-x86_64-unknown-linux-gnu.tar.gz
-cd git-twin-1.0.1-x86_64-unknown-linux-gnu
+sha256sum --check git-twin-1.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf git-twin-1.1.0-x86_64-unknown-linux-gnu.tar.gz
+cd git-twin-1.1.0-x86_64-unknown-linux-gnu
 install -d "$HOME/bin"
 install -m 0755 gitt git-tui "$HOME/bin/"
 export PATH="$HOME/bin:$PATH"
@@ -97,7 +97,7 @@ sh rustup-init.sh
 . "$HOME/.cargo/env"
 ```
 
-Get the sources of the `v1.0.1` tag from the official release (GitHub
+Get the sources of the `v1.1.0` tag from the official release (GitHub
 source archive or repository clone), then open the directory containing
 `Cargo.toml`. Do not copy only `src/`: keep `Cargo.lock` and
 `rust-toolchain.toml`. From that directory:
@@ -201,7 +201,7 @@ Before creating a tag:
    the installed interface on a throwaway repository.
 3. Push the release preparation commit to `meremST/git-twin` and require a
    successful hosted CI run on that exact commit. Then create and push an
-   annotated tag `v1.0.1` matching the Cargo version exactly.
+   annotated tag `v1.1.0` matching the Cargo version exactly.
    Never move a tag that has already been published.
 
 ```sh
@@ -209,7 +209,7 @@ cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 python3 -m unittest discover -s tests -p 'test_*.py'
-python3 scripts/package-release.py --tag v1.0.1
+python3 scripts/package-release.py --tag v1.1.0
 ```
 
 Building the archive requires Python >= 3.8 (standard library
@@ -241,8 +241,8 @@ Source archives are provided by GitHub from the tag.
   approve and perform the visibility change in GitHub settings; publishing a
   release in a private repository does not make it publicly accessible.
 - After the final commit passes hosted CI, create the tag deliberately:
-  `git tag -a v1.0.1 -m "Git Twin v1.0.1"` then
-  `git push origin v1.0.1`. These are publication steps, not local checks.
+  `git tag -a v1.1.0 -m "Git Twin v1.1.0"` then
+  `git push origin v1.1.0`. These are publication steps, not local checks.
 - Review the generated draft and its two assets, confirm it is not marked as
   a prerelease, and publish it as the latest release. Leave the older 0.x
   drafts unpublished.

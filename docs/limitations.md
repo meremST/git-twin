@@ -1,4 +1,4 @@
-# Known limitations of version 1.0.1
+# Known limitations of version 1.1.0
 
 - Both views, menus, dialogs and basic interactions are wired up.
   This does not yet amount to a validation of every row of

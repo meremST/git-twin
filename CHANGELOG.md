@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Improvements planned for 1.1; the development package version remains 1.0.1.
+## 1.1.0 — 2026-10-28
 
 ### New features
 
@@ -14,16 +14,29 @@ Improvements planned for 1.1; the development package version remains 1.0.1.
   and show an overflow `+N` browser scoped to the commit, dismissed by an outside
   click (unlike F2). Compact mode counts
   references by category; View > Reference labels hides categories without
-  changing the graph, while keeping HEAD identifiable.
+  changing the graph, while keeping HEAD identifiable. In Nerd Font mode
+  compact counts are drawn as an icon directly followed by a spaced number
+  instead of overlapping a `[icon:n]` form, and the ultra-compact `+n`
+  overflow marker is tinted with the reference kind that dominates the
+  hidden labels.
 - The fixed F2 reference browser leaves visible History elements interactive,
   including selection, scrolling and context menus. Click to move keyboard
   focus, use F2 to return to the global reference browser, and keep confirmation
   dialogs modal. Reference lists refresh after ref changes.
+- Optional History scrollbar (`history_scrollbar` in `config.toml`, off by
+  default, toggled in Edit > Preferences): drag the thumb or click the track
+  to jump through loaded commits without changing the selected commit; the
+  range grows while history streams in but stays fixed during a drag.
 
 ### Fixes
 
 - Preserve annotated-tag line breaks, blank lines and tab indentation without
   allowing terminal control sequences or losing escaped invalid UTF-8 bytes.
+- Dismiss the reference overflow popup on outside clicks while keeping the
+  F2 browser persistent, History selection intact, and clicks inside the
+  popup or its context menus working.
+- Leave Worktree file-filter editing when pasting a commit message, instead
+  of inserting the paste into the filter field.
 
 ## 1.0.1 — 2026-10-28
 
