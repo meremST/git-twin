@@ -128,6 +128,9 @@ impl App {
             return;
         };
         let col = usize::from(x.saturating_sub(r.x));
+        if self.refs_window_open() && self.menu.is_none() {
+            self.dialogs[0].background_focus = !hit.is_dialog();
+        }
         if !matches!(
             hit,
             Hit::WtFilter(_) | Hit::Button(Action::ClearFileFilter(_))
@@ -303,6 +306,9 @@ impl App {
         match d.fields.get_mut(i) {
             Some(Field::Text { input, .. }) => input.click(col),
             Some(Field::Area { area, .. }) => area.click(row, col, shift),
+            Some(Field::List {
+                search: Some(s), ..
+            }) => s.input.click(col),
             Some(Field::Check { value, .. }) => *value = !*value,
             Some(Field::Choice { dropdown: true, .. }) => d.toggle_dropdown(i),
             Some(Field::Choice { options, sel, .. }) => *sel = (*sel + 1) % options.len().max(1),
@@ -348,13 +354,29 @@ impl App {
 
     fn right_click(&mut self, x: u16, y: u16) {
         self.drag = None;
-        if !self.dialogs.is_empty() {
+        if !self.dialogs.is_empty() && !self.refs_window_open() {
             return;
         }
         let Some(hit) = self.hits.at(x, y).map(|(_, h)| h.clone()) else {
             return;
         };
+        self.wt.filter_focus = None;
+        if self.refs_window_open() {
+            self.dialogs[0].background_focus = !hit.is_dialog();
+        }
         let ctx = match hit {
+            Hit::DlgListRow(i, row) if self.refs_window_open() => {
+                let d = &mut self.dialogs[0];
+                let Some(Field::List { values, sel, .. }) = d.fields.get_mut(i) else {
+                    return;
+                };
+                let Some(full) = values.get(row).cloned() else {
+                    return;
+                };
+                *sel = row;
+                d.focus = i;
+                Ctx::Ref(full)
+            }
             Hit::CommitRow(i) | Hit::CutArrow(i, _) | Hit::ResumeArrow { row: i, .. } => {
                 self.hist.focus = HFocus::List;
                 Ctx::Commit(i)

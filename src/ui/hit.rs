@@ -74,6 +74,19 @@ pub enum Hit {
 }
 
 impl Hit {
+    pub fn is_dialog(&self) -> bool {
+        matches!(
+            self,
+            Hit::Pane(PaneId::Dialog)
+                | Hit::DlgField(_)
+                | Hit::DlgArea(..)
+                | Hit::DlgChoice(..)
+                | Hit::DlgListRow(..)
+                | Hit::DlgButton(_)
+                | Hit::DlgBackdrop
+        )
+    }
+
     pub fn pane(&self) -> Option<PaneId> {
         match self {
             Hit::Pane(p) | Hit::DiffLine(p, _) => Some(*p),

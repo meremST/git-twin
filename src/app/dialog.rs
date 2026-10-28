@@ -411,6 +411,8 @@ pub struct Dialog {
     pub code: Vec<Vec<(String, Tone)>>,
     /// Horizontal scroll offset (columns) for `Kind::FileView`.
     pub hscroll: usize,
+    /// Only the reference browser can leave keyboard focus in History.
+    pub background_focus: bool,
 }
 
 pub enum DialogResult {
@@ -438,7 +440,12 @@ impl Dialog {
             open_choice: None,
             code: Vec::new(),
             hscroll: 0,
+            background_focus: false,
         }
+    }
+
+    pub fn is_modeless(&self) -> bool {
+        matches!(self.kind, Kind::Form(FormKind::ListRefs))
     }
 
     /// Read-only, syntax-highlighted file viewer with an "Open in editor" button.

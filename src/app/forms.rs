@@ -148,6 +148,10 @@ impl App {
     }
 
     pub fn open_list_refs(&mut self) {
+        if self.refs_window_open() {
+            self.dialogs[0].background_focus = false;
+            return;
+        }
         let kinds = [
             RefKind::LocalBranch,
             RefKind::RemoteBranch,
@@ -180,9 +184,9 @@ impl App {
         }
         let title = format!("Tags and heads: {}", self.repo.display_name());
         let legend = if icons.nerd {
-            "type to filter, * wildcard"
+            "type to filter, * wildcard; click History to interact"
         } else {
-            "H branch  R remote  T tag  o other   (type to filter, * wildcard)"
+            "H branch  R remote  T tag  o other; type to filter (*); History stays interactive"
         };
         let fields = vec![Field::filter_list(legend, items, values, keys, 14)];
         self.dialogs.push(form(

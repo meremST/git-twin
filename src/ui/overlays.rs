@@ -125,7 +125,10 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
         return;
     };
     let screen = f.area();
-    app.hits.push(screen, Hit::DlgBackdrop);
+    let active = !d.background_focus && app.menu.is_none();
+    if !d.is_modeless() {
+        app.hits.push(screen, Hit::DlgBackdrop);
+    }
     let w = d.width.min(screen.width.saturating_sub(4)).max(4);
     let width = usize::from(w - 2);
     let mut buttons = Vec::new();
@@ -166,7 +169,7 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
             ranges.push((start, start));
             continue;
         }
-        let focused = d.focus == i;
+        let focused = active && d.focus == i;
         let style = if focused {
             app.theme.base().patch(app.theme.selected(true))
         } else {
@@ -331,12 +334,13 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
         w,
         height,
     );
+    app.hits.push(r, Hit::DlgBackdrop);
     f.render_widget(Clear, r);
     let block = Block::bordered()
         .border_set(border(&app.theme))
         .title(format!(" {} ", sanitize(&d.title)))
         .style(app.theme.base())
-        .border_style(app.theme.border_style(true));
+        .border_style(app.theme.border_style(active));
     let inner = block.inner(r);
     f.render_widget(block, r);
     d.viewport_height = content_h;
@@ -394,7 +398,7 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
             }
             FormRow::Input(i) => {
                 if let Field::Text { input: value, .. } = &mut d.fields[i] {
-                    input(f, value, rr, d.focus == i, &app.theme);
+                    input(f, value, rr, active && d.focus == i, &app.theme);
                 }
                 app.hits.push(rr, Hit::DlgField(i));
             }
@@ -402,7 +406,7 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                 if let Field::Area { area, .. } = &mut d.fields[i] {
                     let top = area.top;
                     area.top += offset;
-                    textarea(f, area, rr, d.focus == i, &app.theme);
+                    textarea(f, area, rr, active && d.focus == i, &app.theme);
                     area.top = top;
                 }
                 app.hits.push(rr, Hit::DlgArea(i, offset));
@@ -425,7 +429,8 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                     let count = format!("{}/{}", shown, s.total());
                     let cw = count.len() as u16 + 1;
                     let ir = Rect::new(rr.x + pw, rr.y, rr.width.saturating_sub(pw + cw), 1);
-                    input(f, &mut s.input, ir, d.focus == i, &app.theme);
+                    input(f, &mut s.input, ir, active && d.focus == i, &app.theme);
+                    app.hits.push(ir, Hit::DlgField(i));
                     let cr = Rect::new(rr.right().saturating_sub(cw), rr.y, cw, 1);
                     text(f, cr, count, app.theme.dimmed());
                 }
@@ -450,7 +455,7 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
                         app.theme.base()
                     };
                     let style = if *sel == item {
-                        base.patch(app.theme.selected(d.focus == i))
+                        base.patch(app.theme.selected(active && d.focus == i))
                     } else {
                         base
                     };
@@ -507,7 +512,7 @@ pub(super) fn dialog(f: &mut Frame, app: &mut App) {
             f,
             rr,
             label,
-            if d.focus == d.fields.len() + i {
+            if active && d.focus == d.fields.len() + i {
                 app.theme.button(true).patch(app.theme.selected(true))
             } else {
                 app.theme.button(true)

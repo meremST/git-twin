@@ -50,7 +50,7 @@ fn border(t: &Theme) -> ratatui::symbols::border::Set<'static> {
 }
 
 fn unobscured(app: &App) -> bool {
-    app.menu.is_none() && app.dialogs.is_empty()
+    app.menu.is_none() && !app.dialog_has_focus()
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
@@ -118,8 +118,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         format!("{prefix}{message}F6: view  F10: menu  {help}"),
         app.theme.bar().fg(color),
     );
-    overlays::menus(f, app);
-    overlays::dialog(f, app);
+    if app.refs_window_open() {
+        overlays::dialog(f, app);
+        overlays::menus(f, app);
+    } else {
+        overlays::menus(f, app);
+        overlays::dialog(f, app);
+    }
 }
 
 fn row(r: Rect, y: u16) -> Rect {

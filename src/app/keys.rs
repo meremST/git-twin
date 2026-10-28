@@ -35,7 +35,27 @@ impl App {
             self.set_status("Press Ctrl-C again to quit", StatusTone::Info);
             // Fall through so Ctrl-C still copies as usual on a single press.
         }
-        if !self.dialogs.is_empty() {
+        if self.refs_window_open() {
+            if self.menu.is_some() {
+                self.menu_key(k);
+                return;
+            }
+            if k.code == C::F(2) {
+                self.dialogs[0].background_focus = false;
+                return;
+            }
+            if k.code == C::Esc && self.dialogs[0].background_focus {
+                self.dialogs.pop();
+                return;
+            }
+            if matches!(k.code, C::F(6) | C::F(12))
+                || k.modifiers.contains(M::CONTROL) && matches!(k.code, C::Char('q' | 'w') | C::Tab)
+            {
+                self.global_key(k);
+                return;
+            }
+        }
+        if self.dialog_has_focus() {
             if k.code == C::Char('c') && k.modifiers.contains(M::CONTROL) {
                 let d = self.dialogs.last().expect("dialog");
                 if d.fields.is_empty() && !d.code.is_empty() {
@@ -53,7 +73,12 @@ impl App {
                     return;
                 }
             }
-            let r = self.dialogs.last_mut().expect("dialog").on_key(k);
+            let d = self.dialogs.last_mut().expect("dialog");
+            let before = d.list_value(0);
+            let r = d.on_key(k);
+            if d.is_modeless() && d.list_value(0) != before {
+                self.preview_list_ref();
+            }
             self.on_dialog_result(r);
             return;
         }

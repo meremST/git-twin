@@ -941,6 +941,9 @@ impl App {
             return;
         }
         self.view = v;
+        if v != ViewKind::History {
+            self.dialogs.retain(|d| !d.is_modeless());
+        }
         self.maximized = None;
         self.menu = None;
     }
@@ -1082,6 +1085,16 @@ impl App {
         }
     }
 
+    pub fn refs_window_open(&self) -> bool {
+        self.dialogs.len() == 1 && self.dialogs[0].is_modeless()
+    }
+
+    pub fn dialog_has_focus(&self) -> bool {
+        self.dialogs
+            .last()
+            .is_some_and(|d| !d.is_modeless() || !d.background_focus)
+    }
+
     fn focus_cycle(&mut self, dir: isize) {
         match self.view {
             ViewKind::History => self.hist.cycle_focus(dir),
@@ -1120,8 +1133,14 @@ impl App {
     }
 
     pub fn paste(&mut self, s: &str) {
-        if let Some(d) = self.dialogs.last_mut() {
+        if self.dialog_has_focus()
+            && let Some(d) = self.dialogs.last_mut()
+        {
+            let before = d.list_value(0);
             d.paste(s);
+            if d.is_modeless() && d.list_value(0) != before {
+                self.preview_list_ref();
+            }
             return;
         }
         match self.view {

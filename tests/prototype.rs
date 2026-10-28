@@ -729,6 +729,31 @@ fn render(app: &mut App, width: u16, height: u16) -> String {
         .join("\n")
 }
 
+fn visible_point(app: &App, wanted: &Hit) -> (u16, u16) {
+    for (r, hit) in &app.hits.zones {
+        if hit != wanted {
+            continue;
+        }
+        for y in r.y..r.bottom() {
+            for x in r.x..r.right() {
+                if app.hits.at(x, y).is_some_and(|(_, h)| h == wanted) {
+                    return (x, y);
+                }
+            }
+        }
+    }
+    panic!("No visible point for {wanted:?}");
+}
+
+fn mouse(app: &mut App, point: (u16, u16), kind: MouseEventKind) {
+    app.on_mouse(MouseEvent {
+        kind,
+        column: point.0,
+        row: point.1,
+        modifiers: KeyModifiers::NONE,
+    });
+}
+
 fn patch_navigation_fixture() -> (tempfile::TempDir, App) {
     let dir = fixture();
     git(dir.path(), &["add", "."]);
@@ -2313,6 +2338,97 @@ fn worktree_filters_are_independent_and_survive_rescan() {
     let screen = render(&mut app, 79, 24);
     assert!(screen.contains("Filter:"));
     assert!(!screen.contains("other.txt"));
+}
+
+#[test]
+fn reference_window_keeps_history_interactive_and_routes_context_menus() {
+    use git_twin::app::menu::MenuItem;
+    let dir = fixture();
+    for n in 0..20 {
+        git(
+            dir.path(),
+            &["commit", "--allow-empty", "-qm", &format!("Commit {n}")],
+        );
+    }
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.open_list_refs();
+    render(&mut app, 160, 50);
+    let row = 3;
+    let point = visible_point(&app, &Hit::CommitRow(row));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+    assert_eq!(app.hist.sel, Some(row));
+    assert!(app.refs_window_open());
+    assert!(app.dialogs[0].background_focus);
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    assert_eq!(app.hist.sel, Some(row + 1));
+    let before = app.hist.top;
+    mouse(&mut app, point, MouseEventKind::ScrollDown);
+    assert!(app.hist.top > before);
+    render(&mut app, 160, 50);
+    let point = visible_point(&app, &Hit::CommitRow(row + 1));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Right));
+    let idx = app.menu.as_ref().unwrap().levels[0]
+        .items
+        .iter()
+        .position(|i| {
+            matches!(
+                i,
+                MenuItem::Entry {
+                    action: Action::CopyCommitId(_),
+                    ..
+                }
+            )
+        })
+        .unwrap();
+    render(&mut app, 160, 50);
+    let point = visible_point(&app, &Hit::MenuItem { depth: 0, idx });
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+    assert_eq!(app.clipboard, app.hist.commits[row + 1].oid.to_hex());
+    assert!(app.refs_window_open());
+    render(&mut app, 160, 50);
+    let point = visible_point(&app, &Hit::CommitRow(row + 1));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Right));
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.menu.is_none());
+    assert!(app.refs_window_open(), "Esc first closes the context menu");
+    app.on_key(KeyEvent::new(KeyCode::F(2), KeyModifiers::NONE));
+    assert!(!app.dialogs[0].background_focus);
+    app.paste("main");
+    assert_eq!(app.dialogs.len(), 1);
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(
+        app.refs_window_open(),
+        "Esc clears the reference filter first"
+    );
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.dialogs.is_empty());
+}
+
+#[test]
+fn reference_window_does_not_make_other_dialogs_modeless() {
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.start();
+    settle(&mut app);
+    app.open_list_refs();
+    render(&mut app, 120, 35);
+    let point = visible_point(&app, &Hit::CommitRow(0));
+    let selected = app.hist.sel;
+    app.dialogs
+        .push(Dialog::info("Modal", "History must stay blocked"));
+    render(&mut app, 120, 35);
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+    mouse(&mut app, point, MouseEventKind::Down(MouseButton::Right));
+    assert_eq!(app.hist.sel, selected);
+    assert!(app.menu.is_none());
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert!(app.refs_window_open());
+    render(&mut app, 79, 24);
+    app.on_key(KeyEvent::new(KeyCode::F(6), KeyModifiers::NONE));
+    assert_eq!(app.view, ViewKind::Worktree);
+    assert!(app.dialogs.is_empty());
 }
 
 #[test]
