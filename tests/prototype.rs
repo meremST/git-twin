@@ -2513,6 +2513,47 @@ fn crowded_references_keep_subjects_visible_and_offer_a_scoped_browser() {
         app.dialogs[0].kind,
         Kind::Form(FormKind::ListRefs(None))
     ));
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    for button in [MouseButton::Left, MouseButton::Right] {
+        app.open_ref_browser(Some(oid));
+        render(&mut app, 120, 40);
+        let inside = visible_point(&app, &Hit::DlgField(0));
+        mouse(&mut app, inside, MouseEventKind::Down(MouseButton::Left));
+        assert!(
+            app.refs_window_open(),
+            "Clicking inside must keep the popup open"
+        );
+        let border = visible_point(&app, &Hit::DlgBackdrop);
+        mouse(&mut app, border, MouseEventKind::Down(MouseButton::Left));
+        assert!(app.refs_window_open(), "The border is part of the popup");
+        let outside = visible_point(&app, &Hit::CommitRow(0));
+        mouse(&mut app, outside, MouseEventKind::Down(button));
+        assert!(
+            app.dialogs.is_empty(),
+            "An outside click must dismiss the scoped popup"
+        );
+        if button == MouseButton::Left {
+            assert_eq!(
+                app.hist.sel,
+                Some(0),
+                "The outside click still selects History"
+            );
+        } else {
+            assert!(
+                app.menu.is_some(),
+                "The outside right click still opens its menu"
+            );
+            app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        }
+    }
+    app.open_ref_browser(Some(oid));
+    render(&mut app, 120, 40);
+    assert!(app.hits.at(0, 39).is_none());
+    mouse(&mut app, (0, 39), MouseEventKind::Down(MouseButton::Left));
+    assert!(
+        app.dialogs.is_empty(),
+        "Clicks on empty background also dismiss the popup"
+    );
 }
 
 #[test]

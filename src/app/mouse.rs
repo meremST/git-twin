@@ -4,11 +4,11 @@
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::layout::Rect;
+use ratatui::layout::{Position, Rect};
 
 use super::App;
 use super::action::{Action, FileList};
-use super::dialog::{DialogResult, Field};
+use super::dialog::{DialogResult, Field, FormKind, Kind};
 use super::history::HFocus;
 use super::menu::{Ctx, MenuItem};
 use super::worktree::WFocus;
@@ -76,6 +76,20 @@ impl App {
         let ctrl = m.modifiers.contains(KeyModifiers::CONTROL);
         if matches!(m.kind, MouseEventKind::Down(_)) {
             self.dismiss_error();
+            if self.refs_window_open()
+                && matches!(
+                    self.dialogs[0].kind,
+                    Kind::Form(FormKind::ListRefs(Some(_)))
+                )
+                && !self
+                    .hits
+                    .zones
+                    .iter()
+                    .any(|(r, hit)| *hit == Hit::DlgBackdrop && r.contains(Position::new(x, y)))
+                && !matches!(self.hits.at(x, y), Some((_, Hit::MenuItem { .. })))
+            {
+                self.dialogs.pop();
+            }
         }
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => {

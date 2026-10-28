@@ -11,7 +11,8 @@ Improvements planned for 1.1; the development package version remains 1.0.1.
   Selection and staging actions operate on visible files; commits still include
   the entire index.
 - History reference labels reserve space for commit subjects, prioritize HEAD
-  and show an overflow `+N` browser scoped to the commit. Compact mode counts
+  and show an overflow `+N` browser scoped to the commit, dismissed by an outside
+  click (unlike F2). Compact mode counts
   references by category; View > Reference labels hides categories without
   changing the graph, while keeping HEAD identifiable.
 - The fixed F2 reference browser leaves visible History elements interactive,

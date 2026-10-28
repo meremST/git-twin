@@ -88,7 +88,8 @@ the history.
 
 History keeps space for the commit subject even when many references point to
 one commit. HEAD's branch name comes first; **`+N`** opens a searchable list of
-that commit's references. **Compact refs** keeps HEAD named and groups the
+that commit's references; this popup closes when you click outside it.
+**Compact refs** keeps HEAD named and groups the
 remaining references into counted markers, such as `[B:2] [T:12] [R:5]`.
 Click a marker to expand it. **View > Reference labels** hides categories for
 the current session without filtering commits or changing the graph; HEAD
