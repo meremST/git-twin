@@ -137,6 +137,7 @@ impl App {
                 &c.editor,
             ),
             Field::check("History scrollbar", c.history_scrollbar),
+            Field::check("Horizontal diff scrollbar", c.diff_scrollbar),
         ];
         let mut d = form(
             "Preferences",
@@ -1174,6 +1175,7 @@ impl App {
         c.graph_cut_after = ca.min(1_000_000) as u32;
         c.editor = d.text(16).trim().to_string();
         c.history_scrollbar = d.checked(17);
+        c.diff_scrollbar = d.checked(18);
         let c = c.clamped();
         let ctx_changed = c.history_context != self.cfg.history_context;
         let wctx_changed = c.worktree_context != self.cfg.worktree_context;

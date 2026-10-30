@@ -30,7 +30,7 @@ use crate::domain::{
     refs::{GitRef, RefKind},
     sanitize::sanitize,
 };
-use hit::{HistoryScrollbar, Hit, HitMap, PaneId, SplitId};
+use hit::{HistoryScrollbar, Hit, HitMap, HorizontalScrollbar, PaneId, SplitId};
 use theme::Theme;
 
 /// Columns kept for the subject when the history graph is wide.
@@ -61,7 +61,11 @@ fn unobscured(app: &App) -> bool {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
-    if app.size != (area.width, area.height) && matches!(app.drag, Some(Drag::HistoryScroll { .. }))
+    if app.size != (area.width, area.height)
+        && matches!(
+            app.drag,
+            Some(Drag::HistoryScroll { .. } | Drag::DiffScroll { .. })
+        )
     {
         app.drag = None;
     }
@@ -96,6 +100,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             .zones
             .iter()
             .any(|(_, h)| matches!(h, Hit::HistoryScrollbar(_)))
+    {
+        app.drag = None;
+    }
+    if let Some(Drag::DiffScroll { pane, bar, .. }) = app.drag
+        && !app
+            .hits
+            .zones
+            .iter()
+            .any(|(_, h)| *h == Hit::DiffScrollbar(pane, bar))
     {
         app.drag = None;
     }
@@ -1114,22 +1127,60 @@ fn diff_pane(f: &mut Frame, app: &mut App, r: Rect, id: PaneId) {
             app.theme.dimmed(),
         );
     }
-    let content = Rect::new(
+    let mut content = Rect::new(
         inner.x,
         inner.y + controls,
         inner.width,
         inner.height.saturating_sub(controls),
     );
-    // Selection and wheel scrolling use the actual text viewport, not its controls.
-    app.hits.zones.retain(|(_, h)| *h != Hit::Pane(id));
-    app.hits.push(content, Hit::Pane(id));
     let focused = app.focused_pane() == id;
     let dv = if id == PaneId::HDiff {
         &mut app.hist.diff
     } else {
         &mut app.wt.diff
     };
+    dv.width = usize::from(content.width);
+    let max_left = dv.max_left();
+    dv.left = dv.left.min(max_left);
+    let scrollbar = if app.cfg.diff_scrollbar && content.height > 1 {
+        HorizontalScrollbar::new(
+            Rect::new(content.x, content.bottom() - 1, content.width, 1),
+            max_left,
+        )
+    } else {
+        None
+    };
+    if scrollbar.is_some() {
+        content.height -= 1;
+    }
+    // Selection and wheel scrolling use the actual text viewport, not its controls.
+    app.hits.zones.retain(|(_, h)| *h != Hit::Pane(id));
+    app.hits.push(content, Hit::Pane(id));
     render_diff(f, dv, content, id, focused, &app.theme, &mut app.hits);
+    if let Some(bar) = scrollbar {
+        let thumb_left = bar.thumb_left(dv.left);
+        for x in bar.track.x..bar.track.right() {
+            let thumb = x >= thumb_left && x < thumb_left + bar.thumb_width;
+            let symbol = match (app.theme.icons.ascii, thumb) {
+                (true, true) => "#",
+                (true, false) => "-",
+                (false, true) => "█",
+                (false, false) => "─",
+            };
+            let color = if thumb {
+                app.theme.accent
+            } else {
+                app.theme.dim
+            };
+            text(
+                f,
+                Rect::new(x, bar.track.y, 1, 1),
+                symbol,
+                app.theme.base().fg(color),
+            );
+        }
+        app.hits.push(bar.track, Hit::DiffScrollbar(id, bar));
+    }
 }
 
 fn diff_style(t: &Theme, kind: DKind) -> Style {

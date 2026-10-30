@@ -6,7 +6,7 @@ Terminal Git client for Linux, with a **History** view inspired by gitk and a
 the Worktree view, via the **`git-tui`** executable. Both commands give access
 to both views; `--view` replaces their initial view.
 
-Version **1.1.0** provides history with
+Version **1.1.1** provides history with
 graph, branches and tags, diffs,
 indexing by file/block/lines, and commit editing with a keyboard and mouse
 interface. Full parity with gitk/git gui is not claimed: see the
@@ -17,7 +17,7 @@ interface. Full parity with gitk/git gui is not claimed: see the
 ## Linux installation
 
 **Without Rust**: once the release is published, download the archive
-`git-twin-1.1.0-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256` file from
+`git-twin-1.1.1-x86_64-unknown-linux-gnu.tar.gz` and its `.sha256` file from
 the [official Releases page](https://github.com/meremST/git-twin/releases).
 The Linux binary targets **x86_64 with glibc
 2.35 or newer** (for example Ubuntu 22.04/24.04, Debian 12).
@@ -210,6 +210,12 @@ jump through the loaded commits of the current view; use the wheel for finer
 scrolling. Scrolling does not change the selected commit or its details.
 While history is loading, the range grows with the loaded commits, but stays
 fixed during a drag and updates on release.
+
+Enable **Horizontal diff scrollbar** in **Edit > Preferences**
+(`diff_scrollbar = true` in `config.toml`) to show a horizontal scrollbar when
+the History details/diff or Worktree diff content exceeds the pane width.
+It is disabled by default. Drag the thumb or click the track to read long lines;
+Left/Right and Shift+wheel also scroll horizontally, even with the bar hidden.
 
 On very branchy histories (for example `gitt --all` on the Linux kernel), two
 preferences keep the graph readable:

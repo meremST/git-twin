@@ -132,6 +132,7 @@ impl DiffView {
     /// Replaces the content; `prefix` lines (commit header) come first.
     pub fn set(&mut self, prefix: Vec<DLine>, diff: Option<Arc<Diff>>, o: &BuildOpts) {
         let keep_top = self.top;
+        let keep_left = self.left;
         self.clear();
         self.lines = prefix;
         if let Some(d) = &diff {
@@ -241,6 +242,7 @@ impl DiffView {
         }
         self.diff = diff;
         self.top = keep_top.min(self.lines.len().saturating_sub(1));
+        self.left = keep_left.min(self.max_left());
         self.recompute_search();
     }
 
@@ -260,10 +262,14 @@ impl DiffView {
         self.top = (self.top as isize + delta).clamp(0, self.max_top() as isize) as usize;
     }
 
-    pub fn scroll_h(&mut self, delta: isize) {
+    pub fn max_left(&self) -> usize {
         use unicode_width::UnicodeWidthStr;
         let max = self.lines.iter().map(|l| l.text.width()).max().unwrap_or(0);
-        self.left = (self.left as isize + delta).clamp(0, max as isize) as usize;
+        max.saturating_sub(self.width.max(1)).min(u16::MAX as usize)
+    }
+
+    pub fn scroll_h(&mut self, delta: isize) {
+        self.left = self.left.saturating_add_signed(delta).min(self.max_left());
     }
 
     pub fn ensure_visible(&mut self, idx: usize) {

@@ -108,6 +108,7 @@ pub struct HistoryState {
     /// Explicit comparison (from, to) shown instead of the commit diff.
     pub compare: Option<(Oid, Oid)>,
     pub details: Option<CommitDetails>,
+    pub details_error: Option<String>,
     pub related: Option<Related>,
     pub cur_diff: Option<Arc<Diff>>,
     pub detail_oid: Option<Oid>,
@@ -188,6 +189,7 @@ impl HistoryState {
             merge_diff: MergeDiff::Combined,
             compare: None,
             details: None,
+            details_error: None,
             related: None,
             cur_diff: None,
             detail_oid: None,
@@ -376,7 +378,10 @@ impl HistoryState {
             return v;
         }
         let Some(d) = &self.details else {
-            v.push(DLine::plain(DKind::Info, "Loading commit details..."));
+            v.push(match &self.details_error {
+                Some(error) => DLine::plain(DKind::Error, error),
+                None => DLine::plain(DKind::Info, "Loading commit details..."),
+            });
             return v;
         };
         v.push(DLine::plain(
@@ -466,7 +471,19 @@ impl HistoryState {
             },
             compact_headers: false,
         };
-        let d = self.cur_diff.clone();
+        // The diff may arrive before the header; do not display it only to
+        // push it down when the commit metadata and message arrive.
+        let waiting_for_details = self.compare.is_none()
+            && self
+                .selected_oid()
+                .is_some_and(|oid| !Self::is_pseudo(&oid))
+            && self.details.is_none()
+            && self.details_error.is_none();
+        let d = if waiting_for_details {
+            None
+        } else {
+            self.cur_diff.clone()
+        };
         self.diff.set(prefix, d, &o);
         self.sync_file_selection(self.diff.top);
     }
@@ -971,6 +988,7 @@ impl App {
         let h = &mut self.hist;
         h.detail_oid = Some(c.oid);
         h.details = None;
+        h.details_error = None;
         h.related = None;
         h.cur_diff = None;
         h.diff.reset_scroll();
@@ -1092,10 +1110,16 @@ impl App {
         match details {
             Ok(d) => {
                 self.hist.details = Some(d);
+                self.hist.details_error = None;
                 self.hist.related = Some(related);
                 self.hist.rebuild_diff();
             }
-            Err(e) => self.set_status(format!("Commit details: {e}"), StatusTone::Error),
+            Err(e) => {
+                let message = format!("Commit details: {e}");
+                self.hist.details_error = Some(message.clone());
+                self.hist.rebuild_diff();
+                self.set_status(message, StatusTone::Error);
+            }
         }
     }
 

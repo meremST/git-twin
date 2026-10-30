@@ -110,6 +110,7 @@ pub struct Config {
     pub colors: ColorMode,
     pub mouse: bool,
     pub history_scrollbar: bool,
+    pub diff_scrollbar: bool,
     /// Draw an extra connector line below each commit's graph node, linking
     /// it to the next one. Off by default since it halves how many commits
     /// fit on screen.
@@ -150,6 +151,7 @@ impl Default for Config {
             colors: ColorMode::Auto,
             mouse: true,
             history_scrollbar: false,
+            diff_scrollbar: false,
             graph_connectors: false,
             graph_max_lanes: 20,
             graph_cut_after: 50,
@@ -362,9 +364,13 @@ mod tests {
         assert_eq!(partial.icons, IconMode::Ascii);
         assert!(partial.mouse);
         assert!(!partial.history_scrollbar);
+        assert!(!partial.diff_scrollbar);
         let enabled: Config = toml::from_str("history_scrollbar = true").unwrap();
         let saved = toml::to_string_pretty(&enabled).unwrap();
         assert!(toml::from_str::<Config>(&saved).unwrap().history_scrollbar);
+        let enabled: Config = toml::from_str("diff_scrollbar = true").unwrap();
+        let saved = toml::to_string_pretty(&enabled).unwrap();
+        assert!(toml::from_str::<Config>(&saved).unwrap().diff_scrollbar);
         let colors: Config = toml::from_str("colors = \"256\"").unwrap();
         assert_eq!(colors.colors, ColorMode::C256);
     }

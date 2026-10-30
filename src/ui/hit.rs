@@ -77,6 +77,52 @@ impl HistoryScrollbar {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HorizontalScrollbar {
+    pub track: Rect,
+    pub thumb_width: u16,
+    pub max_left: usize,
+}
+
+impl HorizontalScrollbar {
+    pub fn new(track: Rect, max_left: usize) -> Option<Self> {
+        if track.width < 2 || track.height == 0 || max_left == 0 {
+            return None;
+        }
+        let width = u128::from(track.width);
+        let thumb_width = (width * width / (width + max_left as u128)).clamp(1, width - 1) as u16;
+        Some(Self {
+            track,
+            thumb_width,
+            max_left,
+        })
+    }
+
+    fn travel(self) -> u16 {
+        self.track.width - self.thumb_width
+    }
+
+    pub fn thumb_left(self, left: usize) -> u16 {
+        self.track.x
+            + (left.min(self.max_left) as u128 * u128::from(self.travel()) / self.max_left as u128)
+                as u16
+    }
+
+    pub fn jump(self, x: u16) -> usize {
+        let pos = x
+            .saturating_sub(self.track.x)
+            .saturating_sub(self.thumb_width / 2)
+            .min(self.travel());
+        (u128::from(pos) * self.max_left as u128 / u128::from(self.travel())) as usize
+    }
+
+    pub fn drag(self, start_left: usize, start_x: u16, x: u16) -> usize {
+        let delta = (i128::from(x) - i128::from(start_x)) * self.max_left as i128
+            / i128::from(self.travel());
+        (start_left as i128 + delta).clamp(0, self.max_left as i128) as usize
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Hit {
     MenuTitle(usize),
@@ -90,6 +136,7 @@ pub enum Hit {
     Pane(PaneId),
     PaneTab(PaneId),
     HistoryScrollbar(HistoryScrollbar),
+    DiffScrollbar(PaneId, HorizontalScrollbar),
     CommitRow(usize),
     RefLabel(usize, Vec<u8>),
     /// Compact ref marker (or its collapse arrow) of the commit at this row.
@@ -137,7 +184,7 @@ impl Hit {
 
     pub fn pane(&self) -> Option<PaneId> {
         match self {
-            Hit::Pane(p) | Hit::DiffLine(p, _) => Some(*p),
+            Hit::Pane(p) | Hit::DiffLine(p, _) | Hit::DiffScrollbar(p, _) => Some(*p),
             Hit::HistoryScrollbar(_)
             | Hit::CommitRow(_)
             | Hit::RefLabel(..)
@@ -202,6 +249,24 @@ impl HitMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn horizontal_scrollbar_geometry_handles_overflow_and_small_tracks() {
+        let track = Rect::new(5, 10, 10, 1);
+        assert!(HorizontalScrollbar::new(track, 0).is_none());
+        assert!(HorizontalScrollbar::new(Rect::new(5, 10, 1, 1), 80).is_none());
+        let bar = HorizontalScrollbar::new(track, 40).unwrap();
+        assert_eq!(bar.thumb_width, 2);
+        assert_eq!(bar.thumb_left(0), track.x);
+        assert_eq!(bar.thumb_left(40) + bar.thumb_width, track.right());
+        assert_eq!(bar.jump(0), 0);
+        assert_eq!(bar.jump(track.x + 5), 20);
+        assert_eq!(bar.jump(u16::MAX), 40);
+        assert_eq!(bar.drag(17, 10, 10), 17);
+        assert_eq!(bar.drag(17, 10, 11), 22);
+        assert_eq!(bar.drag(17, 10, 0), 0);
+        assert_eq!(bar.drag(17, 10, u16::MAX), 40);
+    }
 
     #[test]
     fn history_scrollbar_geometry_handles_overflow_and_small_tracks() {

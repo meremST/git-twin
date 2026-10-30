@@ -777,6 +777,203 @@ fn history_scrollbar(app: &App) -> Option<git_twin::ui::hit::HistoryScrollbar> {
 }
 
 #[test]
+fn commit_diff_waits_for_details_in_either_completion_order() {
+    use git_twin::{
+        domain::{
+            commit::{Commit, CommitDetails},
+            diff::{ParseMode, parse_diff},
+            oid::Oid,
+        },
+        git::{GitError, read::Related},
+    };
+    let dir = fixture();
+    let oid = Oid::from_hex("1111111111111111111111111111111111111111").unwrap();
+    let details = CommitDetails {
+        oid: Some(oid),
+        author: "Demo".into(),
+        message: "Commit message".into(),
+        ..Default::default()
+    };
+    let diff = parse_diff(
+        b"diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1 +1 @@\n-old\n+new\n",
+        ParseMode::Normal,
+        false,
+    );
+    for details_first in [false, true] {
+        let mut app = app(dir.path(), false);
+        app.hist.commits.push(Commit {
+            oid,
+            parents: Box::new([]),
+            author: "Demo".into(),
+            date: "".into(),
+            subject: "Commit message".into(),
+        });
+        app.hist.sel = Some(0);
+        app.hist.detail_oid = Some(oid);
+        app.hist.rebuild_diff();
+        assert!(
+            app.hist
+                .diff
+                .lines
+                .iter()
+                .any(|l| l.text == "Loading commit details...")
+        );
+        if details_first {
+            app.on_details(oid, Ok(details.clone()), Related::default());
+            assert!(app.hist.diff.file_starts.is_empty());
+            app.on_commit_diff(Ok(diff.clone()));
+        } else {
+            app.on_commit_diff(Ok(diff.clone()));
+            assert!(app.hist.cur_diff.is_some(), "cache the early result");
+            assert!(
+                app.hist.diff.file_starts.is_empty(),
+                "never show a diff without its header"
+            );
+            assert!(!app.hist.diff.lines.iter().any(|l| l.text == "+new"));
+            app.on_details(oid, Ok(details.clone()), Related::default());
+        }
+        let file_start = app.hist.diff.file_starts[0];
+        assert!(
+            app.hist.diff.lines[..file_start]
+                .iter()
+                .any(|l| l.text == "    Commit message")
+        );
+        assert!(app.hist.diff.lines.iter().any(|l| l.text == "+new"));
+        assert_eq!(app.hist.diff.top, 0);
+
+        app.hist.details = None;
+        app.hist.rebuild_diff();
+        app.on_details(
+            oid,
+            Err(GitError::new("show", "missing commit")),
+            Related::default(),
+        );
+        assert!(
+            app.hist
+                .diff
+                .lines
+                .iter()
+                .any(|l| l.text.contains("missing commit"))
+        );
+        assert!(
+            !app.hist.diff.file_starts.is_empty(),
+            "metadata failure must not hide the diff forever"
+        );
+        assert_eq!(app.status.1, StatusTone::Error);
+
+        app.hist.details_error = None;
+        app.hist.compare = Some((oid, oid));
+        app.hist.rebuild_diff();
+        assert!(
+            !app.hist.diff.file_starts.is_empty(),
+            "comparisons do not need commit metadata"
+        );
+        app.hist.compare = None;
+        app.hist.commits[0].oid = git_twin::git::log::null_unstaged();
+        app.hist.rebuild_diff();
+        assert!(
+            !app.hist.diff.file_starts.is_empty(),
+            "local changes do not need commit metadata"
+        );
+    }
+}
+
+#[test]
+fn diff_scrollbar_reveals_long_metadata_and_handles_mouse_and_resize() {
+    use git_twin::{
+        app::{diffview::DKind, history::HFocus},
+        ui::hit::PaneId,
+    };
+    use unicode_width::UnicodeWidthStr;
+    let dir = fixture();
+    let mut app = app(dir.path(), false);
+    app.hist.focus = HFocus::Diff;
+    app.maximized = Some(PaneId::HDiff);
+    let line = format!(
+        "Author: {} <long-address@example.invalid>",
+        "界".repeat(100)
+    );
+    app.hist.diff.set_message(DKind::Header, &line);
+    let scrollbar = |app: &App| {
+        app.hits.zones.iter().find_map(|(_, h)| match h {
+            Hit::DiffScrollbar(PaneId::HDiff, bar) => Some(*bar),
+            _ => None,
+        })
+    };
+    let screen = render(&mut app, 79, 24);
+    assert!(!screen.contains("<long-address@example.invalid>"));
+    assert!(scrollbar(&app).is_none());
+    let full_height = app.hist.diff.height;
+    app.cfg.diff_scrollbar = true;
+    render(&mut app, 79, 24);
+    assert_eq!(app.hist.diff.height, full_height - 1);
+    let bar = scrollbar(&app).unwrap();
+    assert_eq!(bar.max_left, line.width() - app.hist.diff.width);
+    assert_eq!(
+        app.hits.pane_at(bar.track.x, bar.track.y),
+        Some(PaneId::HDiff)
+    );
+    assert!(app.hits.zones.iter().all(|(r, h)| {
+        !matches!(
+            h,
+            Hit::DiffLine(PaneId::HDiff, _) | Hit::Pane(PaneId::HDiff)
+        ) || r.bottom() <= bar.track.y
+    }));
+    let down = MouseEventKind::Down(MouseButton::Left);
+    let drag = MouseEventKind::Drag(MouseButton::Left);
+    let up = MouseEventKind::Up(MouseButton::Left);
+    mouse(&mut app, (bar.track.right() - 1, bar.track.y), down);
+    assert_eq!(app.hist.diff.left, bar.max_left);
+    assert!(render(&mut app, 79, 24).contains("<long-address@example.invalid>"));
+    mouse(&mut app, (bar.track.right() - 1, bar.track.y), up);
+    let grab = (bar.thumb_left(app.hist.diff.left), bar.track.y);
+    mouse(&mut app, grab, down);
+    mouse(&mut app, grab, drag);
+    assert_eq!(
+        app.hist.diff.left, bar.max_left,
+        "grabbing the thumb must not jump"
+    );
+    mouse(&mut app, (0, grab.1), drag);
+    assert_eq!(app.hist.diff.left, 0);
+    mouse(&mut app, (u16::MAX, grab.1), drag);
+    assert_eq!(app.hist.diff.left, bar.max_left);
+    mouse(&mut app, (u16::MAX, grab.1), up);
+    mouse(&mut app, grab, MouseEventKind::ScrollLeft);
+    assert_eq!(app.hist.diff.left, bar.max_left - 6);
+    mouse(&mut app, grab, MouseEventKind::ScrollRight);
+    assert_eq!(app.hist.diff.left, bar.max_left);
+    mouse(&mut app, grab, down);
+    render(&mut app, 320, 40);
+    assert!(scrollbar(&app).is_none());
+    assert_eq!(app.hist.diff.left, 0);
+    assert!(app.drag.is_none());
+
+    render(&mut app, 79, 24);
+    let bar = scrollbar(&app).unwrap();
+    mouse(&mut app, (bar.track.x, bar.track.y), down);
+    app.cfg.diff_scrollbar = false;
+    render(&mut app, 79, 24);
+    assert!(scrollbar(&app).is_none());
+    assert!(
+        app.drag.is_none(),
+        "disabling the scrollbar cancels the drag"
+    );
+    app.hist.diff.scroll_h(6);
+    assert_eq!(
+        app.hist.diff.left, 6,
+        "horizontal scrolling remains available"
+    );
+    app.cfg.diff_scrollbar = true;
+    render(&mut app, 79, 24);
+    let bar = scrollbar(&app).unwrap();
+    mouse(&mut app, (bar.track.x, bar.track.y), down);
+    app.hist.diff.set_message(DKind::Header, "Short author");
+    render(&mut app, 79, 24);
+    assert!(scrollbar(&app).is_none());
+    assert!(app.drag.is_none(), "removing overflow cancels the drag");
+}
+
+#[test]
 fn history_scrollbar_renders_only_when_enabled_and_overflowing() {
     use git_twin::config::ThemeName;
     let dir = fixture();
@@ -944,30 +1141,43 @@ fn history_scrollbar_preferences_apply_cancel_and_persist() {
     let dir = fixture();
     let mut app = app(dir.path(), false);
     let mut expected = app.cfg.clone();
-    for (enabled, button) in [(true, 1), (true, 0), (false, 0)] {
-        app.open_preferences();
-        let d = app.dialogs.last_mut().unwrap();
-        let field = d
+    for label in ["History scrollbar", "Horizontal diff scrollbar"] {
+        for (enabled, button) in [(true, 1), (true, 0), (false, 0)] {
+            app.open_preferences();
+            let d = app.dialogs.last_mut().unwrap();
+            let field = d
             .fields
             .iter()
-            .position(|f| matches!(f, Field::Check { label, .. } if label == "History scrollbar"))
+            .position(|f| matches!(f, Field::Check { label: field_label, .. } if field_label == label))
             .unwrap();
-        assert_eq!(d.checked(field), app.cfg.history_scrollbar);
-        d.focus = field;
-        render(&mut app, 79, 24);
-        let point = visible_point(&app, &Hit::DlgField(field));
-        mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
-        assert_eq!(app.dialogs.last().unwrap().checked(field), enabled);
-        assert_eq!(app.cfg, expected, "changes only apply on OK");
-        app.on_dialog_result(DialogResult::Button(button));
-        if button == 0 {
-            expected.history_scrollbar = enabled;
             assert_eq!(
-                Config::load_from(&config::config_file().unwrap()).unwrap(),
-                expected
+                d.checked(field),
+                if label == "History scrollbar" {
+                    app.cfg.history_scrollbar
+                } else {
+                    app.cfg.diff_scrollbar
+                }
             );
+            d.focus = field;
+            render(&mut app, 79, 24);
+            let point = visible_point(&app, &Hit::DlgField(field));
+            mouse(&mut app, point, MouseEventKind::Down(MouseButton::Left));
+            assert_eq!(app.dialogs.last().unwrap().checked(field), enabled);
+            assert_eq!(app.cfg, expected, "changes only apply on OK");
+            app.on_dialog_result(DialogResult::Button(button));
+            if button == 0 {
+                if label == "History scrollbar" {
+                    expected.history_scrollbar = enabled;
+                } else {
+                    expected.diff_scrollbar = enabled;
+                }
+                assert_eq!(
+                    Config::load_from(&config::config_file().unwrap()).unwrap(),
+                    expected
+                );
+            }
+            assert_eq!(app.cfg, expected);
         }
-        assert_eq!(app.cfg, expected);
     }
 }
 

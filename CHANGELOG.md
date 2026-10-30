@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.1.1 — 2026-10-30
+
+### Fixes
+
+- Wait for commit metadata before displaying its diff, avoiding the brief
+  diff-first flicker on large repositories.
+- Add an optional horizontal scrollbar to the History details/diff and Worktree
+  diff panes so long metadata and lines remain accessible in narrow windows.
+  Enable **Horizontal diff scrollbar** in **Edit > Preferences**
+  (`diff_scrollbar = true` in `config.toml`); disabled by default.
+  Keyboard and horizontal wheel scrolling remain available when it is hidden.
+
 ## 1.1.0 — 2026-10-28
 
 ### New features

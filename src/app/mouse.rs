@@ -13,7 +13,7 @@ use super::history::HFocus;
 use super::menu::{Ctx, MenuItem};
 use super::worktree::WFocus;
 use crate::domain::refs::RefKind;
-use crate::ui::hit::{HistoryScrollbar, Hit, PaneId, SplitId};
+use crate::ui::hit::{HistoryScrollbar, Hit, HorizontalScrollbar, PaneId, SplitId};
 
 const WHEEL_LINES: isize = 3;
 
@@ -60,6 +60,12 @@ pub enum Drag {
         bar: HistoryScrollbar,
         start_top: usize,
         start_y: u16,
+    },
+    DiffScroll {
+        pane: PaneId,
+        bar: HorizontalScrollbar,
+        start_left: usize,
+        start_x: u16,
     },
 }
 
@@ -185,6 +191,24 @@ impl App {
                     bar,
                     start_top: self.hist.top,
                     start_y: y,
+                });
+            }
+            Hit::DiffScrollbar(pane, bar) => {
+                self.focus_pane(pane);
+                let dv = if pane == PaneId::WDiff {
+                    &mut self.wt.diff
+                } else {
+                    &mut self.hist.diff
+                };
+                let thumb_left = bar.thumb_left(dv.left);
+                if x < thumb_left || x >= thumb_left + bar.thumb_width {
+                    dv.left = bar.jump(x);
+                }
+                self.drag = Some(Drag::DiffScroll {
+                    pane,
+                    bar,
+                    start_left: dv.left,
+                    start_x: x,
                 });
             }
             Hit::Pane(p) => {
@@ -457,6 +481,19 @@ impl App {
         }
         let Some(d) = self.drag else { return };
         match d {
+            Drag::DiffScroll {
+                pane,
+                bar,
+                start_left,
+                start_x,
+            } => {
+                let dv = if pane == PaneId::WDiff {
+                    &mut self.wt.diff
+                } else {
+                    &mut self.hist.diff
+                };
+                dv.left = bar.drag(start_left, start_x, x).min(dv.max_left());
+            }
             Drag::HistoryScroll {
                 bar,
                 start_top,

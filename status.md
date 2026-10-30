@@ -1,10 +1,11 @@
 # Git Twin — development status
 
-Last update: 2026-10-28, version 1.1.0 prepared.
+Last update: 2026-10-30, version 1.1.1 prepared.
 Spec: `design.md`. The 1.1 improvements are included: multiline tag
 annotations, adaptive/counted reference labels, a non-modal F2 browser, an
-optional History scrollbar and independent Worktree filters. See
-`CHANGELOG.md` (1.1.0).
+optional History scrollbar and independent Worktree filters. Version 1.1.1
+fixes commit-detail loading flicker and adds an optional horizontal diff
+scrollbar. See `CHANGELOG.md` (1.1.1).
 Release preparation status below is retained from 2026-10-16; full parity
 is not a release claim.
 
@@ -53,7 +54,7 @@ PTYs and terminals that do not answer terminal queries.
   installs and Cargo installs (`--cargo`), preserving user data. Included in
   release archives and exercised by isolated tests and archive-install CI.
 - Linux x86_64 GNU packaging with both launchers, docs, dependency licenses and
-  SHA-256. `scripts/package-release.py --tag v1.1.0` rejects version mismatches
+  SHA-256. `scripts/package-release.py --tag v1.1.1` rejects version mismatches
   and extracts the version-specific notes for the draft release.
 - CI for formatting, strict Clippy, tests, archive building on Ubuntu 22.04,
   and installation on Ubuntu 22.04/24.04. Tag pushes create a draft only after
